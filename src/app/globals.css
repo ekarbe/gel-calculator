@@ -1,0 +1,89 @@
+@layer base {
+  :root {
+    --background: 0 0% 95%;      /* F2F2F2 */
+    --foreground: 0 0% 5%;       /* 0D0D0D */
+
+    --card: 0 0% 85%;           /* D9D9D9 */
+    --card-foreground: 0 0% 5%; /* 0D0D0D */
+
+    --popover: 0 0% 95%;        /* F2F2F2 */
+    --popover-foreground: 0 0% 5%; /* 0D0D0D */
+
+    --primary: 11 1% 54%;       /* 8C8988 */
+    --primary-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --secondary: 0 0% 85%;      /* D9D9D9 */
+    --secondary-foreground: 0 0% 25%; /* 404040 */
+
+    --muted: 0 0% 85%;         /* D9D9D9 */
+    --muted-foreground: 0 0% 45%; /* Slightly lighter than 404040 */
+
+    --accent: 11 1% 54%;       /* 8C8988 */
+    --accent-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --destructive: 0 84% 60%;  /* Keeping red for destructive actions */
+    --destructive-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --border: 0 0% 85%;        /* D9D9D9 */
+    --input: 0 0% 85%;         /* D9D9D9 */
+    --ring: 11 1% 54%;         /* 8C8988 */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 5%;       /* 0D0D0D */
+    --foreground: 0 0% 95%;      /* F2F2F2 */
+
+    --card: 0 0% 25%;           /* 404040 */
+    --card-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --popover: 0 0% 5%;         /* 0D0D0D */
+    --popover-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --primary: 11 1% 54%;       /* 8C8988 */
+    --primary-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --secondary: 0 0% 25%;      /* 404040 */
+    --secondary-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --muted: 0 0% 25%;         /* 404040 */
+    --muted-foreground: 0 0% 75%; /* Lighter version for better contrast */
+
+    --accent: 0 0% 25%;        /* 404040 */
+    --accent-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --destructive: 0 84% 60%;  /* Keeping red for destructive actions */
+    --destructive-foreground: 0 0% 95%; /* F2F2F2 */
+
+    --border: 0 0% 25%;        /* 404040 */
+    --input: 0 0% 25%;         /* 404040 */
+    --ring: 11 1% 54%;         /* 8C8988 */
+  }
+}
+
+@layer components {
+  /* Form Elements */
+  .input-number {
+    /* Combines base input styles with specific width */
+    @apply px-3 py-2 border rounded bg-background text-foreground focus:ring-2 ring-primary/50 outline-none w-20;
+  }
+
+  .input-error {
+    /* Semantic class for error state */
+    @apply border-destructive focus:ring-destructive/50;
+  }
+
+  /* Buttons */
+  .btn-icon {
+    @apply p-2 rounded-full hover:bg-accent/10 transition-colors;
+  }
+
+  .btn-danger {
+    @apply text-destructive hover:text-destructive/80 disabled:opacity-50;
+  }
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
