@@ -4,7 +4,7 @@ A web application designed for endurance athletes to calculate personalized ener
 
 **Live App:** [https://eikekarbe.com/gel-calculator](https://eikekarbe.com/gel-calculator)
 
-![Gel-Calculator Screenshot](https://github.com/ekarbe/gel-calculator/assets/APP.PNG)
+![Gel-Calculator Screenshot]([https://github.com/ekarbe/gel-calculator/assets/APP.PNG](https://raw.githubusercontent.com/ekarbe/gel-calculator/refs/heads/main/assets/APP.PNG))
 
 ## Key Features
 
