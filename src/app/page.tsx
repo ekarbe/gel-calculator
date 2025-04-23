@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: description,
   keywords: ['energy gel calculator', 'diy sports drink', 'sports nutrition', 'endurance fuel', 'electrolytes', 'carbohydrates', 'homemade gel', 'cycling', 'running', 'triathlon'],
   alternates: {
-    canonical: pageUrl,
+    canonical: "https://ekarbe.github.io/gel-calculator",
   },
 
   openGraph: {
