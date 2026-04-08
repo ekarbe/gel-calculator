@@ -1,0 +1,139 @@
+/*  Gel-Calculator - Personalized fuel calculator for endurance athletes.
+    Copyright (C) 2026  Eike Christian Karbe
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>. */
+
+import { useCalculatorContext } from "../../context/CalculatorContext";
+import React from "react";
+import { ListRestart, ChevronRight } from "lucide-react";
+
+const FinalRecipe = () => {
+  const {
+    recipeRef,
+    recipeView,
+    setRecipeView,
+    gelsPerHour,
+    setGelsPerHour,
+    totals,
+    duration,
+    getDisplayValue,
+    onOpenInstructions,
+  } = useCalculatorContext();
+  return (
+    <div
+      ref={recipeRef}
+      className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden sticky top-24"
+    >
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <ListRestart size={20} className="text-[#5e5ce6]" />
+            <h3 className="text-lg font-bold text-slate-900">Final Recipe</h3>
+          </div>
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            <button
+              onClick={() => setRecipeView("total")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-[#5e5ce6] text-white shadow-sm" : "text-slate-600"}`}
+            >
+              Total Batch
+            </button>
+            <button
+              onClick={() => setRecipeView("perGel")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-[#5e5ce6] text-white shadow-sm" : "text-slate-600"}`}
+            >
+              Per Gel
+            </button>
+          </div>
+        </div>
+
+        {recipeView === "perGel" && (
+          <div className="mb-6 p-4 bg-[#eef2ff] rounded-xl border border-[#c7d2fe] flex items-center justify-between">
+            <label className="text-sm font-semibold text-[#5e5ce6]">
+              Gels per Hour
+            </label>
+            <input
+              type="number"
+              value={gelsPerHour}
+              onChange={(e) => setGelsPerHour(Number(e.target.value))}
+              className="w-20 px-3 py-1.5 text-sm font-bold text-slate-800 text-right border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5e5ce6]"
+            />
+          </div>
+        )}
+
+        <div className="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+          {recipeView === "total"
+            ? `Total batch for a ${(duration / 60).toFixed(1)} hour activity.`
+            : `Amounts to mix for one single gel flask (${gelsPerHour} gels/hr).`}
+        </div>
+
+        <div className="space-y-4">
+          {[
+            {
+              label: "Maltodextrin",
+              value: `${getDisplayValue(totals.malto)}g`,
+              color: "bg-[#5e5ce6]",
+            },
+            {
+              label: "Fructose",
+              value: `${getDisplayValue(totals.fructose)}g`,
+              color: "bg-[#9333ea]",
+            },
+            {
+              label: "Sodium Citrate",
+              value: `${getDisplayValue(totals.sodiumCitrate)}mg`,
+              color: "bg-[#2dd4bf]",
+            },
+            {
+              label: "Table Salt",
+              value: `${getDisplayValue(totals.tableSalt)}mg`,
+              color: "bg-[#2dd4bf]",
+            },
+            {
+              label: "Water",
+              value: `${getDisplayValue(totals.water, true)}ml`,
+              color: "bg-blue-400",
+              noBorder: true,
+            },
+          ].map((item, idx) => (
+            <div
+              key={idx}
+              className={`flex justify-between items-center py-2 ${item.noBorder ? "pt-2" : "border-b border-slate-100 border-dashed"}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
+                <span className="font-medium text-slate-700">{item.label}</span>
+              </div>
+              <span className="font-bold text-slate-900">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-6 bg-slate-50 border-t border-slate-100">
+        <button
+          onClick={onOpenInstructions}
+          className="w-full bg-[#5e5ce6] hover:bg-[#4b49c6] text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group"
+        >
+          View Mixing Instructions{" "}
+          <ChevronRight
+            size={18}
+            className="group-hover:translate-x-1 transition-transform"
+          />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default FinalRecipe;

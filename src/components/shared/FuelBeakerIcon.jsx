@@ -14,12 +14,25 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import React from "react";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
+const FuelBeakerIcon = ({ className = "w-5 h-5", strokeWidth = 2 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    className={className}
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  >
+    <g stroke="currentColor">
+      <path d="M4.5 3h15" />
+      <path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3" />
+      <path d="M6 10h12" />
+      <path d="M12 10l-2 4h4l-2 4" />
+    </g>
+  </svg>
+);
+
+export default FuelBeakerIcon;

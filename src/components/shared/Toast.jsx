@@ -14,12 +14,16 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import React from "react";
+import { CheckCircle2 } from "lucide-react";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
+const Toast = ({ message, visible }) => (
+  <div
+    className={`fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1e1e2d] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all duration-300 z-50 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"}`}
+  >
+    <CheckCircle2 size={18} className="text-[#2dd4bf]" />
+    <span className="text-sm font-medium">{message}</span>
+  </div>
+);
+
+export default Toast;

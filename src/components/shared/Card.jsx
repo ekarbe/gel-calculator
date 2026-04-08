@@ -14,12 +14,14 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import React from "react";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
+const Card = ({ children, className = "" }) => (
+  <div
+    className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-6 ${className}`}
+  >
+    {children}
+  </div>
+);
+
+export default Card;

@@ -14,12 +14,23 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+"use client";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+import { createContext, useContext } from "react";
+import { useCalculator } from "../hooks/useCalculator";
+
+const CalculatorContext = createContext(null);
+
+export function CalculatorProvider({ children }) {
+  const calculatorState = useCalculator();
+  return (
+    <CalculatorContext.Provider value={calculatorState}>
+      {children}
+    </CalculatorContext.Provider>
+  );
+}
+
+// Helper hook to easily use the context in components
+export function useCalculatorContext() {
+  return useContext(CalculatorContext);
 }

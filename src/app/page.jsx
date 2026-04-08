@@ -14,12 +14,15 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import App from "./app";
+import { CalculatorProvider } from "../context/CalculatorContext";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+export default function Page() {
+  return (
+    <CalculatorProvider>
+      <main className="min-h-screen p-4">
+        <App />
+      </main>
+    </CalculatorProvider>
+  );
 }
