@@ -17,7 +17,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { glucoseSourceOptions, fructoseSourceOptions } from "../constants/constants";
+import { glucoseSourceOptions, fructoseSourceOptions, electrolyteSourceOptions } from "../constants/constants";
 
 export function useCalculator() {
   // Activity State
@@ -34,6 +34,9 @@ export function useCalculator() {
   const [fructoseSources, setFructoseSources] = useState([
     { id: 1, name: "Crystalline Fructose", percentage: 100 },
   ]);
+  const [electrolyteSources, setElectrolyteSources] = useState([
+    { id: 1, name: "Sodium Chloride (Table Salt)"}
+  ])
 
   const addSource = (type) => {
     const newSource = { id: Date.now(), name: "", percentage: 0 };
@@ -46,7 +49,7 @@ export function useCalculator() {
         if (!availableOption) return prev;
         return [...prev, { ...newSource, name: availableOption.label }];
       });
-    } else {
+    } else if (type === "fructose") {
       setFructoseSources((prev) => {
         const usedNames = prev.map((s) => s.name);
         const availableOption = fructoseSourceOptions.find(
@@ -54,6 +57,15 @@ export function useCalculator() {
         );
         if (!availableOption) return prev;
         return [...prev, { ...newSource, name: availableOption.label }];
+      });
+    } else if (type === "electrolyte") {
+      setElectrolyteSources((prev) => {
+        const usedNames = prev.map((s) => s.name);
+        const availableOption = electrolyteSourceOptions.find(
+          (opt) => !usedNames.includes(opt.label),
+        );
+        if (!availableOption) return prev;
+        return [...prev, { id: Date.now(), name: availableOption.label, amount: 0 }];
       });
     }
   };
@@ -175,6 +187,8 @@ export function useCalculator() {
     setGlucoseSources,
     fructoseSources,
     setFructoseSources,
+    electrolyteSources,
+    setElectrolyteSources,
     addSource,
     updateSource,
     removeSource,

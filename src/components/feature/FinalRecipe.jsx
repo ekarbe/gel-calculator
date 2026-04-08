@@ -17,6 +17,7 @@
 import { useCalculatorContext } from "../../context/CalculatorContext";
 import React from "react";
 import { ListRestart, ChevronRight } from "lucide-react";
+import { sourceDataMap } from "../../constants/constants";
 
 const FinalRecipe = () => {
   const {
@@ -29,7 +30,60 @@ const FinalRecipe = () => {
     duration,
     getDisplayValue,
     onOpenInstructions,
+    glucoseSources,
+    fructoseSources,
+    electrolyteSources
   } = useCalculatorContext();
+
+  const recipeItems = [];
+
+  glucoseSources.forEach(source => {
+    if (source.percentage > 0) {
+      const sourceData = sourceDataMap.get(source.name);
+      const targetCarbs = (totals.malto * source.percentage) / 100;
+      const powderAmount = Math.round(targetCarbs / (sourceData?.carbsPerGram || 1));
+      if (powderAmount > 0) {
+        recipeItems.push({
+          label: source.name,
+          value: `${getDisplayValue(powderAmount)}g`,
+          color: "bg-[#5e5ce6]",
+        });
+      }
+    }
+  });
+
+  fructoseSources.forEach(source => {
+    if (source.percentage > 0) {
+      const sourceData = sourceDataMap.get(source.name);
+      const targetCarbs = (totals.fructose * source.percentage) / 100;
+      const powderAmount = Math.round(targetCarbs / (sourceData?.carbsPerGram || 1));
+      if (powderAmount > 0) {
+        recipeItems.push({
+          label: source.name,
+          value: `${getDisplayValue(powderAmount)}g`,
+          color: "bg-[#9333ea]",
+        });
+      }
+    }
+  });
+
+  electrolyteSources.forEach(source => {
+    if (source.amount > 0) {
+      recipeItems.push({
+        label: source.name,
+        value: `${getDisplayValue(source.amount)}mg`,
+        color: "bg-[#2dd4bf]",
+      });
+    }
+  });
+
+  recipeItems.push({
+    label: "Water",
+    value: `${getDisplayValue(totals.water)}ml`,
+    color: "bg-blue-400",
+    noBorder: true,
+  });
+
   return (
     <div
       ref={recipeRef}
@@ -78,34 +132,7 @@ const FinalRecipe = () => {
         </div>
 
         <div className="space-y-4">
-          {[
-            {
-              label: "Maltodextrin",
-              value: `${getDisplayValue(totals.malto)}g`,
-              color: "bg-[#5e5ce6]",
-            },
-            {
-              label: "Fructose",
-              value: `${getDisplayValue(totals.fructose)}g`,
-              color: "bg-[#9333ea]",
-            },
-            {
-              label: "Sodium Citrate",
-              value: `${getDisplayValue(totals.sodiumCitrate)}mg`,
-              color: "bg-[#2dd4bf]",
-            },
-            {
-              label: "Table Salt",
-              value: `${getDisplayValue(totals.tableSalt)}mg`,
-              color: "bg-[#2dd4bf]",
-            },
-            {
-              label: "Water",
-              value: `${getDisplayValue(totals.water, true)}ml`,
-              color: "bg-blue-400",
-              noBorder: true,
-            },
-          ].map((item, idx) => (
+          {recipeItems.map((item, idx) => (
             <div
               key={idx}
               className={`flex justify-between items-center py-2 ${item.noBorder ? "pt-2" : "border-b border-slate-100 border-dashed"}`}

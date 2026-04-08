@@ -19,9 +19,10 @@ import React from "react";
 import { Droplet, Plus, Trash2 } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";
+import { electrolyteSourceOptions } from "../../constants/constants";
 
 const ElectrolytesHydration = () => {
-  const {} = useCalculatorContext();
+  const { electrolyteSources, addSource, updateSource, removeSource } = useCalculatorContext();
   return (
     <Card>
       <div className="flex items-center gap-3 mb-6">
@@ -68,41 +69,52 @@ const ElectrolytesHydration = () => {
       <div className="pt-6 border-t border-slate-100">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-slate-800">Added Sources</h3>
-          <button className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline">
+          <button 
+            onClick={() => addSource("electrolyte")}
+            className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+          >
             <Plus size={16} /> Add
           </button>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
-            <select className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none">
-              <option>Sodium Citrate</option>
-            </select>
-            <TooltipInfo content="Yields approx. 810mg Sodium (Na+)" />
-            <input
-              type="number"
-              defaultValue={3000}
-              className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg text-right font-bold"
-            />{" "}
-            <span className="text-sm">mg</span>
-            <button className="text-slate-400 hover:text-red-500 p-2">
-              <Trash2 size={16} />
-            </button>
-          </div>
-          <div className="flex items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
-            <select className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none">
-              <option>Table Salt (NaCl)</option>
-            </select>
-            <TooltipInfo content="Yields approx. 590mg Sodium (Na+)" />
-            <input
-              type="number"
-              defaultValue={1500}
-              className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg text-right font-bold"
-            />{" "}
-            <span className="text-sm">mg</span>
-            <button className="text-slate-400 hover:text-red-500 p-2">
-              <Trash2 size={16} />
-            </button>
-          </div>
+          {electrolyteSources.map((source) => {
+            const currentOption = electrolyteSourceOptions.find(opt => opt.label === source.name);
+            const tooltipContent = currentOption ? `Contains ${currentOption.components.map(c => `${(c.ratio * 100).toFixed(1)}% ${c.name}`).join(", ")}` : "";
+            
+            return (
+              <div key={source.id} className="flex items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
+                <select 
+                  value={source.name}
+                  onChange={(e) => updateSource("electrolyte", source.id, "name", e.target.value)}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none"
+                >
+                  {electrolyteSourceOptions.map((opt) => (
+                    <option 
+                      key={opt.label} 
+                      value={opt.label}
+                      disabled={electrolyteSources.some((s) => s.name === opt.label && s.id !== source.id)}
+                    >
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <TooltipInfo content={tooltipContent} />
+                <input
+                  type="number"
+                  value={source.amount}
+                  onChange={(e) => updateSource("electrolyte", source.id, "amount", Number(e.target.value))}
+                  className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg text-right font-bold"
+                />{" "}
+                <span className="text-sm">mg</span>
+                <button 
+                  onClick={() => removeSource("electrolyte", source.id)}
+                  className="text-slate-400 hover:text-red-500 p-2"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </Card>
