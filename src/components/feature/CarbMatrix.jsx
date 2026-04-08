@@ -169,10 +169,23 @@ const CarbMatrix = () => {
                   className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
                 >
                   {glucoseSourceOptions.map((opt) => (
-                    <option key={opt.label} value={opt.label}>{opt.label}</option>
+                    <option 
+                      key={opt.label} 
+                      value={opt.label}
+                      disabled={glucoseSources.some((s) => s.name === opt.label && s.id !== source.id)}
+                    >
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
-                <TooltipInfo content={`${(sourceDataMap.get(source.name)?.carbsPerGram || 1.00).toFixed(2)}g Carbs / 1g`} />
+                <TooltipInfo content={
+                  <div className="flex flex-col gap-1 text-left">
+                    <span className="font-semibold">{(sourceDataMap.get(source.name)?.carbsPerGram || 1.00).toFixed(2)}g Carbs / 1g</span>
+                    <span className="text-xs text-slate-300">
+                      Glucose: {((sourceDataMap.get(source.name)?.glucoseContent || 0) * 100).toFixed(0)}% | Fructose: {((sourceDataMap.get(source.name)?.fructoseContent || 0) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                } />
                 <div className="flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 ml-1">
                   <input
                     type="number"
@@ -217,10 +230,23 @@ const CarbMatrix = () => {
                   className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
                 >
                   {fructoseSourceOptions.map((opt) => (
-                    <option key={opt.label} value={opt.label}>{opt.label}</option>
+                    <option 
+                      key={opt.label} 
+                      value={opt.label}
+                      disabled={fructoseSources.some((s) => s.name === opt.label && s.id !== source.id)}
+                    >
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
-                <TooltipInfo content={`${(sourceDataMap.get(source.name)?.carbsPerGram || 1.00).toFixed(2)}g Carbs / 1g`} />
+                <TooltipInfo content={
+                  <div className="flex flex-col gap-1 text-left">
+                    <span className="font-semibold">{(sourceDataMap.get(source.name)?.carbsPerGram || 1.00).toFixed(2)}g Carbs / 1g</span>
+                    <span className="text-xs text-slate-300">
+                      Glucose: {((sourceDataMap.get(source.name)?.glucoseContent || 0) * 100).toFixed(0)}% | Fructose: {((sourceDataMap.get(source.name)?.fructoseContent || 0) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                } />
                 <div className="flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 ml-1">
                   <input
                     type="number"

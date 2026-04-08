@@ -17,6 +17,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { glucoseSourceOptions, fructoseSourceOptions } from "../constants/constants";
 
 export function useCalculator() {
   // Activity State
@@ -37,15 +38,23 @@ export function useCalculator() {
   const addSource = (type) => {
     const newSource = { id: Date.now(), name: "", percentage: 0 };
     if (type === "glucose") {
-      setGlucoseSources((prev) => [
-        ...prev,
-        { ...newSource, name: "Maltodextrin" },
-      ]);
+      setGlucoseSources((prev) => {
+        const usedNames = prev.map((s) => s.name);
+        const availableOption = glucoseSourceOptions.find(
+          (opt) => !usedNames.includes(opt.label),
+        );
+        if (!availableOption) return prev;
+        return [...prev, { ...newSource, name: availableOption.label }];
+      });
     } else {
-      setFructoseSources((prev) => [
-        ...prev,
-        { ...newSource, name: "Crystalline Fructose" },
-      ]);
+      setFructoseSources((prev) => {
+        const usedNames = prev.map((s) => s.name);
+        const availableOption = fructoseSourceOptions.find(
+          (opt) => !usedNames.includes(opt.label),
+        );
+        if (!availableOption) return prev;
+        return [...prev, { ...newSource, name: availableOption.label }];
+      });
     }
   };
 
