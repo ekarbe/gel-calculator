@@ -18,6 +18,7 @@ import { useCalculatorContext } from "../../context/CalculatorContext";
 import React from "react";
 import { ListRestart, ChevronRight } from "lucide-react";
 import { sourceDataMap } from "../../constants/constants";
+import TooltipInfo from "../shared/TooltipInfo";
 
 const FinalRecipe = () => {
   const {
@@ -42,10 +43,27 @@ const FinalRecipe = () => {
     if (source.percentage > 0) {
       const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
       if (powderAmount > 0) {
+        const data = sourceDataMap.get(source.name);
+        let tooltipContent = null;
+        if (data) {
+          const totalCarbs = powderAmount * (data.carbsPerGram || 1);
+          const gProvided = totalCarbs * (data.glucoseContent || 0);
+          const fProvided = totalCarbs * (data.fructoseContent || 0);
+          tooltipContent = (
+            <div className="flex flex-col gap-1 text-left min-w-max">
+              <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
+              <span className="text-xs text-slate-300">
+                Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
+              </span>
+            </div>
+          );
+        }
+        
         recipeItems.push({
           label: source.name,
           value: `${getDisplayValue(powderAmount)}g`,
           color: "bg-[#5e5ce6]",
+          tooltipContent,
         });
       }
     }
@@ -55,10 +73,27 @@ const FinalRecipe = () => {
     if (source.percentage > 0) {
       const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
       if (powderAmount > 0) {
+        const data = sourceDataMap.get(source.name);
+        let tooltipContent = null;
+        if (data) {
+          const totalCarbs = powderAmount * (data.carbsPerGram || 1);
+          const gProvided = totalCarbs * (data.glucoseContent || 0);
+          const fProvided = totalCarbs * (data.fructoseContent || 0);
+          tooltipContent = (
+            <div className="flex flex-col gap-1 text-left min-w-max">
+              <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
+              <span className="text-xs text-slate-300">
+                Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
+              </span>
+            </div>
+          );
+        }
+
         recipeItems.push({
           label: source.name,
           value: `${getDisplayValue(powderAmount)}g`,
           color: "bg-[#9333ea]",
+          tooltipContent,
         });
       }
     }
@@ -136,7 +171,12 @@ const FinalRecipe = () => {
             >
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
-                <span className="font-medium text-slate-700">{item.label}</span>
+                <div className="flex items-center">
+                  <span className="font-medium text-slate-700">{item.label}</span>
+                  {item.tooltipContent && (
+                    <TooltipInfo content={item.tooltipContent} />
+                  )}
+                </div>
               </div>
               <span className="font-bold text-slate-900">{item.value}</span>
             </div>

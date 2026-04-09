@@ -33,6 +33,10 @@ const CarbMatrix = () => {
     updateSource,
     removeSource
   } = useCalculatorContext();
+
+  const totalGlucosePercentage = glucoseSources.reduce((sum, s) => sum + (s.percentage || 0), 0);
+  const totalFructosePercentage = fructoseSources.reduce((sum, s) => sum + (s.percentage || 0), 0);
+
   return (
     <Card>
       <div className="flex items-center gap-3 mb-6">
@@ -153,12 +157,19 @@ const CarbMatrix = () => {
               <div className="w-2 h-2 rounded-full bg-[#5e5ce6]"></div> Glucose
               Sources
             </h3>
-            <button 
-              onClick={() => addSource("glucose")}
-              className="text-xs text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
-            >
-              <Plus size={14} /> Add
-            </button>
+            <div className="flex items-center gap-4">
+              {totalGlucosePercentage !== 100 && (
+                <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100">
+                  Total: {totalGlucosePercentage}% (Must be 100%)
+                </span>
+              )}
+              <button 
+                onClick={() => addSource("glucose")}
+                className="text-xs text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+              >
+                <Plus size={14} /> Add
+              </button>
+            </div>
           </div>
           <div className="space-y-3">
             {glucoseSources.map((source) => (
@@ -190,9 +201,14 @@ const CarbMatrix = () => {
                   <input
                     type="number"
                     min="0"
-                    max="100"
+                    max={100 - (totalGlucosePercentage - source.percentage)}
                     value={source.percentage}
-                    onChange={(e) => updateSource("glucose", source.id, "percentage", Number(e.target.value))}
+                    onChange={(e) => {
+                      const maxAllowed = 100 - (totalGlucosePercentage - source.percentage);
+                      let val = Number(e.target.value);
+                      if (val > maxAllowed) val = maxAllowed;
+                      updateSource("glucose", source.id, "percentage", val);
+                    }}
                     className="w-12 bg-transparent outline-none font-semibold text-slate-700 text-right"
                   />
                   <span className="text-slate-500">%</span>
@@ -214,12 +230,19 @@ const CarbMatrix = () => {
               <div className="w-2 h-2 rounded-full bg-[#9333ea]"></div> Fructose
               Sources
             </h3>
-            <button 
-              onClick={() => addSource("fructose")}
-              className="text-xs text-[#9333ea] font-medium flex items-center gap-1 hover:underline"
-            >
-              <Plus size={14} /> Add
-            </button>
+            <div className="flex items-center gap-4">
+              {totalFructosePercentage !== 100 && (
+                <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100">
+                  Total: {totalFructosePercentage}% (Must be 100%)
+                </span>
+              )}
+              <button 
+                onClick={() => addSource("fructose")}
+                className="text-xs text-[#9333ea] font-medium flex items-center gap-1 hover:underline"
+              >
+                <Plus size={14} /> Add
+              </button>
+            </div>
           </div>
           <div className="space-y-3">
             {fructoseSources.map((source) => (
@@ -251,9 +274,14 @@ const CarbMatrix = () => {
                   <input
                     type="number"
                     min="0"
-                    max="100"
+                    max={100 - (totalFructosePercentage - source.percentage)}
                     value={source.percentage}
-                    onChange={(e) => updateSource("fructose", source.id, "percentage", Number(e.target.value))}
+                    onChange={(e) => {
+                      const maxAllowed = 100 - (totalFructosePercentage - source.percentage);
+                      let val = Number(e.target.value);
+                      if (val > maxAllowed) val = maxAllowed;
+                      updateSource("fructose", source.id, "percentage", val);
+                    }}
                     className="w-12 bg-transparent outline-none font-semibold text-slate-700 text-right"
                   />
                   <span className="text-slate-500">%</span>
