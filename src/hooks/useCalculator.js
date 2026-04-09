@@ -17,11 +17,169 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { zlibSync, unzlibSync, strToU8, strFromU8 } from 'fflate';
+
+const keyMap = {
+  duration: 'd',
+  targetCarbs: 't',
+  glucoseParts: 'gp',
+  fructoseParts: 'fp',
+  glucoseSources: 'gs',
+  fructoseSources: 'fs',
+  electrolyteSources: 'es',
+  isSweatRate: 'isr',
+  sweatRate: 'sr',
+  saltiness: 'sl',
+  activeElectrolytes: 'ae',
+  manualTargets: 'mt',
+  recipeView: 'rv',
+  gelsPerHour: 'gph',
+  id: 'i',
+  name: 'n',
+  percentage: 'p',
+  amount: 'a',
+  Sodium: 's',
+  Chloride: 'c',
+  Potassium: 'po',
+  Magnesium: 'm',
+  Calcium: 'ca'
+};
+
+const reverseKeyMap = Object.entries(keyMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
+
+function mapKeys(obj, map) {
+  if (Array.isArray(obj)) {
+    return obj.map(item => mapKeys(item, map));
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const mappedKey = map[key] || key;
+      acc[mappedKey] = mapKeys(obj[key], map);
+      return acc;
+    }, {});
+  }
+  return obj;
+}
+
+function encodeState(state) {
+  const parts = [];
+  
+  if (state.duration !== 180) parts.push(`d_${state.duration}`);
+  if (state.targetCarbs !== 90) parts.push(`t_${state.targetCarbs}`);
+  if (state.glucoseParts !== 1.0) parts.push(`gp_${state.glucoseParts}`);
+  if (state.fructoseParts !== 0.8) parts.push(`fp_${state.fructoseParts}`);
+  
+  if (state.glucoseSources && state.glucoseSources.length > 0) {
+    const gsStr = state.glucoseSources.filter(s => s.id != null).map(s => `${s.id}-${s.percentage}`).join('.');
+    if (gsStr !== '3-100') parts.push(`gs_${gsStr}`);
+  } else {
+    parts.push(`gs_empty`);
+  }
+  
+  if (state.fructoseSources && state.fructoseSources.length > 0) {
+    const fsStr = state.fructoseSources.filter(s => s.id != null).map(s => `${s.id}-${s.percentage}`).join('.');
+    if (fsStr !== '11-100') parts.push(`fs_${fsStr}`);
+  } else {
+    parts.push(`fs_empty`);
+  }
+  
+  if (state.electrolyteSources && state.electrolyteSources.length > 0) {
+    const esStr = state.electrolyteSources.filter(s => s.id != null).map(s => `${s.id}-${s.amount}`).join('.');
+    if (esStr !== '') parts.push(`es_${esStr}`);
+  }
+  
+  if (state.isSweatRate === false) parts.push(`isr_0`);
+  if (state.sweatRate !== 2) parts.push(`sr_${state.sweatRate}`);
+  if (state.saltiness !== 2) parts.push(`sl_${state.saltiness}`);
+  
+  if (state.activeElectrolytes) {
+    const aeArray = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
+    const aeStr = aeArray.map(k => state.activeElectrolytes[k] ? '1' : '0').join('');
+    if (aeStr !== '11111') parts.push(`ae_${aeStr}`);
+  }
+  
+  if (state.manualTargets && state.isSweatRate === false) {
+    const aeArray = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
+    const mtStr = aeArray.map(k => state.manualTargets[k] || 0).join('-');
+    if (mtStr !== '0-0-0-0-0') parts.push(`mt_${mtStr}`);
+  }
+  
+  if (state.recipeView !== 'total') parts.push(`rv_${state.recipeView === 'perGel' ? 'g' : 't'}`);
+  if (state.gelsPerHour !== 2) parts.push(`gph_${state.gelsPerHour}`);
+
+  return parts.length > 0 ? parts.join('~') : 'v2';
+}
+
+function decodeStateV1(base64Url) {
+  try {
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const jsonString = strFromU8(unzlibSync(bytes));
+    return mapKeys(JSON.parse(jsonString), reverseKeyMap);
+  } catch (e) {
+    console.error("V1 decode error", e);
+    return {};
+  }
+}
+
+function decodeState(str) {
+  if (!str.includes('_') && str !== 'v2') {
+    return decodeStateV1(str);
+  }
+  
+  const state = {};
+  if (str === 'v2') return state;
+  
+  const parts = str.split('~');
+  for (const part of parts) {
+    const [k, v] = part.split('_');
+    if (!v) continue;
+    
+    if (k === 'd') state.duration = Number(v);
+    else if (k === 't') state.targetCarbs = Number(v);
+    else if (k === 'gp') state.glucoseParts = Number(v);
+    else if (k === 'fp') state.fructoseParts = Number(v);
+    else if (k === 'gs') {
+      if (v === 'empty') state.glucoseSources = [];
+      else state.glucoseSources = v.split('.').map(s => { const [id, p] = s.split('-'); return { id: Number(id), percentage: Number(p) }; });
+    }
+    else if (k === 'fs') {
+      if (v === 'empty') state.fructoseSources = [];
+      else state.fructoseSources = v.split('.').map(s => { const [id, p] = s.split('-'); return { id: Number(id), percentage: Number(p) }; });
+    }
+    else if (k === 'es') {
+      state.electrolyteSources = v.split('.').map(s => { const [id, a] = s.split('-'); return { id: Number(id), amount: Number(a) }; });
+    }
+    else if (k === 'isr') state.isSweatRate = v === '1';
+    else if (k === 'sr') state.sweatRate = Number(v);
+    else if (k === 'sl') state.saltiness = Number(v);
+    else if (k === 'ae') {
+      const keys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
+      state.activeElectrolytes = {};
+      for (let i = 0; i < keys.length; i++) state.activeElectrolytes[keys[i]] = v[i] === '1';
+    }
+    else if (k === 'mt') {
+      const keys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
+      const vals = v.split('-');
+      state.manualTargets = {};
+      for (let i = 0; i < keys.length; i++) state.manualTargets[keys[i]] = Number(vals[i]);
+    }
+    else if (k === 'rv') state.recipeView = v === 'g' ? 'perGel' : 'total';
+    else if (k === 'gph') state.gelsPerHour = Number(v);
+  }
+  return state;
+}
 import { 
   glucoseSourceOptions, 
   fructoseSourceOptions, 
   electrolyteSourceOptions,
   sourceDataMap,
+  allSourcesOptions,
+  sourceDataByIdMap,
   SWEAT_RATES,
   ELECTROLYTE_CONCENTRATIONS,
   CONVERSION_FACTORS
@@ -116,16 +274,27 @@ export function useCalculator() {
       const s = urlParams.get('s');
       if (s) {
         try {
-          const jsonString = decodeURIComponent(atob(s));
-          const state = JSON.parse(jsonString);
+          let state;
+          try {
+            state = decodeState(s);
+          } catch {
+            const jsonString = decodeURIComponent(atob(s));
+            state = JSON.parse(jsonString);
+          }
+
+          const decompressSources = (sources) => sources.map(src => {
+            if (src.name) return { ...src, id: Date.now() + Math.random() };
+            const opt = allSourcesOptions.find(o => o.id == src.id);
+            return { id: Date.now() + Math.random(), name: opt ? opt.label : "", percentage: src.percentage, amount: src.amount };
+          });
           
           if (state.duration !== undefined) setDuration(state.duration);
           if (state.targetCarbs !== undefined) setTargetCarbs(state.targetCarbs);
           if (state.glucoseParts !== undefined) setGlucoseParts(state.glucoseParts);
           if (state.fructoseParts !== undefined) setFructoseParts(state.fructoseParts);
-          if (state.glucoseSources !== undefined) setGlucoseSources(state.glucoseSources);
-          if (state.fructoseSources !== undefined) setFructoseSources(state.fructoseSources);
-          if (state.electrolyteSources !== undefined) setElectrolyteSources(state.electrolyteSources);
+          if (state.glucoseSources !== undefined) setGlucoseSources(decompressSources(state.glucoseSources));
+          if (state.fructoseSources !== undefined) setFructoseSources(decompressSources(state.fructoseSources));
+          if (state.electrolyteSources !== undefined) setElectrolyteSources(decompressSources(state.electrolyteSources));
           if (state.isSweatRate !== undefined) setIsSweatRate(state.isSweatRate);
           if (state.sweatRate !== undefined) setSweatRate(state.sweatRate);
           if (state.saltiness !== undefined) setSaltiness(state.saltiness);
@@ -333,14 +502,19 @@ export function useCalculator() {
   };
 
   const handleCopyLink = () => {
+    const compressSources = (sources) => sources.map(s => {
+      const opt = allSourcesOptions.find(o => o.label === s.name);
+      return { id: opt ? opt.id : undefined, percentage: s.percentage, amount: s.amount };
+    });
+
     const stateToSave = {
       duration,
       targetCarbs,
       glucoseParts,
       fructoseParts,
-      glucoseSources,
-      fructoseSources,
-      electrolyteSources,
+      glucoseSources: compressSources(glucoseSources),
+      fructoseSources: compressSources(fructoseSources),
+      electrolyteSources: compressSources(electrolyteSources),
       isSweatRate,
       sweatRate,
       saltiness,
@@ -350,8 +524,7 @@ export function useCalculator() {
       gelsPerHour
     };
     try {
-      const jsonString = JSON.stringify(stateToSave);
-      const base64String = btoa(encodeURIComponent(jsonString));
+      const base64String = encodeState(stateToSave);
       const url = new URL(window.location.href);
       url.searchParams.set('s', base64String);
       
