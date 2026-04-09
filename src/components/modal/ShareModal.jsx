@@ -15,8 +15,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React from "react";
-import { X, Link2, ImageIcon, Zap, Copy } from "lucide-react";
+import React, { useRef } from "react";
+import { X, Link2, ImageIcon, Zap, Download, Copy } from "lucide-react";
+import * as htmlToImage from "html-to-image";
 
 const ShareModal = () => {
   const {
@@ -29,10 +30,77 @@ const ShareModal = () => {
     totals,
     getDisplayValue,
     handleCopyLink,
-    handleCopyImage,
+    glucoseSources,
+    fructoseSources,
+    electrolyteSources,
+    calculatedSourceGrams,
+    showToast,
   } = useCalculatorContext();
+
+  const imageRef = useRef(null);
+
   const onClose = () => setIsShareModalOpen(false);
+
+  const handleDownloadImage = async () => {
+    if (!imageRef.current) return;
+    try {
+      const dataUrl = await htmlToImage.toPng(imageRef.current, { cacheBust: true });
+      const link = document.createElement("a");
+      link.download = "gel-recipe.png";
+      link.href = dataUrl;
+      link.click();
+      showToast("Image downloaded successfully!");
+      setIsShareModalOpen(false);
+    } catch (error) {
+      console.error("Failed to generate image", error);
+      showToast("Failed to generate image.");
+    }
+  };
+
   if (!isOpen) return null;
+
+  const recipeItems = [];
+
+  glucoseSources.forEach(source => {
+    if (source.percentage > 0) {
+      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
+      if (powderAmount > 0) {
+        recipeItems.push({
+          label: source.name,
+          value: `${getDisplayValue(powderAmount)}g`,
+        });
+      }
+    }
+  });
+
+  fructoseSources.forEach(source => {
+    if (source.percentage > 0) {
+      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
+      if (powderAmount > 0) {
+        recipeItems.push({
+          label: source.name,
+          value: `${getDisplayValue(powderAmount)}g`,
+        });
+      }
+    }
+  });
+
+  electrolyteSources.forEach(source => {
+    if (source.amount > 0) {
+      recipeItems.push({
+        label: source.name,
+        value: `${getDisplayValue(source.amount)}mg`,
+        isElectrolyte: true,
+      });
+    }
+  });
+
+  recipeItems.push({
+    label: "Water",
+    value: `${getDisplayValue(totals.water)}ml`,
+    isWater: true,
+  });
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -81,8 +149,8 @@ const ShareModal = () => {
         ) : (
           <div className="flex flex-col">
             <div className="p-6 bg-slate-100 flex justify-center">
-              <div className="bg-[#1e1e2d] text-white p-8 rounded-2xl w-full max-w-[320px] aspect-[4/5] flex flex-col relative ring-1 ring-slate-800">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#5e5ce6] to-[#2dd4bf]"></div>
+              <div ref={imageRef} className="bg-[#1e1e2d] text-white p-8 rounded-2xl w-full max-w-[320px] aspect-[4/5] flex flex-col relative ring-1 ring-slate-800">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#5e5ce6] to-[#2dd4bf] rounded-t-2xl"></div>
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-2">
                   <Zap
                     size={20}
@@ -106,39 +174,28 @@ const ShareModal = () => {
                   </div>
                 </div>
                 <div className="space-y-4 flex-1">
-                  <div className="flex justify-between">
-                    <span>Maltodextrin</span>
-                    <span className="font-semibold">
-                      {getDisplayValue(totals.malto)}g
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Fructose</span>
-                    <span className="font-semibold">
-                      {getDisplayValue(totals.fructose)}g
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[#2dd4bf]">
-                    <span>Sodium Citrate</span>
-                    <span className="font-semibold">
-                      {getDisplayValue(totals.sodiumCitrate)}mg
-                    </span>
-                  </div>
+                  {recipeItems.map((item, idx) => (
+                    <div key={idx} className={`flex justify-between ${item.isElectrolyte ? 'text-[#2dd4bf]' : (item.isWater ? 'text-blue-400 mt-2 pt-2 border-t border-slate-700/50' : '')}`}>
+                      <span>{item.label}</span>
+                      <span className="font-semibold">{item.value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-3 bg-white">
+            <div className="p-4 border-t border-slate-100 flex gap-2 bg-white">
               <button
                 onClick={() => setShareView("menu")}
-                className="px-5 py-3 text-slate-600 bg-slate-100 rounded-xl font-semibold"
+                className="px-4 py-3 text-slate-600 bg-slate-100 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
+                title="Back"
               >
                 Back
               </button>
               <button
-                onClick={handleCopyImage}
-                className="flex-1 bg-[#5e5ce6] text-white font-semibold py-3 rounded-xl flex justify-center items-center gap-2"
+                onClick={handleDownloadImage}
+                className="flex-1 bg-[#5e5ce6] text-white font-semibold py-3 rounded-xl flex justify-center items-center gap-2 hover:bg-[#4b49c6] transition-colors"
               >
-                <Copy size={18} /> Copy Image
+                <Download size={18} /> Download
               </button>
             </div>
           </div>
