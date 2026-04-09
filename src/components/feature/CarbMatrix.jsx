@@ -1,4 +1,4 @@
-/*  Gel-Calculator - Personalized fuel calculator for endurance athletes.
+/* Gel-Calculator - Personalized fuel calculator for endurance athletes.
     Copyright (C) 2026  Eike Christian Karbe
 
     This program is free software: you can redistribute it and/or modify
@@ -151,18 +151,27 @@ const CarbMatrix = () => {
 
       {/* Source Groups */}
       <div className="space-y-6">
+        {/* Glucose Sources */}
         <div className="p-5 rounded-xl border border-blue-100 bg-[#f4f7ff]">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-blue-700 flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#5e5ce6]"></div> Glucose
               Sources
             </h3>
-            <div className="flex items-center gap-4">
-              {totalGlucosePercentage !== 100 && (
-                <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100">
-                  Total: {totalGlucosePercentage}% (Must be 100%)
-                </span>
-              )}
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-semibold px-2 py-1 rounded-md border transition-colors ${
+                totalGlucosePercentage > 100 
+                  ? "text-red-600 bg-red-50 border-red-200" 
+                  : totalGlucosePercentage === 100 
+                    ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+                    : "text-amber-600 bg-amber-50 border-amber-200"
+              }`}>
+                {totalGlucosePercentage > 100 
+                  ? `Over by ${totalGlucosePercentage - 100}%` 
+                  : totalGlucosePercentage === 100 
+                    ? "100% Allocated" 
+                    : `${100 - totalGlucosePercentage}% Remaining`}
+              </span>
               <button 
                 onClick={() => addSource("glucose")}
                 className="text-xs text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
@@ -173,7 +182,7 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {glucoseSources.map((source) => (
-              <div key={source.id} className="flex items-center gap-2 p-3 border border-blue-200/60 rounded-xl bg-white shadow-sm">
+              <div key={source.id} className={`flex items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200/60' : 'border-blue-200/60'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("glucose", source.id, "name", e.target.value)}
@@ -197,21 +206,20 @@ const CarbMatrix = () => {
                     </span>
                   </div>
                 } />
-                <div className="flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 ml-1">
+                <div className={`flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200' : 'border-slate-200'}`}>
                   <input
                     type="number"
                     min="0"
-                    max={100 - (totalGlucosePercentage - source.percentage)}
-                    value={source.percentage}
+                    value={source.percentage === 0 ? '' : source.percentage}
+                    placeholder="0"
                     onChange={(e) => {
-                      const maxAllowed = 100 - (totalGlucosePercentage - source.percentage);
                       let val = Number(e.target.value);
-                      if (val > maxAllowed) val = maxAllowed;
+                      if (val < 0) val = 0; // Only block negative numbers
                       updateSource("glucose", source.id, "percentage", val);
                     }}
-                    className="w-12 bg-transparent outline-none font-semibold text-slate-700 text-right"
+                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalGlucosePercentage > 100 ? 'text-red-600' : 'text-slate-700'}`}
                   />
-                  <span className="text-slate-500">%</span>
+                  <span className={totalGlucosePercentage > 100 ? "text-red-400" : "text-slate-500"}>%</span>
                 </div>
                 <button 
                   onClick={() => removeSource("glucose", source.id)}
@@ -224,18 +232,27 @@ const CarbMatrix = () => {
           </div>
         </div>
 
+        {/* Fructose Sources */}
         <div className="p-5 rounded-xl border border-purple-100 bg-[#faf5ff]">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-purple-700 flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#9333ea]"></div> Fructose
               Sources
             </h3>
-            <div className="flex items-center gap-4">
-              {totalFructosePercentage !== 100 && (
-                <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100">
-                  Total: {totalFructosePercentage}% (Must be 100%)
-                </span>
-              )}
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-semibold px-2 py-1 rounded-md border transition-colors ${
+                totalFructosePercentage > 100 
+                  ? "text-red-600 bg-red-50 border-red-200" 
+                  : totalFructosePercentage === 100 
+                    ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+                    : "text-amber-600 bg-amber-50 border-amber-200"
+              }`}>
+                {totalFructosePercentage > 100 
+                  ? `Over by ${totalFructosePercentage - 100}%` 
+                  : totalFructosePercentage === 100 
+                    ? "100% Allocated" 
+                    : `${100 - totalFructosePercentage}% Remaining`}
+              </span>
               <button 
                 onClick={() => addSource("fructose")}
                 className="text-xs text-[#9333ea] font-medium flex items-center gap-1 hover:underline"
@@ -246,7 +263,7 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {fructoseSources.map((source) => (
-              <div key={source.id} className="flex items-center gap-2 p-3 border border-purple-200/60 rounded-xl bg-white shadow-sm">
+              <div key={source.id} className={`flex items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalFructosePercentage > 100 ? 'border-red-200/60' : 'border-purple-200/60'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("fructose", source.id, "name", e.target.value)}
@@ -270,21 +287,20 @@ const CarbMatrix = () => {
                     </span>
                   </div>
                 } />
-                <div className="flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 ml-1">
+                <div className={`flex items-center gap-1 text-sm bg-slate-50 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalFructosePercentage > 100 ? 'border-red-200' : 'border-slate-200'}`}>
                   <input
                     type="number"
                     min="0"
-                    max={100 - (totalFructosePercentage - source.percentage)}
-                    value={source.percentage}
+                    value={source.percentage === 0 ? '' : source.percentage}
+                    placeholder="0"
                     onChange={(e) => {
-                      const maxAllowed = 100 - (totalFructosePercentage - source.percentage);
                       let val = Number(e.target.value);
-                      if (val > maxAllowed) val = maxAllowed;
+                      if (val < 0) val = 0; // Only block negative numbers
                       updateSource("fructose", source.id, "percentage", val);
                     }}
-                    className="w-12 bg-transparent outline-none font-semibold text-slate-700 text-right"
+                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalFructosePercentage > 100 ? 'text-red-600' : 'text-slate-700'}`}
                   />
-                  <span className="text-slate-500">%</span>
+                  <span className={totalFructosePercentage > 100 ? "text-red-400" : "text-slate-500"}>%</span>
                 </div>
                 <button 
                   onClick={() => removeSource("fructose", source.id)}
