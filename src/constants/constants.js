@@ -1,3 +1,19 @@
+/*  Gel-Calculator - Personalized fuel calculator for endurance athletes.
+    Copyright (C) 2026  Eike Christian Karbe
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>. */
+
 export const glucoseSourceOptions = [
     { id: 1, label: 'Dextrose', carbsPerGram: 1.00, glucoseContent: 1.00, fructoseContent: 0 },
     { id: 2, label: 'Glucose Syrup', carbsPerGram: 0.80, glucoseContent: 1.00, fructoseContent: 0 },
@@ -47,3 +63,141 @@ export const SALTINESS_DESCRIPTIONS = ["Very low salt content: Sweat barely tast
 
 export const initialActiveElectrolytes = { Sodium: true, Chloride: true, Potassium: true, Magnesium: true, Calcium: true };
 export const initialManualTargets = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
+
+export const TEMPLATES = [
+  {
+    name: "GU Energy Gel",
+    description: "e.g., Tri-Berry or Raspberry Lemonade",
+    glucoseParts: 1.0,
+    fructoseParts: 0.5,
+    glucoseSources: [{ id: 3, percentage: 100 }],
+    fructoseSources: [{ id: 11, percentage: 100 }],
+    electrolyteSources: [
+      { id: 39, amount: 0 },
+      { id: 33, amount: 0 }
+    ],
+    otherIngredients: "Water, Leucine, Natural Flavors, Green Tea (Leaf) Extract, Citric Acid",
+    nutrition: "Calories 100; Total Fat 0g; Sodium 55–60mg; Total Carbohydrates 22–23g (Sugars ~5g); Protein 0g; Amino acids ~450mg. Some versions add caffeine (0–40mg)."
+  },
+  {
+    name: "Honey Stinger Organic Energy Gel",
+    description: "e.g., Fruit Smoothie",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 2, percentage: 100 }],
+    fructoseSources: [{ id: 14, percentage: 100 }],
+    electrolyteSources: [
+      { id: 39, amount: 0 },
+      { id: 31, amount: 0 }
+    ],
+    otherIngredients: "Organic Tapioca Syrup (Glucose Source), Organic Natural Flavor, Citric Acid, Water",
+    nutrition: "Calories 100; Total Fat 0g; Sodium ~50mg; Total Carbohydrates 24g (Sugars ~13g); Protein 0g. Organic and gluten-free."
+  },
+  {
+    name: "Huma Chia Energy Gel",
+    description: "e.g., Strawberry",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 6, percentage: 100 }],
+    fructoseSources: [
+      { id: 18, percentage: 50 },
+      { id: 16, percentage: 50 }
+    ],
+    electrolyteSources: [
+      { id: 31, amount: 0 }
+    ],
+    otherIngredients: "Water, Powdered Chia Seeds, Citric Acid",
+    nutrition: "Calories 100; Total Fat ~1g; Sodium 105mg (Plus version: ~240mg); Total Carbohydrates 21–22g; Protein ~1g; Fiber from chia. Real-food based."
+  },
+  {
+    name: "Maurten Gel 100",
+    description: "Hydrogel technology",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 1, percentage: 100 }],
+    fructoseSources: [{ id: 11, percentage: 100 }],
+    electrolyteSources: [],
+    otherIngredients: "Water, Calcium Carbonate, Gluconic Acid, Sodium Alginate",
+    nutrition: "Calories 100; Sodium ~20mg; Total Carbohydrates 25g. Extremely easy to digest due to hydrogel."
+  },
+  {
+    name: "BPN Go Gel Endurance",
+    description: "e.g., Apple Cinnamon",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 6, percentage: 100 }],
+    fructoseSources: [{ id: 16, percentage: 100 }],
+    electrolyteSources: [
+      { id: 31, amount: 0 }
+    ],
+    otherIngredients: "Water (assumed), natural flavors",
+    nutrition: "Calories 100; Total Carbohydrates 24g; Sodium ~110mg. Designed for easy consumption during runs."
+  },
+  {
+    name: "Science in Sport (SiS) GO Isotonic Energy Gel",
+    description: "Isotonic formula",
+    glucoseParts: 1.0,
+    fructoseParts: 0.0,
+    glucoseSources: [{ id: 3, percentage: 100 }],
+    fructoseSources: [],
+    electrolyteSources: [
+      { id: 33, amount: 0 },
+      { id: 31, amount: 0 }
+    ],
+    otherIngredients: "Water, Natural Flavouring, Gelling Agents, Citric Acid, Preservatives, Sweetener",
+    nutrition: "Calories ~90; Sodium ~4–10mg; Total Carbohydrates 22g. Isotonic formula (no extra water needed)."
+  },
+  {
+    name: "Precision Fuel PF 30 Gel",
+    description: "High-carb option",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 3, percentage: 100 }],
+    fructoseSources: [{ id: 11, percentage: 100 }],
+    electrolyteSources: [],
+    otherIngredients: "Water, Pectin, Citric Acid, Preservatives, Calcium Lactate",
+    nutrition: "Calories 120; Total Fat <0.1g; Sodium 0mg; Total Carbohydrates 30g; Protein <0.1g. Optimized for high carb intake."
+  },
+  {
+    name: "GU Roctane Ultra Endurance",
+    description: "Premium GU variant for longer efforts",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 3, percentage: 100 }],
+    fructoseSources: [{ id: 11, percentage: 100 }],
+    electrolyteSources: [
+      { id: 39, amount: 0 },
+      { id: 33, amount: 0 }
+    ],
+    otherIngredients: "Water, Beta-alanine, Taurine, Histidine, Amino Acids, Natural Flavors, Citric Acid",
+    nutrition: "Calories ~100–110; Total Carbohydrates ~23g; Sodium higher than standard GU (~100+ mg in some); enhanced aminos."
+  },
+  {
+    name: "Huma Plus Chia Energy Gel",
+    description: "Double-electrolyte version",
+    glucoseParts: 1.0,
+    fructoseParts: 0.8,
+    glucoseSources: [{ id: 6, percentage: 100 }],
+    fructoseSources: [
+      { id: 18, percentage: 50 },
+      { id: 16, percentage: 50 }
+    ],
+    electrolyteSources: [
+      { id: 31, amount: 0 },
+      { id: 33, amount: 0 }
+    ],
+    otherIngredients: "Water, Powdered Chia Seeds, Citric Acid",
+    nutrition: "Calories 100; Total Carbohydrates ~21g; Sodium ~240mg (double the standard Huma). Popular for heavy sweaters."
+  },
+  {
+    name: "Untapped Maple Syrup Energy Gel",
+    description: "Pure maple option",
+    glucoseParts: 1.0,
+    fructoseParts: 1.0,
+    glucoseSources: [],
+    fructoseSources: [{ id: 17, percentage: 100 }],
+    electrolyteSources: [],
+    otherIngredients: "None",
+    nutrition: "Calories ~100; Total Carbohydrates ~25–26g (natural sugars from maple); trace natural electrolytes. Gentle, real-food option."
+  }
+];

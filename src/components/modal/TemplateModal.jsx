@@ -16,62 +16,62 @@
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
 import React from "react";
-import { BookTemplate, X } from "lucide-react";
+import { BookTemplate, X, Info } from "lucide-react";
+import { TEMPLATES, sourceDataByIdMap } from "../../constants/constants";
 
 const TemplateModal = () => {
   const { isTemplateModalOpen: isOpen, setIsTemplateModalOpen, applyTemplate } = useCalculatorContext();
   const onClose = () => setIsTemplateModalOpen(false);
+  
   if (!isOpen) return null;
+  
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 flex-shrink-0">
           <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
             <BookTemplate size={20} className="text-[#5e5ce6]" /> Pre-Mix
             Templates
           </h3>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 bg-slate-50 rounded-full"
+            className="p-2 text-slate-400 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="p-6 bg-slate-50 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button
-            onClick={() => applyTemplate(80, 1.0, 0.8)}
-            className="bg-white border border-slate-200 p-5 rounded-xl text-left hover:border-[#5e5ce6] hover:shadow-md transition-all"
-          >
-            <h4 className="font-bold text-slate-900 mb-1">
-              Maurten Drink Mix 320
-            </h4>
-            <div className="flex justify-between text-sm mt-4">
-              <span className="text-slate-700">80g/hr</span>
-              <span className="text-[#a2a0fa]">Ratio 1:0.8</span>
-            </div>
-          </button>
-          <button
-            onClick={() => applyTemplate(90, 1.0, 0.8)}
-            className="bg-white border border-slate-200 p-5 rounded-xl text-left hover:border-orange-500 hover:shadow-md transition-all"
-          >
-            <h4 className="font-bold text-slate-900 mb-1">SiS Beta Fuel</h4>
-            <div className="flex justify-between text-sm mt-4">
-              <span className="text-slate-700">90g/hr</span>
-              <span className="text-orange-400">Ratio 1:0.8</span>
-            </div>
-          </button>
-          <button
-            onClick={() => applyTemplate(60, 1.0, 0.5)}
-            className="bg-white border border-slate-200 p-5 rounded-xl text-left hover:border-red-500 hover:shadow-md transition-all"
-          >
-            <h4 className="font-bold text-slate-900 mb-1">
-              Traditional Isotonic
-            </h4>
-            <div className="flex justify-between text-sm mt-4">
-              <span className="text-slate-700">60g/hr</span>
-              <span className="text-red-400">Ratio 1:0.5</span>
-            </div>
-          </button>
+        <div className="p-6 bg-slate-50 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+          {TEMPLATES.map((tpl, idx) => (
+            <button
+              key={idx}
+              onClick={() => applyTemplate(tpl)}
+              className="bg-white border border-slate-200 p-5 rounded-xl text-left hover:border-[#5e5ce6] hover:shadow-md transition-all flex flex-col group"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <h4 className="font-bold text-slate-900 group-hover:text-[#5e5ce6] transition-colors">{tpl.name}</h4>
+                <span className="text-xs font-medium text-[#5e5ce6] bg-indigo-50 px-2 py-1 rounded-full whitespace-nowrap ml-2">
+                  Ratio {tpl.glucoseParts}:{tpl.fructoseParts}
+                </span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">{tpl.description}</p>
+              
+              <div className="text-xs text-slate-600 space-y-2 mt-auto">
+                <p><strong>App Sources:</strong> {
+                  [...tpl.glucoseSources, ...tpl.fructoseSources, ...tpl.electrolyteSources]
+                    .map(s => sourceDataByIdMap.get(s.id)?.label)
+                    .filter(Boolean)
+                    .join(', ') || 'None'
+                }</p>
+                {tpl.otherIngredients !== 'None' && (
+                  <p><strong>Other Ingredients:</strong> {tpl.otherIngredients}</p>
+                )}
+                <div className="mt-3 p-3 bg-slate-50 rounded-lg flex gap-2 items-start border border-slate-100">
+                  <Info size={14} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-slate-500 text-[11px] leading-relaxed">{tpl.nutrition}</p>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     </div>

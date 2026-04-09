@@ -560,10 +560,30 @@ export function useCalculator() {
     setIsShareModalOpen(false);
   };
 
-  const applyTemplate = (carbs, gParts, fParts) => {
-    setTargetCarbs(carbs);
-    setGlucoseParts(gParts);
-    setFructoseParts(fParts);
+  const applyTemplate = (template) => {
+    if (template.glucoseParts !== undefined) setGlucoseParts(template.glucoseParts);
+    if (template.fructoseParts !== undefined) setFructoseParts(template.fructoseParts);
+    
+    // Create new IDs for sources to ensure uniqueness when applying and resolve names
+    if (template.glucoseSources !== undefined) {
+      setGlucoseSources(template.glucoseSources.map((s, i) => {
+        const opt = sourceDataByIdMap.get(s.id);
+        return { id: Date.now() + i, name: opt ? opt.label : "", percentage: s.percentage };
+      }));
+    }
+    if (template.fructoseSources !== undefined) {
+      setFructoseSources(template.fructoseSources.map((s, i) => {
+        const opt = sourceDataByIdMap.get(s.id);
+        return { id: Date.now() + 100 + i, name: opt ? opt.label : "", percentage: s.percentage };
+      }));
+    }
+    if (template.electrolyteSources !== undefined) {
+      setElectrolyteSources(template.electrolyteSources.map((s, i) => {
+        const opt = sourceDataByIdMap.get(s.id);
+        return { id: Date.now() + 200 + i, name: opt ? opt.label : "", amount: s.amount };
+      }));
+    }
+
     setIsTemplateModalOpen(false);
     showToast("Template applied successfully!");
   };
