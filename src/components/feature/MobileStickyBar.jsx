@@ -22,6 +22,21 @@ const MobileStickyBar = () => {
   const { totals, duration, targetCarbs, scrollToRecipe, electrolyteAnalysis, glucoseParts, fructoseParts, activeElectrolytes } =
     useCalculatorContext();
 
+  const activeElectrolyteKeys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].filter(
+    (key) => activeElectrolytes?.[key]
+  );
+
+  const getElectrolyteSymbol = (name) => {
+    switch(name) {
+      case 'Sodium': return 'Na+';
+      case 'Chloride': return 'Cl-';
+      case 'Potassium': return 'K+';
+      case 'Magnesium': return 'Mg++';
+      case 'Calcium': return 'Ca++';
+      default: return name;
+    }
+  };
+
   const glucoseCarbs = (totals.glucoseRatio / 100) * targetCarbs;
   const fructoseCarbs = (totals.fructoseRatio / 100) * targetCarbs;
   
@@ -42,8 +57,6 @@ const MobileStickyBar = () => {
     ? `1:${Number((fructoseParts / glucoseParts).toFixed(2))}`
     : `0:1`;
 
-  const sodiumMatch = Math.min(100, Math.round(electrolyteAnalysis?.Sodium?.percentage || 0));
-
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-30 pb-safe">
       <div className="flex justify-between items-center max-w-7xl mx-auto">
@@ -55,37 +68,43 @@ const MobileStickyBar = () => {
               <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 ${pathwayColor}`}>{pathwayStatus}</span>
             )}
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
               <Scale size={12} className="text-[#a2a0fa]" /> Ratio:{" "}
               <span className="text-[#a2a0fa] font-bold">
                 {formattedRatio}
               </span>
             </div>
-            {activeElectrolytes?.Sodium && (
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
-                <Droplet
-                  size={12}
-                  className="text-[#2dd4bf]"
-                  fill="currentColor"
-                />{" "}
-                Na+:{" "}
-                <span
-                  className={
-                    sodiumMatch >= 80 && sodiumMatch <= 100
-                      ? "text-[#2dd4bf] font-bold"
-                      : "text-amber-500 font-bold"
-                  }
-                >
-                  {sodiumMatch}%
-                </span>
-              </div>
-            )}
+            {activeElectrolyteKeys.map(electrolyte => {
+              const match = Math.min(100, Math.round(electrolyteAnalysis?.[electrolyte]?.percentage || 0));
+              let colorClass = "text-[#2dd4bf]";
+              if (match < 50) {
+                colorClass = "text-red-400";
+              } else if (match < 80) {
+                colorClass = "text-orange-400";
+              } else if (match > 100) {
+                colorClass = "text-orange-400";
+              }
+
+              return (
+                <div key={electrolyte} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                  <Droplet
+                    size={12}
+                    className="text-[#2dd4bf]"
+                    fill="currentColor"
+                  />{" "}
+                  {getElectrolyteSymbol(electrolyte)}:{" "}
+                  <span className={`${colorClass} font-bold`}>
+                    {match}%
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
         <button
           onClick={scrollToRecipe}
-          className="bg-[#1e1e2d] text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform"
+          className="bg-[#1e1e2d] text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform shrink-0 ml-4"
         >
           Recipe <ChevronRight size={16} />
         </button>
