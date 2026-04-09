@@ -192,6 +192,12 @@ const ShareModal = () => {
                 Back
               </button>
               <button
+                onClick={handleCopyLink}
+                className="flex-1 bg-indigo-50 text-[#5e5ce6] font-semibold py-3 rounded-xl flex justify-center items-center gap-2 hover:bg-indigo-100 transition-colors"
+              >
+                <Copy size={18} /> Copy Link
+              </button>
+              <button
                 onClick={handleDownloadImage}
                 className="flex-1 bg-[#5e5ce6] text-white font-semibold py-3 rounded-xl flex justify-center items-center gap-2 hover:bg-[#4b49c6] transition-colors"
               >

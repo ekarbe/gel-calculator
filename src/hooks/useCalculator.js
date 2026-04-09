@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { 
   glucoseSourceOptions, 
   fructoseSourceOptions, 
@@ -109,6 +109,36 @@ export function useCalculator() {
   const [toastMessage, setToastMessage] = useState("");
 
   const recipeRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const s = urlParams.get('s');
+      if (s) {
+        try {
+          const jsonString = decodeURIComponent(atob(s));
+          const state = JSON.parse(jsonString);
+          
+          if (state.duration !== undefined) setDuration(state.duration);
+          if (state.targetCarbs !== undefined) setTargetCarbs(state.targetCarbs);
+          if (state.glucoseParts !== undefined) setGlucoseParts(state.glucoseParts);
+          if (state.fructoseParts !== undefined) setFructoseParts(state.fructoseParts);
+          if (state.glucoseSources !== undefined) setGlucoseSources(state.glucoseSources);
+          if (state.fructoseSources !== undefined) setFructoseSources(state.fructoseSources);
+          if (state.electrolyteSources !== undefined) setElectrolyteSources(state.electrolyteSources);
+          if (state.isSweatRate !== undefined) setIsSweatRate(state.isSweatRate);
+          if (state.sweatRate !== undefined) setSweatRate(state.sweatRate);
+          if (state.saltiness !== undefined) setSaltiness(state.saltiness);
+          if (state.activeElectrolytes !== undefined) setActiveElectrolytes(state.activeElectrolytes);
+          if (state.manualTargets !== undefined) setManualTargets(state.manualTargets);
+          if (state.recipeView !== undefined) setRecipeView(state.recipeView);
+          if (state.gelsPerHour !== undefined) setGelsPerHour(state.gelsPerHour);
+        } catch (e) {
+          console.error("Failed to parse share link", e);
+        }
+      }
+    }
+  }, []);
 
   // Calculation Engines
   const durationHours = duration / 60;
@@ -303,8 +333,52 @@ export function useCalculator() {
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href).catch(() => {});
-    showToast("Recipe link copied!");
+    const stateToSave = {
+      duration,
+      targetCarbs,
+      glucoseParts,
+      fructoseParts,
+      glucoseSources,
+      fructoseSources,
+      electrolyteSources,
+      isSweatRate,
+      sweatRate,
+      saltiness,
+      activeElectrolytes,
+      manualTargets,
+      recipeView,
+      gelsPerHour
+    };
+    try {
+      const jsonString = JSON.stringify(stateToSave);
+      const base64String = btoa(encodeURIComponent(jsonString));
+      const url = new URL(window.location.href);
+      url.searchParams.set('s', base64String);
+      
+      const copyText = url.toString();
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(copyText).catch(() => {});
+      } else {
+        // Fallback for non-secure contexts
+        const textArea = document.createElement("textarea");
+        textArea.value = copyText;
+        textArea.style.position = "absolute";
+        textArea.style.left = "-999999px";
+        document.body.prepend(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (err) {
+          console.error("Fallback copy failed", err);
+        } finally {
+          textArea.remove();
+        }
+      }
+      showToast("Recipe link copied!");
+    } catch (e) {
+      console.error("Failed to generate share link", e);
+      showToast("Failed to generate link.");
+    }
     setIsShareModalOpen(false);
   };
 
