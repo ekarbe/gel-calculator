@@ -29,7 +29,10 @@ import {
 } from "../../constants/constants";
 
 const ElectrolytesHydration = () => {
-  const { electrolyteSources, addSource, updateSource, removeSource } = useCalculatorContext();
+  const { 
+    electrolyteSources, addSource, updateSource, removeSource,
+    isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness
+  } = useCalculatorContext();
   return (
     <Card>
       <div className="flex items-center gap-3 mb-6">
@@ -46,21 +49,28 @@ const ElectrolytesHydration = () => {
         </div>
       </div>
       <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
-        <button className="flex-1 py-2 text-sm font-semibold bg-white text-slate-800 shadow-sm border border-slate-200/60 rounded-lg">
+        <button 
+          onClick={() => setIsSweatRate(true)}
+          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${isSweatRate ? 'font-semibold bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'font-medium text-slate-600 hover:text-slate-800'}`}>
           Sweat Profile
         </button>
-        <button className="flex-1 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">
+        <button 
+          onClick={() => setIsSweatRate(false)}
+          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${!isSweatRate ? 'font-semibold bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'font-medium text-slate-600 hover:text-slate-800'}`}>
           Manual Targets
         </button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 ${!isSweatRate ? 'opacity-50 pointer-events-none' : ''}`}>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Sweat Rate
           </label>
-          <select className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
+          <select 
+            value={sweatRate}
+            onChange={(e) => setSweatRate(Number(e.target.value))}
+            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
             {SWEAT_RATES.map((rate, index) => (
-              <option key={rate} value={rate}>
+              <option key={rate} value={index}>
                 {SWEAT_RATE_DESCRIPTIONS[index].split(':')[0]} ({rate} L/hr)
               </option>
             ))}
@@ -70,7 +80,10 @@ const ElectrolytesHydration = () => {
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Saltiness
           </label>
-          <select className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
+          <select 
+            value={saltiness}
+            onChange={(e) => setSaltiness(Number(e.target.value))}
+            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
             {SALTINESS_DESCRIPTIONS.map((desc, index) => {
               const mgPerL = Math.round(ELECTROLYTE_CONCENTRATIONS.Sodium[index] * CONVERSION_FACTORS.Sodium);
               return (

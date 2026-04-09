@@ -19,7 +19,9 @@ import React from "react";
 import { Settings } from "lucide-react";
 
 const BalanceAnalysis = () => {
-  const { totals, duration, targetCarbs } = useCalculatorContext();
+  const { totals, duration, targetCarbs, electrolyteAnalysis } = useCalculatorContext();
+  const sodiumMatch = Math.min(100, Math.round(electrolyteAnalysis?.Sodium?.percentage || 0));
+  const sodiumMessage = electrolyteAnalysis?.Sodium?.message || "No sources added";
   return (
     <div className="bg-[#1e1e2d] rounded-2xl shadow-xl shadow-[#5e5ce6]/10 p-6 text-white">
       <div className="flex items-center gap-2 mb-6">
@@ -44,14 +46,17 @@ const BalanceAnalysis = () => {
           <div className="flex justify-between text-sm mb-2">
             <span className="text-slate-300 font-medium">Sodium Match</span>
             <span className="text-[#2dd4bf] font-bold">
-              {totals.sodiumMatch}%
+              {sodiumMatch}%
             </span>
           </div>
           <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#2dd4bf] rounded-full"
-              style={{ width: `${totals.sodiumMatch}%` }}
+              className="h-full bg-[#2dd4bf] rounded-full transition-all duration-300"
+              style={{ width: `${sodiumMatch}%` }}
             ></div>
+          </div>
+          <div className="text-xs text-slate-400 mt-2">
+            {sodiumMessage}
           </div>
         </div>
         <div className="pt-2">

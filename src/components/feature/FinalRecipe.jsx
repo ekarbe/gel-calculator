@@ -27,6 +27,7 @@ const FinalRecipe = () => {
     gelsPerHour,
     setGelsPerHour,
     totals,
+    calculatedSourceGrams,
     duration,
     getDisplayValue,
     onOpenInstructions,
@@ -39,9 +40,7 @@ const FinalRecipe = () => {
 
   glucoseSources.forEach(source => {
     if (source.percentage > 0) {
-      const sourceData = sourceDataMap.get(source.name);
-      const targetCarbs = (totals.malto * source.percentage) / 100;
-      const powderAmount = Math.round(targetCarbs / (sourceData?.carbsPerGram || 1));
+      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
       if (powderAmount > 0) {
         recipeItems.push({
           label: source.name,
@@ -54,9 +53,7 @@ const FinalRecipe = () => {
 
   fructoseSources.forEach(source => {
     if (source.percentage > 0) {
-      const sourceData = sourceDataMap.get(source.name);
-      const targetCarbs = (totals.fructose * source.percentage) / 100;
-      const powderAmount = Math.round(targetCarbs / (sourceData?.carbsPerGram || 1));
+      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
       if (powderAmount > 0) {
         recipeItems.push({
           label: source.name,
