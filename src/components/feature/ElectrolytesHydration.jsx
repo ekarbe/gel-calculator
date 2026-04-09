@@ -19,7 +19,14 @@ import React from "react";
 import { Droplet, Plus, Trash2 } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";
-import { electrolyteSourceOptions } from "../../constants/constants";
+import { 
+  electrolyteSourceOptions,
+  SWEAT_RATES,
+  SWEAT_RATE_DESCRIPTIONS,
+  SALTINESS_DESCRIPTIONS,
+  ELECTROLYTE_CONCENTRATIONS,
+  CONVERSION_FACTORS
+} from "../../constants/constants";
 
 const ElectrolytesHydration = () => {
   const { electrolyteSources, addSource, updateSource, removeSource } = useCalculatorContext();
@@ -52,8 +59,11 @@ const ElectrolytesHydration = () => {
             Sweat Rate
           </label>
           <select className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
-            <option>Moderate (1.0 L/hr)</option>
-            <option>Heavy (1.5 L/hr)</option>
+            {SWEAT_RATES.map((rate, index) => (
+              <option key={rate} value={rate}>
+                {SWEAT_RATE_DESCRIPTIONS[index].split(':')[0]} ({rate} L/hr)
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -61,8 +71,14 @@ const ElectrolytesHydration = () => {
             Saltiness
           </label>
           <select className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
-            <option>Average (1000mg/L)</option>
-            <option>Salty (1500mg/L)</option>
+            {SALTINESS_DESCRIPTIONS.map((desc, index) => {
+              const mgPerL = Math.round(ELECTROLYTE_CONCENTRATIONS.Sodium[index] * CONVERSION_FACTORS.Sodium);
+              return (
+                <option key={index} value={index}>
+                  {desc.split(':')[0]} ({mgPerL}mg/L)
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>

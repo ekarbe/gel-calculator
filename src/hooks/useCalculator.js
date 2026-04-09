@@ -75,8 +75,12 @@ export function useCalculator() {
       setGlucoseSources((prev) =>
         prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
       );
-    } else {
+    } else if (type === "fructose") {
       setFructoseSources((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
+      );
+    } else if (type === "electrolyte") {
+      setElectrolyteSources((prev) =>
         prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
       );
     }
@@ -85,8 +89,10 @@ export function useCalculator() {
   const removeSource = (type, id) => {
     if (type === "glucose") {
       setGlucoseSources((prev) => prev.filter((s) => s.id !== id));
-    } else {
+    } else if (type === "fructose") {
       setFructoseSources((prev) => prev.filter((s) => s.id !== id));
+    } else if (type === "electrolyte") {
+      setElectrolyteSources((prev) => prev.filter((s) => s.id !== id));
     }
   };
 
