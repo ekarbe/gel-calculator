@@ -23,7 +23,7 @@ const Footer = () => (
     <p className="text-sm font-medium">By Eike Christian Karbe</p>
     <div className="flex gap-4">
       <a
-        href="https://www.strava.com/"
+        href="https://www.strava.com/athletes/58442765"
         target="_blank"
         rel="noopener noreferrer"
         className="hover:text-[#fc4c02] transition-colors"
@@ -32,7 +32,7 @@ const Footer = () => (
         <StravaIcon size={20} />
       </a>
       <a
-        href="https://github.com/"
+        href="https://github.com/ekarbe"
         target="_blank"
         rel="noopener noreferrer"
         className="hover:text-slate-900 transition-colors"
