@@ -15,8 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React from "react";
-import { Droplet, Plus, Trash2 } from "lucide-react";
+import React, { useState } from "react";
+import { Droplet, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";
 import { 
@@ -31,7 +31,8 @@ import {
 const ElectrolytesHydration = () => {
   const { 
     electrolyteSources, addSource, updateSource, removeSource,
-    isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness
+    isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness,
+    activeElectrolytes, setActiveElectrolytes, manualTargets, setManualTargets, targetAmountsPerHour
   } = useCalculatorContext();
   return (
     <Card>
@@ -95,6 +96,42 @@ const ElectrolytesHydration = () => {
           </select>
         </div>
       </div>
+
+      <div className="pt-6 border-t border-slate-100 mb-8">
+        <h3 className="font-semibold text-slate-800 mb-4">Electrolyte Targets (per hour)</h3>
+        <div className="space-y-3">
+          {['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].map(electrolyte => (
+            <div key={electrolyte} className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={activeElectrolytes[electrolyte]}
+                  onChange={(e) => setActiveElectrolytes(prev => ({ ...prev, [electrolyte]: e.target.checked }))}
+                  className="rounded text-[#5e5ce6] focus:ring-[#5e5ce6]"
+                />
+                <span className={`text-sm font-medium ${activeElectrolytes[electrolyte] ? 'text-slate-700' : 'text-slate-400'}`}>{electrolyte}</span>
+              </label>
+              {isSweatRate ? (
+                <span className={`text-sm font-bold ${activeElectrolytes[electrolyte] ? 'text-slate-900' : 'text-slate-400'}`}>
+                  {activeElectrolytes[electrolyte] ? Math.round(targetAmountsPerHour[electrolyte]) : 0} mg
+                </span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={manualTargets[electrolyte] || 0}
+                    onChange={(e) => setManualTargets(prev => ({ ...prev, [electrolyte]: Number(e.target.value) }))}
+                    disabled={!activeElectrolytes[electrolyte]}
+                    className="w-20 px-2 py-1 text-sm border border-slate-200 rounded-lg text-right font-bold disabled:bg-slate-50 disabled:text-slate-400 outline-none focus:ring-2 focus:ring-[#5e5ce6]"
+                  />
+                  <span className="text-sm text-slate-500 w-6">mg</span>
+                </div>
+              )}
+            </div>
+          ))}
+          </div>
+      </div>
+
       <div className="pt-6 border-t border-slate-100">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-slate-800">Added Sources</h3>

@@ -19,9 +19,32 @@ import React from "react";
 import { Settings } from "lucide-react";
 
 const BalanceAnalysis = () => {
-  const { totals, duration, targetCarbs, electrolyteAnalysis } = useCalculatorContext();
-  const sodiumMatch = Math.min(100, Math.round(electrolyteAnalysis?.Sodium?.percentage || 0));
-  const sodiumMessage = electrolyteAnalysis?.Sodium?.message || "No sources added";
+  const { totals, duration, targetCarbs, electrolyteAnalysis, glucoseParts, fructoseParts, activeElectrolytes } = useCalculatorContext();
+
+  const activeElectrolyteKeys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].filter(
+    (key) => activeElectrolytes?.[key]
+  );
+
+  const glucoseCarbs = (totals.glucoseRatio / 100) * targetCarbs;
+  const fructoseCarbs = (totals.fructoseRatio / 100) * targetCarbs;
+  
+  let pathwayStatus = "Optimal";
+  let pathwayColor = "text-[#a2a0fa]";
+  if (glucoseCarbs > 66.7 && fructoseCarbs > 53.3) {
+    pathwayStatus = "Both Overloaded";
+    pathwayColor = "text-red-400";
+  } else if (glucoseCarbs > 66.7) {
+    pathwayStatus = "SGLT1 Overload";
+    pathwayColor = "text-orange-400";
+  } else if (fructoseCarbs > 53.3) {
+    pathwayStatus = "GLUT5 Overload";
+    pathwayColor = "text-orange-400";
+  }
+
+  const formattedRatio = glucoseParts > 0 
+    ? `1:${Number((fructoseParts / glucoseParts).toFixed(2))}`
+    : `0:1`;
+
   return (
     <div className="bg-[#1e1e2d] rounded-2xl shadow-xl shadow-[#5e5ce6]/10 p-6 text-white">
       <div className="flex items-center gap-2 mb-6">
@@ -42,29 +65,49 @@ const BalanceAnalysis = () => {
         </div>
       </div>
       <div className="space-y-5">
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-slate-300 font-medium">Sodium Match</span>
-            <span className="text-[#2dd4bf] font-bold">
-              {sodiumMatch}%
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#2dd4bf] rounded-full transition-all duration-300"
-              style={{ width: `${sodiumMatch}%` }}
-            ></div>
-          </div>
-          <div className="text-xs text-slate-400 mt-2">
-            {sodiumMessage}
-          </div>
-        </div>
+        {activeElectrolyteKeys.map(electrolyte => {
+          const match = Math.min(100, Math.round(electrolyteAnalysis?.[electrolyte]?.percentage || 0));
+          const message = electrolyteAnalysis?.[electrolyte]?.message || "No sources added";
+          
+          let colorClass = "text-[#2dd4bf]";
+          let bgClass = "bg-[#2dd4bf]";
+          if (match < 50) {
+            colorClass = "text-red-400";
+            bgClass = "bg-red-400";
+          } else if (match < 80) {
+            colorClass = "text-orange-400";
+            bgClass = "bg-orange-400";
+          } else if (match > 100) {
+            colorClass = "text-orange-400";
+            bgClass = "bg-orange-400";
+          }
+
+          return (
+            <div key={electrolyte}>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-300 font-medium">{electrolyte} Match</span>
+                <span className={`${colorClass} font-bold`}>
+                  {match}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${bgClass} rounded-full transition-all duration-300`}
+                  style={{ width: `${match}%` }}
+                ></div>
+              </div>
+              <div className="text-xs text-slate-400 mt-2">
+                {message}
+              </div>
+            </div>
+          );
+        })}
         <div className="pt-2">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-slate-300 font-medium">
               Carb Pathway Limit
             </span>
-            <span className="text-[#a2a0fa] font-bold">Optimal</span>
+            <span className={`${pathwayColor} font-bold`}>{pathwayStatus}</span>
           </div>
           <div className="w-full h-1.5 bg-slate-700 rounded-full flex overflow-hidden">
             <div
@@ -77,7 +120,7 @@ const BalanceAnalysis = () => {
             ></div>
           </div>
           <div className="text-xs text-slate-400 mt-2">
-            Ratio ({totals.glucoseRatio}:{totals.fructoseRatio})
+            Ratio ({formattedRatio})
           </div>
         </div>
       </div>

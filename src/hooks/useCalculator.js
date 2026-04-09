@@ -212,12 +212,16 @@ export function useCalculator() {
   const targetAmountsPerHour = useMemo(() => {
     const targets = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
     if (!isSweatRate) {
-      Object.keys(targets).forEach(key => targets[key] = manualTargets[key]);
+      Object.keys(targets).forEach(key => targets[key] = activeElectrolytes[key] ? manualTargets[key] : 0);
       return targets;
     }
 
     const rateL = SWEAT_RATES[sweatRate];
     Object.keys(targets).forEach(key => {
+      if (!activeElectrolytes[key]) {
+        targets[key] = 0;
+        return;
+      }
       const concentrations = ELECTROLYTE_CONCENTRATIONS[key];
       if (concentrations) {
         const conc_mmolL = concentrations[saltiness];
@@ -226,7 +230,7 @@ export function useCalculator() {
       }
     });
     return targets;
-  }, [isSweatRate, sweatRate, saltiness, manualTargets]);
+  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes]);
 
   const electrolyteAnalysis = useMemo(() => {
     const analysis = {};
