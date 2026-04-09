@@ -19,8 +19,17 @@ import React from "react";
 import { FlaskConical, X } from "lucide-react";
 
 const MixingModal = () => {
-  const { isMixingModalOpen: isOpen, setIsMixingModalOpen, duration, targetCarbs, totals, getDisplayValue } =
-    useCalculatorContext();
+  const { 
+    isMixingModalOpen: isOpen, 
+    setIsMixingModalOpen, 
+    duration, 
+    targetCarbs, 
+    getDisplayValue,
+    glucoseSources,
+    fructoseSources,
+    electrolyteSources,
+    calculatedSourceGrams
+  } = useCalculatorContext();
   const onClose = () => setIsMixingModalOpen(false);
   if (!isOpen) return null;
   return (
@@ -53,20 +62,26 @@ const MixingModal = () => {
                 1. Gather Ingredients
               </h4>
               <ul className="list-disc pl-5 space-y-1 text-slate-600 font-medium">
-                {totals.malto > 0 && (
-                  <li>{getDisplayValue(totals.malto)}g Maltodextrin</li>
-                )}
-                {totals.fructose > 0 && (
-                  <li>{getDisplayValue(totals.fructose)}g Fructose</li>
-                )}
-                {totals.sodiumCitrate > 0 && (
-                  <li>
-                    {getDisplayValue(totals.sodiumCitrate)}mg Sodium Citrate
-                  </li>
-                )}
-                {totals.tableSalt > 0 && (
-                  <li>{getDisplayValue(totals.tableSalt)}mg Table Salt</li>
-                )}
+                {glucoseSources.map(source => {
+                  const amount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
+                  if (source.percentage > 0 && amount > 0) {
+                    return <li key={`glucose-${source.id}`}>{getDisplayValue(amount)}g {source.name}</li>;
+                  }
+                  return null;
+                })}
+                {fructoseSources.map(source => {
+                  const amount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
+                  if (source.percentage > 0 && amount > 0) {
+                    return <li key={`fructose-${source.id}`}>{getDisplayValue(amount)}g {source.name}</li>;
+                  }
+                  return null;
+                })}
+                {electrolyteSources.map(source => {
+                  if (source.amount > 0) {
+                    return <li key={`electrolyte-${source.id}`}>{getDisplayValue(source.amount)}mg {source.name}</li>;
+                  }
+                  return null;
+                })}
               </ul>
             </div>
             <div>
