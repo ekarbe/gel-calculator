@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React from "react";
 import { ListRestart, ChevronRight } from "lucide-react";
 import { sourceDataMap } from "../../constants/constants";
 import TooltipInfo from "../shared/TooltipInfo";

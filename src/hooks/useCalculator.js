@@ -17,7 +17,6 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { zlibSync, unzlibSync, strToU8, strFromU8 } from 'fflate';
 
 const keyMap = {
   duration: 'd',
@@ -106,33 +105,13 @@ function encodeState(state) {
   if (state.recipeView !== 'total') parts.push(`rv_${state.recipeView === 'perGel' ? 'g' : 't'}`);
   if (state.gelsPerHour !== 2) parts.push(`gph_${state.gelsPerHour}`);
 
-  return parts.length > 0 ? parts.join('~') : 'v2';
-}
-
-function decodeStateV1(base64Url) {
-  try {
-    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    const jsonString = strFromU8(unzlibSync(bytes));
-    return mapKeys(JSON.parse(jsonString), reverseKeyMap);
-  } catch (e) {
-    console.error("V1 decode error", e);
-    return {};
-  }
+  return parts.length > 0 ? parts.join('~') : 'tm2';
 }
 
 function decodeState(str) {
-  if (!str.includes('_') && str !== 'v2') {
-    return decodeStateV1(str);
-  }
   
   const state = {};
-  if (str === 'v2') return state;
+  if (str === 'tm2') return state;
   
   const parts = str.split('~');
   for (const part of parts) {

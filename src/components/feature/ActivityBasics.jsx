@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React from "react";
 import { Activity, Clock, Zap } from "lucide-react";
 import Card from "../shared/Card";
 

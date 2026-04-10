@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React from "react";
 import { BookTemplate, X, Info } from "lucide-react";
 import { TEMPLATES, sourceDataByIdMap } from "../../constants/constants";
 

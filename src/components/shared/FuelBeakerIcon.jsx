@@ -14,8 +14,6 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-import React from "react";
-
 const FuelBeakerIcon = ({ className = "w-5 h-5", strokeWidth = 2 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

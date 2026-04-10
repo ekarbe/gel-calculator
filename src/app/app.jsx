@@ -17,7 +17,6 @@
 "use client";
 
 import { useCalculatorContext } from "../context/CalculatorContext";
-import React, { useState, useEffect, useRef } from "react";
 import Header from "../components/feature/Header";
 import ActivityBasics from "../components/feature/ActivityBasics";
 import CarbMatrix from "../components/feature/CarbMatrix";

@@ -94,22 +94,6 @@ export const TEMPLATES = [
     nutrition: "Calories 100; Total Fat 0g; Sodium ~50mg; Total Carbohydrates 24g (Sugars ~13g); Protein 0g. Organic and gluten-free."
   },
   {
-    name: "Huma Chia Energy Gel",
-    description: "e.g., Strawberry",
-    glucoseParts: 1.0,
-    fructoseParts: 0.8,
-    glucoseSources: [{ id: 6, percentage: 100 }],
-    fructoseSources: [
-      { id: 18, percentage: 50 },
-      { id: 16, percentage: 50 }
-    ],
-    electrolyteSources: [
-      { id: 31, amount: 0 }
-    ],
-    otherIngredients: "Water, Powdered Chia Seeds, Citric Acid",
-    nutrition: "Calories 100; Total Fat ~1g; Sodium 105mg (Plus version: ~240mg); Total Carbohydrates 21–22g; Protein ~1g; Fiber from chia. Real-food based."
-  },
-  {
     name: "Maurten Gel 100",
     description: "Hydrogel technology",
     glucoseParts: 1.0,
@@ -171,23 +155,6 @@ export const TEMPLATES = [
     ],
     otherIngredients: "Water, Beta-alanine, Taurine, Histidine, Amino Acids, Natural Flavors, Citric Acid",
     nutrition: "Calories ~100–110; Total Carbohydrates ~23g; Sodium higher than standard GU (~100+ mg in some); enhanced aminos."
-  },
-  {
-    name: "Huma Plus Chia Energy Gel",
-    description: "Double-electrolyte version",
-    glucoseParts: 1.0,
-    fructoseParts: 0.8,
-    glucoseSources: [{ id: 6, percentage: 100 }],
-    fructoseSources: [
-      { id: 18, percentage: 50 },
-      { id: 16, percentage: 50 }
-    ],
-    electrolyteSources: [
-      { id: 31, amount: 0 },
-      { id: 33, amount: 0 }
-    ],
-    otherIngredients: "Water, Powdered Chia Seeds, Citric Acid",
-    nutrition: "Calories 100; Total Carbohydrates ~21g; Sodium ~240mg (double the standard Huma). Popular for heavy sweaters."
   },
   {
     name: "Untapped Maple Syrup Energy Gel",

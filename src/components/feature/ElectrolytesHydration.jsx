@@ -15,7 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React, { useState } from "react";
+import { useState } from "react";
 import { Droplet, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";

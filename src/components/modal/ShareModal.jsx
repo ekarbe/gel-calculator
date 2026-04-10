@@ -15,9 +15,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import React, { useRef } from "react";
-import { X, Link2, ImageIcon, Zap, Download, Copy } from "lucide-react";
+import { useRef } from "react";
+import { X, Link2, ImageIcon, Download, Copy } from "lucide-react";
 import * as htmlToImage from "html-to-image";
+import FuelBeakerIcon from "../shared/FuelBeakerIcon";
 
 const ShareModal = () => {
   const {
@@ -35,6 +36,7 @@ const ShareModal = () => {
     electrolyteSources,
     calculatedSourceGrams,
     showToast,
+    glucoseParts, fructoseParts, 
   } = useCalculatorContext();
 
   const imageRef = useRef(null);
@@ -101,6 +103,10 @@ const ShareModal = () => {
     isWater: true,
   });
 
+    const formattedRatio = glucoseParts > 0 
+    ? `1:${Number((fructoseParts / glucoseParts).toFixed(2))}`
+    : `0:1`;
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -151,14 +157,14 @@ const ShareModal = () => {
             <div className="p-6 bg-slate-100 flex justify-center">
               <div ref={imageRef} className="bg-[#1e1e2d] text-white p-8 rounded-2xl w-full max-w-[320px] aspect-[4/5] flex flex-col relative ring-1 ring-slate-800">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#5e5ce6] to-[#2dd4bf] rounded-t-2xl"></div>
-                <h2 className="text-2xl font-bold mb-8 flex items-center gap-2">
-                  <Zap
-                    size={20}
+                <h1 className="text-2xl font-bold mb-8 flex items-center gap-2">
+                  <FuelBeakerIcon
+                    size={10}
                     className="text-[#5e5ce6]"
                     fill="currentColor"
                   />{" "}
-                  Gel-Calc
-                </h2>
+                  Gel-Calculator
+                </h1>
                 <div className="flex justify-between items-end mb-8 pb-6 border-b border-slate-700/50">
                   <div>
                     <div className="text-xs text-slate-400">TOTAL CARBS</div>
@@ -169,7 +175,7 @@ const ShareModal = () => {
                   <div className="text-right">
                     <div className="text-xs text-slate-400">RATIO</div>
                     <div className="text-2xl font-bold text-[#a2a0fa]">
-                      {totals.glucoseRatio}:{totals.fructoseRatio}
+                      {formattedRatio}
                     </div>
                   </div>
                 </div>
