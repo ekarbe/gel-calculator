@@ -88,7 +88,7 @@ const CarbMatrix = () => {
               </button>
               <input
                 type="range"
-                min="0.1"
+                min="0.0"
                 max="2.0"
                 step="0.05"
                 value={glucoseParts}
@@ -182,11 +182,11 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {glucoseSources.map((source) => (
-              <div key={source.id} className={`flex items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200/60' : 'border-blue-200/60'}`}>
+              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200/60' : 'border-blue-200/60'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("glucose", source.id, "name", e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
+                  className="flex-1 min-w-[120px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
                 >
                   {glucoseSourceOptions.map((opt) => (
                     <option 
@@ -263,11 +263,11 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {fructoseSources.map((source) => (
-              <div key={source.id} className={`flex items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalFructosePercentage > 100 ? 'border-red-200/60' : 'border-purple-200/60'}`}>
+              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-white shadow-sm transition-colors ${totalFructosePercentage > 100 ? 'border-red-200/60' : 'border-purple-200/60'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("fructose", source.id, "name", e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
+                  className="flex-1 min-w-[120px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 outline-none"
                 >
                   {fructoseSourceOptions.map((opt) => (
                     <option 

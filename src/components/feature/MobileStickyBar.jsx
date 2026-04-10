@@ -42,13 +42,13 @@ const MobileStickyBar = () => {
   
   let pathwayStatus = "Optimal";
   let pathwayColor = "text-[#a2a0fa]";
-  if (glucoseCarbs > 66.7 && fructoseCarbs > 53.3) {
+  if (glucoseCarbs > 67 && fructoseCarbs > 53) {
     pathwayStatus = "Both Overloaded";
     pathwayColor = "text-red-400";
-  } else if (glucoseCarbs > 66.7) {
+  } else if (glucoseCarbs > 67) {
     pathwayStatus = "SGLT1 Overload";
     pathwayColor = "text-orange-400";
-  } else if (fructoseCarbs > 53.3) {
+  } else if (fructoseCarbs > 53) {
     pathwayStatus = "GLUT5 Overload";
     pathwayColor = "text-orange-400";
   }
@@ -58,9 +58,9 @@ const MobileStickyBar = () => {
     : `0:1`;
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-30 pb-safe">
-      <div className="flex justify-between items-center max-w-7xl mx-auto">
-        <div className="flex flex-col gap-1.5">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-30 pb-safe">
+      <div className="flex justify-between items-center max-w-7xl mx-auto p-4">
+        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <Zap size={14} className="text-[#5e5ce6]" fill="currentColor" />{" "}
             Target: {Math.round((duration / 60) * targetCarbs)}g

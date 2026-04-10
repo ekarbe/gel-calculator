@@ -161,11 +161,11 @@ const ElectrolytesHydration = () => {
             const tooltipContent = currentOption ? `Contains ${currentOption.components.map(c => `${(c.ratio * 100).toFixed(1)}% ${c.name}`).join(", ")}` : "";
             
             return (
-              <div key={source.id} className="flex items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
+              <div key={source.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("electrolyte", source.id, "name", e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none"
+                  className="flex-1 min-w-[120px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none"
                 >
                   {electrolyteSourceOptions.map((opt) => (
                     <option 

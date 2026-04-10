@@ -30,13 +30,13 @@ const BalanceAnalysis = () => {
   
   let pathwayStatus = "Optimal";
   let pathwayColor = "text-[#a2a0fa]";
-  if (glucoseCarbs > 66.7 && fructoseCarbs > 53.3) {
+  if (glucoseCarbs > 67 && fructoseCarbs > 53) {
     pathwayStatus = "Both Overloaded";
     pathwayColor = "text-red-400";
-  } else if (glucoseCarbs > 66.7) {
+  } else if (glucoseCarbs > 67) {
     pathwayStatus = "SGLT1 Overload";
     pathwayColor = "text-orange-400";
-  } else if (fructoseCarbs > 53.3) {
+  } else if (fructoseCarbs > 53) {
     pathwayStatus = "GLUT5 Overload";
     pathwayColor = "text-orange-400";
   }

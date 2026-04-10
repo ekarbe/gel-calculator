@@ -20,7 +20,7 @@ import { CalculatorProvider } from "../context/CalculatorContext";
 export default function Page() {
   return (
     <CalculatorProvider>
-      <main className="min-h-screen p-4">
+      <main className="min-h-screen">
         <App />
       </main>
     </CalculatorProvider>
