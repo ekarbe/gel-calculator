@@ -33,7 +33,8 @@ const ElectrolytesHydration = () => {
   const { 
     electrolyteSources, addSource, updateSource, removeSource,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness,
-    activeElectrolytes, setActiveElectrolytes, manualTargets, setManualTargets, targetAmountsPerHour
+    activeElectrolytes, setActiveElectrolytes, manualTargets, setManualTargets, targetAmountsPerHour,
+    autoFillElectrolytes
   } = useCalculatorContext();
   return (
     <Card>
@@ -148,12 +149,20 @@ const ElectrolytesHydration = () => {
       <div className="pt-6 border-t border-slate-100">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-slate-800">Added Sources</h3>
-          <button 
-            onClick={() => addSource("electrolyte")}
-            className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
-          >
-            <Plus size={16} /> Add
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={autoFillElectrolytes}
+              className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+            >
+              Auto-Fill
+            </button>
+            <button 
+              onClick={() => addSource("electrolyte")}
+              className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+            >
+              <Plus size={16} /> Add
+            </button>
+          </div>
         </div>
         <div className="space-y-4">
           {electrolyteSources.map((source) => {

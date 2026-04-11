@@ -26,6 +26,8 @@ const FinalRecipe = () => {
     setRecipeView,
     gelsPerHour,
     setGelsPerHour,
+    targetOsmolarity,
+    setTargetOsmolarity,
     totals,
     calculatedSourceGrams,
     duration,
@@ -155,6 +157,21 @@ const FinalRecipe = () => {
             />
           </div>
         )}
+
+        <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+          <label className="text-sm font-semibold text-slate-700">
+            Target Osmolarity
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={targetOsmolarity}
+              onChange={(e) => setTargetOsmolarity(Number(e.target.value))}
+              className="w-20 px-3 py-1.5 text-sm font-bold text-slate-800 text-right border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5e5ce6]"
+            />
+            <span className="text-sm text-slate-500">mOsm/L</span>
+          </div>
+        </div>
 
         <div className="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
           {recipeView === "total"

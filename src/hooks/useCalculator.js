@@ -62,7 +62,7 @@ function mapKeys(obj, map) {
 function encodeState(state) {
   const parts = [];
   
-  if (state.duration !== 180) parts.push(`d_${state.duration}`);
+  if (state.duration !== 60) parts.push(`d_${state.duration}`);
   if (state.targetCarbs !== 90) parts.push(`t_${state.targetCarbs}`);
   if (state.glucoseParts !== 1.0) parts.push(`gp_${state.glucoseParts}`);
   if (state.fructoseParts !== 0.8) parts.push(`fp_${state.fructoseParts}`);
@@ -166,7 +166,7 @@ import {
 
 export function useCalculator() {
   // Activity State
-  const [duration, setDuration] = useState(180);
+  const [duration, setDuration] = useState(60);
   const [targetCarbs, setTargetCarbs] = useState(90);
 
   // Carb Matrix State
@@ -237,6 +237,7 @@ export function useCalculator() {
   // Recipe View State
   const [recipeView, setRecipeView] = useState("total");
   const [gelsPerHour, setGelsPerHour] = useState(2);
+  const [targetOsmolarity, setTargetOsmolarity] = useState(3500);
 
   // Modals & UI State
   const [isMixingModalOpen, setIsMixingModalOpen] = useState(false);
@@ -464,14 +465,92 @@ export function useCalculator() {
   }, [targetAmountsPerHour, durationHours, electrolyteSources]);
 
   const totals = useMemo(() => {
+    let total_mOsm = 0;
+
+    if (calculatedSourceGrams.finalGrams) {
+      Object.entries(calculatedSourceGrams.finalGrams).forEach(([name, grams]) => {
+        if (name !== 'totalGrams') {
+           if (name.includes('Maltodextrin') || name.includes('Dextrin')) {
+             total_mOsm += grams * 1.0; 
+           } else {
+             total_mOsm += grams * 5.56;
+           }
+        }
+      });
+    }
+
+    const na = targetAmountsPerHour.Sodium * durationHours;
+    const k = targetAmountsPerHour.Potassium * durationHours;
+    const mg = targetAmountsPerHour.Magnesium * durationHours;
+    const ca = targetAmountsPerHour.Calcium * durationHours;
+
+    total_mOsm += (na / 23) * 2;
+    total_mOsm += (k / 39.1) * 2; 
+    total_mOsm += (mg / 24.3) * 3;
+    total_mOsm += (ca / 40.1) * 3;
+
+    const water = targetOsmolarity > 0 ? Math.round((total_mOsm / targetOsmolarity) * 1000) : 0;
+
     return {
-      water: Math.round(durationHours * 60),
+      water,
       glucoseRatio: Math.round((glucoseParts / (glucoseParts + fructoseParts)) * 100),
       fructoseRatio: Math.round((fructoseParts / (glucoseParts + fructoseParts)) * 100),
       malto: 0, // Legacy fallback, handled in calculatedSourceGrams now
       fructose: 0, // Legacy fallback
     };
-  }, [durationHours, glucoseParts, fructoseParts]);
+  }, [durationHours, glucoseParts, fructoseParts, calculatedSourceGrams, targetAmountsPerHour, targetOsmolarity]);
+
+  const autoFillElectrolytes = () => {
+    const totalTargets = {};
+    ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].forEach(type => {
+      totalTargets[type] = targetAmountsPerHour[type] * durationHours;
+    });
+
+    const newSources = [];
+    let idCounter = Date.now();
+    
+    const addSourceAmount = (name, amount) => {
+        if (amount > 0) newSources.push({ id: idCounter++, name, amount: Math.round(amount) });
+    };
+
+    if (totalTargets.Chloride > 0) {
+        const opt = electrolyteSourceOptions.find(o => o.label === 'Sodium Chloride (Table Salt)');
+        if (opt) {
+          const clComp = opt.components.find(c => c.name === 'Chloride');
+          const naComp = opt.components.find(c => c.name === 'Sodium');
+          const clRatio = clComp.ratio * clComp.absorptionRate;
+          const naRatio = naComp.ratio * naComp.absorptionRate;
+          
+          let powder = totalTargets.Chloride / clRatio;
+          if (powder * naRatio > totalTargets.Sodium && totalTargets.Sodium > 0) {
+              powder = totalTargets.Sodium / naRatio;
+          }
+          addSourceAmount('Sodium Chloride (Table Salt)', powder);
+          totalTargets.Chloride -= powder * clRatio;
+          totalTargets.Sodium -= powder * naRatio;
+        }
+    }
+
+    const preferred = {
+        Sodium: 'Sodium Citrate',
+        Potassium: 'Potassium Citrate',
+        Magnesium: 'Magnesium Citrate',
+        Calcium: 'Calcium Citrate'
+    };
+
+    ['Sodium', 'Potassium', 'Magnesium', 'Calcium'].forEach(type => {
+        if (totalTargets[type] > 0) {
+            const opt = electrolyteSourceOptions.find(o => o.label === preferred[type]);
+            if (opt) {
+                const comp = opt.components.find(c => c.name === type);
+                const powder = totalTargets[type] / (comp.ratio * comp.absorptionRate);
+                addSourceAmount(preferred[type], powder);
+            }
+        }
+    });
+
+    setElectrolyteSources(newSources);
+  };
 
   const scrollToRecipe = () =>
     recipeRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -585,6 +664,7 @@ export function useCalculator() {
     glucoseSources, setGlucoseSources, fructoseSources, setFructoseSources, electrolyteSources, setElectrolyteSources,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness, activeElectrolytes, setActiveElectrolytes,
     manualTargets, setManualTargets, addSource, updateSource, removeSource, recipeView, setRecipeView, gelsPerHour, setGelsPerHour,
+    targetOsmolarity, setTargetOsmolarity, autoFillElectrolytes,
     isMixingModalOpen, setIsMixingModalOpen, isTemplateModalOpen, setIsTemplateModalOpen, isShareModalOpen, setIsShareModalOpen,
     shareView, setShareView, toastMessage, setToastMessage, totals, calculatedSourceGrams, targetAmountsPerHour, electrolyteAnalysis,
     recipeRef, scrollToRecipe, getDisplayValue, showToast, handleCopyLink, handleCopyImage, applyTemplate, onOpenInstructions,
