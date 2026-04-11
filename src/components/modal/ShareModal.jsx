@@ -107,12 +107,6 @@ const ShareModal = () => {
     }
   });
 
-  recipeItems.push({
-    label: "Water",
-    value: `${getDisplayValue(totals.water)}ml`,
-    isWater: true,
-  });
-
     const formattedRatio = glucoseParts > 0 
     ? `1:${Number((fructoseParts / glucoseParts).toFixed(2))}`
     : `0:1`;
@@ -199,7 +193,7 @@ const ShareModal = () => {
                 </div>
                 <div className="space-y-4 flex-1">
                   {recipeItems.map((item, idx) => (
-                    <div key={idx} className={`flex justify-between ${item.isElectrolyte ? 'text-[#2dd4bf]' : (item.isWater ? 'text-blue-400 mt-2 pt-2 border-t border-slate-700/50' : '')}`}>
+                    <div key={idx} className={`flex justify-between ${item.isElectrolyte ? 'text-[#2dd4bf]' : ''}`}>
                       <span>{item.label}</span>
                       <span className="font-semibold">{item.value}</span>
                     </div>

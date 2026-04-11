@@ -44,21 +44,6 @@ const keyMap = {
   Calcium: 'ca'
 };
 
-const reverseKeyMap = Object.entries(keyMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {});
-
-function mapKeys(obj, map) {
-  if (Array.isArray(obj)) {
-    return obj.map(item => mapKeys(item, map));
-  } else if (obj !== null && typeof obj === 'object') {
-    return Object.keys(obj).reduce((acc, key) => {
-      const mappedKey = map[key] || key;
-      acc[mappedKey] = mapKeys(obj[key], map);
-      return acc;
-    }, {});
-  }
-  return obj;
-}
-
 function encodeState(state) {
   const parts = [];
   
@@ -237,7 +222,6 @@ export function useCalculator() {
   // Recipe View State
   const [recipeView, setRecipeView] = useState("total");
   const [gelsPerHour, setGelsPerHour] = useState(2);
-  const [targetOsmolarity, setTargetOsmolarity] = useState(3500);
 
   // Modals & UI State
   const [isMixingModalOpen, setIsMixingModalOpen] = useState(false);
@@ -465,40 +449,13 @@ export function useCalculator() {
   }, [targetAmountsPerHour, durationHours, electrolyteSources]);
 
   const totals = useMemo(() => {
-    let total_mOsm = 0;
-
-    if (calculatedSourceGrams.finalGrams) {
-      Object.entries(calculatedSourceGrams.finalGrams).forEach(([name, grams]) => {
-        if (name !== 'totalGrams') {
-           if (name.includes('Maltodextrin') || name.includes('Dextrin')) {
-             total_mOsm += grams * 1.0; 
-           } else {
-             total_mOsm += grams * 5.56;
-           }
-        }
-      });
-    }
-
-    const na = targetAmountsPerHour.Sodium * durationHours;
-    const k = targetAmountsPerHour.Potassium * durationHours;
-    const mg = targetAmountsPerHour.Magnesium * durationHours;
-    const ca = targetAmountsPerHour.Calcium * durationHours;
-
-    total_mOsm += (na / 23) * 2;
-    total_mOsm += (k / 39.1) * 2; 
-    total_mOsm += (mg / 24.3) * 3;
-    total_mOsm += (ca / 40.1) * 3;
-
-    const water = targetOsmolarity > 0 ? Math.round((total_mOsm / targetOsmolarity) * 1000) : 0;
-
     return {
-      water,
       glucoseRatio: Math.round((glucoseParts / (glucoseParts + fructoseParts)) * 100),
       fructoseRatio: Math.round((fructoseParts / (glucoseParts + fructoseParts)) * 100),
       malto: 0, // Legacy fallback, handled in calculatedSourceGrams now
       fructose: 0, // Legacy fallback
     };
-  }, [durationHours, glucoseParts, fructoseParts, calculatedSourceGrams, targetAmountsPerHour, targetOsmolarity]);
+  }, [glucoseParts, fructoseParts]);
 
   const autoFillElectrolytes = () => {
     const totalTargets = {};
@@ -664,7 +621,7 @@ export function useCalculator() {
     glucoseSources, setGlucoseSources, fructoseSources, setFructoseSources, electrolyteSources, setElectrolyteSources,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness, activeElectrolytes, setActiveElectrolytes,
     manualTargets, setManualTargets, addSource, updateSource, removeSource, recipeView, setRecipeView, gelsPerHour, setGelsPerHour,
-    targetOsmolarity, setTargetOsmolarity, autoFillElectrolytes,
+    autoFillElectrolytes,
     isMixingModalOpen, setIsMixingModalOpen, isTemplateModalOpen, setIsTemplateModalOpen, isShareModalOpen, setIsShareModalOpen,
     shareView, setShareView, toastMessage, setToastMessage, totals, calculatedSourceGrams, targetAmountsPerHour, electrolyteAnalysis,
     recipeRef, scrollToRecipe, getDisplayValue, showToast, handleCopyLink, handleCopyImage, applyTemplate, onOpenInstructions,
