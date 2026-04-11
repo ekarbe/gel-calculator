@@ -17,6 +17,45 @@
 import App from "./app";
 import { CalculatorProvider } from "../context/CalculatorContext";
 
+const siteUrl = 'https://eikekarbe.com';
+const pageUrl = `${siteUrl}/gel-calculator`;
+const title = 'DIY Energy Gel & Sports Drink Calculator | Optimize Your Fuel';
+const description = 'Calculate precise carb ratios (glucose:fructose) and electrolyte needs for your endurance activity. Create custom DIY energy gel or sports drink recipes.';
+const imageUrl = `${siteUrl}/favicon.svg`;
+
+export const metadata = {
+  title: title,
+  description: description,
+  keywords: ['energy gel calculator', 'diy sports drink', 'sports nutrition', 'endurance fuel', 'electrolytes', 'carbohydrates', 'homemade gel', 'cycling', 'running', 'triathlon'],
+  alternates: {
+    canonical: "https://ekarbe.github.io/gel-calculator",
+  },
+
+  openGraph: {
+    title: title,
+    description: description,
+    url: pageUrl,
+    siteName: 'Gel Calculator',
+    images: [
+      {
+        url: imageUrl,
+        width: 24,
+        height: 24,
+        alt: 'Gel Calculator Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+
+  twitter: {
+    card: 'summary',
+    title: title,
+    description: description,
+    images: [imageUrl],
+  },
+};
+
 export default function Page() {
   return (
     <CalculatorProvider>

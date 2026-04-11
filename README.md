@@ -1,6 +1,6 @@
 # Gel-Calculator 🧪⚡
 
-A web application designed for endurance athletes to calculate personalized energy gel or drink mix recipes. Determine the right mix of carbohydrates (controlling the glucose-to-fructose ratio) and electrolytes based on your activity duration, intensity, and sweat profile.
+A web application designed for endurance athletes to calculate personalized energy gel or drink mix recipes. Determine the right mix of carbohydrates (controlling the glucose-to-fructose ratio) and electrolytes based on your activity duration and sweat profile.
 
 **Live App:** [https://eikekarbe.com/gel-calculator](https://eikekarbe.com/gel-calculator)
 
@@ -20,15 +20,6 @@ A web application designed for endurance athletes to calculate personalized ener
 * **Mixing Instructions:** Provides a step-by-step guide for mixing the calculated recipe in a modal.
 * **Light & Dark Mode:** Adapts to your system's theme preference.
 * **Responsive Design:** Usable across different screen sizes.
-
-## Tech Stack
-
-* **Framework:** [Next.js](https://nextjs.org/) (App Router)
-* **Language:** [TypeScript](https://www.typescriptlang.org/)
-* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-* **UI Components:** [shadcn/ui](https://ui.shadcn.com/) (using Radix UI primitives)
-* **Icons:** [Lucide React](https://lucide.dev/)
-* **Theming:** [next-themes](https://github.com/pacocoursey/next-themes)
 
 ## Getting Started
 
@@ -68,7 +59,7 @@ Follow these steps to set up and run the project locally:
 4. **Open your browser:**
     Navigate to [http://localhost:3000/gel-calculator](http://localhost:3000/gel-calculator)
 
-The main application page is located at `src/app/page.tsx`.
+The main application page is located at `src/app/page.jsx`.
 
 ## How It Works
 
@@ -77,14 +68,17 @@ The main application page is located at `src/app/page.tsx`.
 3. **Carb Sources:** Add carbohydrate sources for each pathway (Glucose/Fructose) and specify the percentage each source should contribute to that pathway's total target carbs. The calculator determines the grams needed for each source.
 4. **Electrolyte Targets:** Choose either the "Sweat Profile" tab to estimate needs based on sweat rate and saltiness, or the "Manual Target" tab to input specific mg/hour goals. Toggle which electrolytes you want to target using the grid.
 5. **Electrolyte Sources:** Add electrolyte sources (salts, citrates) and input the total amount (in mg) you plan to add for the entire duration. The calculator shows the contribution of each electrolyte based on the source's composition and estimated absorption.
-6. **Analysis:** The "Electrolyte Balance Analysis" section compares your target electrolyte needs with the calculated absorbed amount from your sources.
+6. **Analysis:** The "Balance Analysis" section compares your target electrolyte needs with the calculated absorbed amount from your sources.
 7. **Recipe:** The "Final Recipe" section summarizes the required amounts of each carbohydrate and electrolyte source, viewable as a total batch or per individual gel.
 8. **Instructions:** Click "View Mixing Instructions" for a guide on preparing your custom mix.
+9. **Sharing:** Share your mix as a link or generated image.
+
+![Gel-Recipe](https://raw.githubusercontent.com/ekarbe/gel-calculator/refs/heads/main/assets/RECIPE.PNG)
 
 ## Configuration & Data
 
-* Carbohydrate source data (carbs per gram, glucose/fructose content) is defined in `src/constants/gelCalculator.ts`.
-* Electrolyte source data (component ratios, estimated absorption rates) is also in `src/constants/gelCalculator.ts`. **Note:** Absorption rates are simplified estimates and can vary significantly between individuals.
+* Carbohydrate source data (carbs per gram, glucose/fructose content) is defined in `src/constants/constants.js`.
+* Electrolyte source data (component ratios, estimated absorption rates) is also in `src/constants/constants.js`. **Note:** Absorption rates are simplified estimates and can vary significantly between individuals.
 * Sweat profile ranges and descriptions are located in the same constants file.
 
 ## Contributing

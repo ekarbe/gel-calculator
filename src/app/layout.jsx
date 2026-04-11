@@ -16,9 +16,42 @@
 
 import "./globals.css";
 
+export const metadata = {
+  title: 'Gel Calculator',
+  description: 'Calculate your energy gel mixture',
+  icons: [
+    {
+      rel: 'icon',
+      url: '/gel-calculator/favicon.svg',
+      type: 'image/svg+xml',
+      media: '(prefers-color-scheme: light)'
+    },
+    {
+      rel: 'icon',
+      url: '/gel-calculator/favicon.svg',
+      type: 'image/svg+xml',
+      media: '(prefers-color-scheme: dark)'
+    }
+  ],
+}
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              "name": "Gel Calculator",
+              "description": "Calculate the perfect energy gel mixture for your endurance activities.",
+              "url": "https://eikekarbe.com/gel-calculator",
+            }),
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
