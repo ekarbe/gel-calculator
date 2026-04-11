@@ -294,18 +294,11 @@ export function useCalculator() {
   // 1. Carb Engine
   const calculatedSourceGrams = useMemo(() => {
     const totalCarbsNeeded = targetCarbs * durationHours;
-    const gSum = glucoseSources.reduce((acc, s) => acc + s.percentage, 0);
-    const fSum = fructoseSources.reduce((acc, s) => acc + s.percentage, 0);
 
     const finalGrams = { totalGrams: 0 };
     let glucoseAccountedByMixed = 0;
     let fructoseAccountedByMixed = 0;
     let canAchieveRatio = true;
-
-    // "Percentage Validation Lock"
-    if (Math.abs(gSum - 100) > 0.01 || Math.abs(fSum - 100) > 0.01) {
-      return { finalGrams, glucoseAccountedByMixed, fructoseAccountedByMixed, canAchieveRatio: false };
-    }
 
     const totalParts = glucoseParts + fructoseParts;
     const validTotalParts = totalParts > 0 ? totalParts : 1;
@@ -353,6 +346,9 @@ export function useCalculator() {
     const pureGlucoseSources = pureSources.filter(s => s.targetPool === 'glucose');
     const pureFructoseSources = pureSources.filter(s => s.targetPool === 'fructose');
 
+    let actualGlucoseProvided = glucoseAccountedByMixed;
+    let actualFructoseProvided = fructoseAccountedByMixed;
+
     const pureGlucosePercentageSum = pureGlucoseSources.reduce((acc, s) => acc + s.percentage, 0);
     if (remainingGlucoseNeed > 0 && pureGlucosePercentageSum > 0) {
       pureGlucoseSources.forEach(s => {
@@ -362,6 +358,7 @@ export function useCalculator() {
         const rawGramsNeeded = (remainingGlucoseNeed * relativePercentage) / (data.glucoseContent * data.carbsPerGram);
         finalGrams[s.name] = (finalGrams[s.name] || 0) + rawGramsNeeded;
         finalGrams.totalGrams += rawGramsNeeded;
+        actualGlucoseProvided += rawGramsNeeded * data.glucoseContent * data.carbsPerGram;
       });
     }
 
@@ -374,13 +371,25 @@ export function useCalculator() {
         const rawGramsNeeded = (remainingFructoseNeed * relativePercentage) / (data.fructoseContent * data.carbsPerGram);
         finalGrams[s.name] = (finalGrams[s.name] || 0) + rawGramsNeeded;
         finalGrams.totalGrams += rawGramsNeeded;
+        actualFructoseProvided += rawGramsNeeded * data.fructoseContent * data.carbsPerGram;
       });
     }
 
-    const totalActualCarbs = glucoseAccountedByMixed + fructoseAccountedByMixed + remainingGlucoseNeed + remainingFructoseNeed;
+    const totalActualCarbs = actualGlucoseProvided + actualFructoseProvided;
     const tolerance = Math.max(0.5, totalCarbsNeeded * 0.01);
-    if (Math.abs(totalActualCarbs - totalCarbsNeeded) > tolerance) {
-      canAchieveRatio = false;
+    const isTotalCarbsMatch = Math.abs(totalActualCarbs - totalCarbsNeeded) <= tolerance;
+    const isGlucoseMatch = Math.abs(actualGlucoseProvided - targetGlucose) <= tolerance;
+    const isFructoseMatch = Math.abs(actualFructoseProvided - targetFructose) <= tolerance;
+
+    canAchieveRatio = isTotalCarbsMatch && isGlucoseMatch && isFructoseMatch;
+
+    if (!canAchieveRatio) {
+      return { 
+        finalGrams: { totalGrams: 0 }, 
+        glucoseAccountedByMixed, 
+        fructoseAccountedByMixed, 
+        canAchieveRatio: false 
+      };
     }
 
     return { finalGrams, glucoseAccountedByMixed, fructoseAccountedByMixed, canAchieveRatio };

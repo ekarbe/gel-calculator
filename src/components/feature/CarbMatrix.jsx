@@ -30,7 +30,8 @@ const CarbMatrix = () => {
     fructoseSources,
     addSource,
     updateSource,
-    removeSource
+    removeSource,
+    calculatedSourceGrams
   } = useCalculatorContext();
 
   const totalGlucosePercentage = glucoseSources.reduce((sum, s) => sum + (s.percentage || 0), 0);
@@ -78,7 +79,7 @@ const CarbMatrix = () => {
               <button
                 onClick={() =>
                   setGlucoseParts((p) =>
-                    Math.max(0.1, Number((p - 0.05).toFixed(2))),
+                    Math.max(0.0, Number((p - 0.05).toFixed(2))),
                   )
                 }
                 className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#5e5ce6] hover:text-[#5e5ce6] shadow-sm"
@@ -146,6 +147,16 @@ const CarbMatrix = () => {
             </div>
           </div>
         </div>
+
+        {!calculatedSourceGrams?.canAchieveRatio && (
+          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-3">
+            <span className="font-bold shrink-0 mt-0.5">⚠️ Warning:</span>
+            <p>
+              The target ratio cannot be achieved with the current sources. 
+              Please add a source to cover the missing carbohydrates or adjust your ratio.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Source Groups */}
