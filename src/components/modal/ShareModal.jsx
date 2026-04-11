@@ -41,7 +41,17 @@ const ShareModal = () => {
 
   const imageRef = useRef(null);
 
-  const onClose = () => setIsShareModalOpen(false);
+  const onClose = () => {
+    setIsShareModalOpen(false);
+    // Add a small delay to prevent the view changing visually before the modal fades out if there's an animation
+    setTimeout(() => setShareView("menu"), 200);
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleDownloadImage = async () => {
     if (!imageRef.current) return;
@@ -108,7 +118,10 @@ const ShareModal = () => {
     : `0:1`;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
+    <div 
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
           <h3 className="font-bold text-lg text-slate-800">
@@ -153,14 +166,13 @@ const ShareModal = () => {
             </button>
           </div>
         ) : (
-          <div className="flex flex-col">
-            <div className="p-6 bg-slate-100 flex justify-center">
-              <div ref={imageRef} className="bg-[#1e1e2d] text-white p-8 rounded-2xl w-full max-w-[320px] aspect-[4/5] flex flex-col relative ring-1 ring-slate-800">
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="p-6 bg-slate-100 flex justify-center overflow-y-auto">
+              <div ref={imageRef} className="bg-[#1e1e2d] text-white p-8 rounded-2xl w-full max-w-[320px] h-fit min-h-[400px] flex flex-col relative ring-1 ring-slate-800 shrink-0">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#5e5ce6] to-[#2dd4bf] rounded-t-2xl"></div>
                 <h1 className="text-2xl font-bold mb-8 flex items-center gap-2">
                   <FuelBeakerIcon
-                    size={10}
-                    className="text-[#5e5ce6]"
+                    className="w-6 h-6 text-[#5e5ce6]"
                     fill="currentColor"
                   />{" "}
                   Gel-Calculator
@@ -172,9 +184,15 @@ const ShareModal = () => {
                       {Math.round((duration / 60) * targetCarbs)}g
                     </div>
                   </div>
+                  <div className="text-center">
+                    <div className="text-xs text-slate-400">CARBS/HR</div>
+                    <div className="text-2xl font-bold pb-1">
+                      {targetCarbs}g
+                    </div>
+                  </div>
                   <div className="text-right">
                     <div className="text-xs text-slate-400">RATIO</div>
-                    <div className="text-2xl font-bold text-[#a2a0fa]">
+                    <div className="text-2xl font-bold text-[#a2a0fa] pb-1">
                       {formattedRatio}
                     </div>
                   </div>
@@ -187,9 +205,12 @@ const ShareModal = () => {
                     </div>
                   ))}
                 </div>
+                <div className="mt-8 pt-4 text-[10px] text-slate-500 text-center border-t border-slate-800">
+                  eikekarbe.com/gel-calculator
+                </div>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-2 bg-white">
+            <div className="p-4 border-t border-slate-100 flex gap-2 bg-white shrink-0">
               <button
                 onClick={() => setShareView("menu")}
                 className="px-4 py-3 text-slate-600 bg-slate-100 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
