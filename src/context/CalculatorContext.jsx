@@ -19,7 +19,7 @@
 import { createContext, useContext } from "react";
 import { useCalculator } from "../hooks/useCalculator";
 
-const CalculatorContext = createContext(null);
+export const CalculatorContext = createContext(null);
 
 export function CalculatorProvider({ children }) {
   const calculatorState = useCalculator();
