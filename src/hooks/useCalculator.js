@@ -1,22 +1,8 @@
-/*  Gel-Calculator - Personalized fuel calculator for endurance athletes.
-    Copyright (C) 2026  Eike Christian Karbe
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>. */
-
 "use client";
-
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
+import { allSourcesOptions, sourceDataByIdMap } from "../constants/constants";
+import { useCarbCalculation } from "./useCarbCalculation";
+import { useElectrolyteCalculation } from "./useElectrolyteCalculation";
 
 const keyMap = {
   duration: 'd',
@@ -94,7 +80,6 @@ function encodeState(state) {
 }
 
 function decodeState(str) {
-  
   const state = {};
   if (str === 'tm2') return state;
   
@@ -137,93 +122,51 @@ function decodeState(str) {
   }
   return state;
 }
-import { 
-  glucoseSourceOptions, 
-  fructoseSourceOptions, 
-  electrolyteSourceOptions,
-  sourceDataMap,
-  allSourcesOptions,
-  sourceDataByIdMap,
-  SWEAT_RATES,
-  ELECTROLYTE_CONCENTRATIONS,
-  CONVERSION_FACTORS
-} from "../constants/constants";
 
 export function useCalculator() {
-  // Activity State
   const [duration, setDuration] = useState(60);
   const [targetCarbs, setTargetCarbs] = useState(90);
+  
+  const durationHours = duration / 60;
 
-  // Carb Matrix State
-  const [glucoseParts, setGlucoseParts] = useState(1.0);
-  const [fructoseParts, setFructoseParts] = useState(0.8);
+  const {
+    glucoseParts, setGlucoseParts,
+    fructoseParts, setFructoseParts,
+    glucoseSources, setGlucoseSources,
+    fructoseSources, setFructoseSources,
+    addCarbSource, updateCarbSource, removeCarbSource,
+    calculatedSourceGrams, totals
+  } = useCarbCalculation({ durationHours, targetCarbs });
 
-  const [glucoseSources, setGlucoseSources] = useState([
-    { id: 1, name: "Maltodextrin", percentage: 100 },
-  ]);
-  const [fructoseSources, setFructoseSources] = useState([
-    { id: 1, name: "Crystalline Fructose", percentage: 100 },
-  ]);
-  const [electrolyteSources, setElectrolyteSources] = useState([]);
-
-  // Electrolyte State
-  const [isSweatRate, setIsSweatRate] = useState(true);
-  const [sweatRate, setSweatRate] = useState(2); // 0-5 index
-  const [saltiness, setSaltiness] = useState(2); // 0-5 index
-  const [activeElectrolytes, setActiveElectrolytes] = useState({ Sodium: true, Chloride: true, Potassium: true, Magnesium: true, Calcium: true });
-  const [manualTargets, setManualTargets] = useState({ Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 });
+  const {
+    electrolyteSources, setElectrolyteSources,
+    isSweatRate, setIsSweatRate,
+    sweatRate, setSweatRate,
+    saltiness, setSaltiness,
+    activeElectrolytes, setActiveElectrolytes,
+    manualTargets, setManualTargets,
+    addElectrolyteSource, updateElectrolyteSource, removeElectrolyteSource,
+    targetAmountsPerHour, electrolyteAnalysis, autoFillElectrolytes
+  } = useElectrolyteCalculation({ durationHours });
 
   const addSource = (type) => {
-    const newSource = { id: Date.now(), name: "", percentage: 0 };
-    if (type === "glucose") {
-      setGlucoseSources((prev) => {
-        const usedNames = prev.map((s) => s.name);
-        const availableOption = glucoseSourceOptions.find((opt) => !usedNames.includes(opt.label));
-        if (!availableOption) return prev;
-        return [...prev, { ...newSource, name: availableOption.label }];
-      });
-    } else if (type === "fructose") {
-      setFructoseSources((prev) => {
-        const usedNames = prev.map((s) => s.name);
-        const availableOption = fructoseSourceOptions.find((opt) => !usedNames.includes(opt.label));
-        if (!availableOption) return prev;
-        return [...prev, { ...newSource, name: availableOption.label }];
-      });
-    } else if (type === "electrolyte") {
-      setElectrolyteSources((prev) => {
-        const usedNames = prev.map((s) => s.name);
-        const availableOption = electrolyteSourceOptions.find((opt) => !usedNames.includes(opt.label));
-        if (!availableOption) return prev;
-        return [...prev, { id: Date.now(), name: availableOption.label, amount: 0 }];
-      });
-    }
+    if (type === "glucose" || type === "fructose") addCarbSource(type);
+    else if (type === "electrolyte") addElectrolyteSource();
   };
 
   const updateSource = (type, id, field, value) => {
-    if (type === "glucose") {
-      setGlucoseSources((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-    } else if (type === "fructose") {
-      setFructoseSources((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-    } else if (type === "electrolyte") {
-      setElectrolyteSources((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-    }
+    if (type === "glucose" || type === "fructose") updateCarbSource(type, id, field, value);
+    else if (type === "electrolyte") updateElectrolyteSource(id, field, value);
   };
 
   const removeSource = (type, id) => {
-    if (type === "glucose") {
-      setGlucoseSources((prev) => prev.filter((s) => s.id !== id));
-    } else if (type === "fructose") {
-      setFructoseSources((prev) => prev.filter((s) => s.id !== id));
-    } else if (type === "electrolyte") {
-      setElectrolyteSources((prev) => prev.filter((s) => s.id !== id));
-    }
+    if (type === "glucose" || type === "fructose") removeCarbSource(type, id);
+    else if (type === "electrolyte") removeElectrolyteSource(id);
   };
 
-  // Recipe View State
   const [recipeView, setRecipeView] = useState("total");
   const [gelsPerHour, setGelsPerHour] = useState(2);
 
-  // Modals & UI State
   const [isMixingModalOpen, setIsMixingModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -273,244 +216,7 @@ export function useCalculator() {
     }
   }, []);
 
-  // Calculation Engines
-  const durationHours = duration / 60;
-  
-  // 1. Carb Engine
-  const calculatedSourceGrams = useMemo(() => {
-    const totalCarbsNeeded = targetCarbs * durationHours;
-
-    const finalGrams = { totalGrams: 0 };
-    let glucoseAccountedByMixed = 0;
-    let fructoseAccountedByMixed = 0;
-    let canAchieveRatio = true;
-
-    const totalParts = glucoseParts + fructoseParts;
-    const validTotalParts = totalParts > 0 ? totalParts : 1;
-    const targetGlucose = (glucoseParts / validTotalParts) * totalCarbsNeeded;
-    const targetFructose = (fructoseParts / validTotalParts) * totalCarbsNeeded;
-
-    // Combine sources for processing
-    const allUserSources = [
-      ...glucoseSources.map(s => ({ ...s, targetPool: 'glucose', target: targetGlucose })),
-      ...fructoseSources.map(s => ({ ...s, targetPool: 'fructose', target: targetFructose }))
-    ];
-
-    // Process mixed sources first
-    const mixedSources = allUserSources.filter(s => {
-      const data = sourceDataMap.get(s.name);
-      return data && data.glucoseContent > 0 && data.fructoseContent > 0;
-    });
-
-    mixedSources.forEach(s => {
-      const data = sourceDataMap.get(s.name);
-      if (!data) return;
-      const targetForSource = s.target * (s.percentage / 100);
-      const relevantContentRatio = s.targetPool === 'glucose' ? data.glucoseContent : data.fructoseContent;
-      // Formula: Raw Grams Needed = Target Carbs for Source / (sourceContentRatio * carbsPerGram)
-      const rawGramsNeeded = targetForSource / (relevantContentRatio * data.carbsPerGram);
-      
-      finalGrams[s.name] = (finalGrams[s.name] || 0) + rawGramsNeeded;
-      finalGrams.totalGrams += rawGramsNeeded;
-
-      glucoseAccountedByMixed += rawGramsNeeded * data.carbsPerGram * data.glucoseContent;
-      fructoseAccountedByMixed += rawGramsNeeded * data.carbsPerGram * data.fructoseContent;
-    });
-
-    // Process pure sources
-    let remainingGlucoseNeed = targetGlucose - glucoseAccountedByMixed;
-    let remainingFructoseNeed = targetFructose - fructoseAccountedByMixed;
-    remainingGlucoseNeed = remainingGlucoseNeed > 0 ? remainingGlucoseNeed : 0;
-    remainingFructoseNeed = remainingFructoseNeed > 0 ? remainingFructoseNeed : 0;
-
-    const pureSources = allUserSources.filter(s => {
-      const data = sourceDataMap.get(s.name);
-      return data && (data.glucoseContent === 0 || data.fructoseContent === 0);
-    });
-
-    const pureGlucoseSources = pureSources.filter(s => s.targetPool === 'glucose');
-    const pureFructoseSources = pureSources.filter(s => s.targetPool === 'fructose');
-
-    let actualGlucoseProvided = glucoseAccountedByMixed;
-    let actualFructoseProvided = fructoseAccountedByMixed;
-
-    const pureGlucosePercentageSum = pureGlucoseSources.reduce((acc, s) => acc + s.percentage, 0);
-    if (remainingGlucoseNeed > 0 && pureGlucosePercentageSum > 0) {
-      pureGlucoseSources.forEach(s => {
-        const data = sourceDataMap.get(s.name);
-        if (!data) return;
-        const relativePercentage = s.percentage / pureGlucosePercentageSum;
-        const rawGramsNeeded = (remainingGlucoseNeed * relativePercentage) / (data.glucoseContent * data.carbsPerGram);
-        finalGrams[s.name] = (finalGrams[s.name] || 0) + rawGramsNeeded;
-        finalGrams.totalGrams += rawGramsNeeded;
-        actualGlucoseProvided += rawGramsNeeded * data.glucoseContent * data.carbsPerGram;
-      });
-    }
-
-    const pureFructosePercentageSum = pureFructoseSources.reduce((acc, s) => acc + s.percentage, 0);
-    if (remainingFructoseNeed > 0 && pureFructosePercentageSum > 0) {
-      pureFructoseSources.forEach(s => {
-        const data = sourceDataMap.get(s.name);
-        if (!data) return;
-        const relativePercentage = s.percentage / pureFructosePercentageSum;
-        const rawGramsNeeded = (remainingFructoseNeed * relativePercentage) / (data.fructoseContent * data.carbsPerGram);
-        finalGrams[s.name] = (finalGrams[s.name] || 0) + rawGramsNeeded;
-        finalGrams.totalGrams += rawGramsNeeded;
-        actualFructoseProvided += rawGramsNeeded * data.fructoseContent * data.carbsPerGram;
-      });
-    }
-
-    const totalActualCarbs = actualGlucoseProvided + actualFructoseProvided;
-    const tolerance = Math.max(0.5, totalCarbsNeeded * 0.01);
-    const isTotalCarbsMatch = Math.abs(totalActualCarbs - totalCarbsNeeded) <= tolerance;
-    const isGlucoseMatch = Math.abs(actualGlucoseProvided - targetGlucose) <= tolerance;
-    const isFructoseMatch = Math.abs(actualFructoseProvided - targetFructose) <= tolerance;
-
-    canAchieveRatio = isTotalCarbsMatch && isGlucoseMatch && isFructoseMatch;
-
-    if (!canAchieveRatio) {
-      return { 
-        finalGrams: { totalGrams: 0 }, 
-        glucoseAccountedByMixed, 
-        fructoseAccountedByMixed, 
-        canAchieveRatio: false 
-      };
-    }
-
-    return { finalGrams, glucoseAccountedByMixed, fructoseAccountedByMixed, canAchieveRatio };
-  }, [durationHours, targetCarbs, glucoseParts, fructoseParts, glucoseSources, fructoseSources]);
-
-  // 2. Electrolyte Engine
-  const targetAmountsPerHour = useMemo(() => {
-    const targets = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
-    if (!isSweatRate) {
-      Object.keys(targets).forEach(key => targets[key] = activeElectrolytes[key] ? manualTargets[key] : 0);
-      return targets;
-    }
-
-    const rateL = SWEAT_RATES[sweatRate];
-    Object.keys(targets).forEach(key => {
-      if (!activeElectrolytes[key]) {
-        targets[key] = 0;
-        return;
-      }
-      const concentrations = ELECTROLYTE_CONCENTRATIONS[key];
-      if (concentrations) {
-        const conc_mmolL = concentrations[saltiness];
-        const conversion = CONVERSION_FACTORS[key];
-        targets[key] = rateL * conc_mmolL * conversion;
-      }
-    });
-    return targets;
-  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes]);
-
-  const electrolyteAnalysis = useMemo(() => {
-    const analysis = {};
-    const electrolytes = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
-    
-    electrolytes.forEach(type => {
-      const targetTotal = targetAmountsPerHour[type] * durationHours;
-      analysis[type] = {
-        electrolyte: type,
-        target: targetTotal,
-        absorbed: 0,
-        percentage: 0,
-        message: "",
-        hasAnySources: false
-      };
-    });
-
-    electrolyteSources.forEach(es => {
-      const opt = electrolyteSourceOptions.find(o => o.label === es.name);
-      if (!opt) return;
-      opt.components.forEach(comp => {
-        if (analysis[comp.name]) {
-          const absorbedAmt = es.amount * comp.ratio * comp.absorptionRate;
-          analysis[comp.name].absorbed += absorbedAmt;
-          analysis[comp.name].hasAnySources = true;
-        }
-      });
-    });
-
-    electrolytes.forEach(type => {
-      const a = analysis[type];
-      a.percentage = a.target > 0 ? (a.absorbed / a.target) * 100 : 100;
-      const diff = a.absorbed - a.target;
-      if (Math.abs(diff) <= 1.0) {
-        a.message = "Target met";
-      } else if (diff < -1.0) {
-        a.message = `Short by ${Math.abs(diff).toFixed(0)}mg`;
-      } else {
-        a.message = `Excess of ${diff.toFixed(0)}mg`;
-      }
-    });
-
-    return analysis;
-  }, [targetAmountsPerHour, durationHours, electrolyteSources]);
-
-  const totals = useMemo(() => {
-    return {
-      glucoseRatio: Math.round((glucoseParts / (glucoseParts + fructoseParts)) * 100),
-      fructoseRatio: Math.round((fructoseParts / (glucoseParts + fructoseParts)) * 100),
-      malto: 0, // Legacy fallback, handled in calculatedSourceGrams now
-      fructose: 0, // Legacy fallback
-    };
-  }, [glucoseParts, fructoseParts]);
-
-  const autoFillElectrolytes = () => {
-    const totalTargets = {};
-    ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].forEach(type => {
-      totalTargets[type] = targetAmountsPerHour[type] * durationHours;
-    });
-
-    const newSources = [];
-    let idCounter = Date.now();
-    
-    const addSourceAmount = (name, amount) => {
-        if (amount > 0) newSources.push({ id: idCounter++, name, amount: Math.round(amount) });
-    };
-
-    if (totalTargets.Chloride > 0) {
-        const opt = electrolyteSourceOptions.find(o => o.label === 'Sodium Chloride (Table Salt)');
-        if (opt) {
-          const clComp = opt.components.find(c => c.name === 'Chloride');
-          const naComp = opt.components.find(c => c.name === 'Sodium');
-          const clRatio = clComp.ratio * clComp.absorptionRate;
-          const naRatio = naComp.ratio * naComp.absorptionRate;
-          
-          let powder = totalTargets.Chloride / clRatio;
-          if (powder * naRatio > totalTargets.Sodium && totalTargets.Sodium > 0) {
-              powder = totalTargets.Sodium / naRatio;
-          }
-          addSourceAmount('Sodium Chloride (Table Salt)', powder);
-          totalTargets.Chloride -= powder * clRatio;
-          totalTargets.Sodium -= powder * naRatio;
-        }
-    }
-
-    const preferred = {
-        Sodium: 'Sodium Citrate',
-        Potassium: 'Potassium Citrate',
-        Magnesium: 'Magnesium Citrate',
-        Calcium: 'Calcium Citrate'
-    };
-
-    ['Sodium', 'Potassium', 'Magnesium', 'Calcium'].forEach(type => {
-        if (totalTargets[type] > 0) {
-            const opt = electrolyteSourceOptions.find(o => o.label === preferred[type]);
-            if (opt) {
-                const comp = opt.components.find(c => c.name === type);
-                const powder = totalTargets[type] / (comp.ratio * comp.absorptionRate);
-                addSourceAmount(preferred[type], powder);
-            }
-        }
-    });
-
-    setElectrolyteSources(newSources);
-  };
-
-  const scrollToRecipe = () =>
-    recipeRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToRecipe = () => recipeRef.current?.scrollIntoView({ behavior: "smooth" });
 
   const getDisplayValue = (val) => {
     if (recipeView === "perGel") {
@@ -532,20 +238,12 @@ export function useCalculator() {
     });
 
     const stateToSave = {
-      duration,
-      targetCarbs,
-      glucoseParts,
-      fructoseParts,
+      duration, targetCarbs, glucoseParts, fructoseParts,
       glucoseSources: compressSources(glucoseSources),
       fructoseSources: compressSources(fructoseSources),
       electrolyteSources: compressSources(electrolyteSources),
-      isSweatRate,
-      sweatRate,
-      saltiness,
-      activeElectrolytes,
-      manualTargets,
-      recipeView,
-      gelsPerHour
+      isSweatRate, sweatRate, saltiness, activeElectrolytes,
+      manualTargets, recipeView, gelsPerHour
     };
     try {
       const base64String = encodeState(stateToSave);
@@ -556,24 +254,16 @@ export function useCalculator() {
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(copyText).catch(() => {});
       } else {
-        // Fallback for non-secure contexts
         const textArea = document.createElement("textarea");
         textArea.value = copyText;
         textArea.style.position = "absolute";
         textArea.style.left = "-999999px";
         document.body.prepend(textArea);
         textArea.select();
-        try {
-          document.execCommand('copy');
-        } catch (err) {
-          console.error("Fallback copy failed", err);
-        } finally {
-          textArea.remove();
-        }
+        try { document.execCommand('copy'); } catch (err) {} finally { textArea.remove(); }
       }
       showToast("Recipe link copied!");
     } catch (e) {
-      console.error("Failed to generate share link", e);
       showToast("Failed to generate link.");
     }
     setIsShareModalOpen(false);
@@ -588,7 +278,6 @@ export function useCalculator() {
     if (template.glucoseParts !== undefined) setGlucoseParts(template.glucoseParts);
     if (template.fructoseParts !== undefined) setFructoseParts(template.fructoseParts);
     
-    // Create new IDs for sources to ensure uniqueness when applying and resolve names
     if (template.glucoseSources !== undefined) {
       setGlucoseSources(template.glucoseSources.map((s, i) => {
         const opt = sourceDataByIdMap.get(s.id);
