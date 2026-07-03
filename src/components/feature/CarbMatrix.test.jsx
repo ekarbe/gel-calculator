@@ -19,6 +19,7 @@ describe('CarbMatrix Component', () => {
     updateSource: vi.fn(),
     removeSource: vi.fn(),
     calculatedSourceGrams: { canAchieveRatio: true },
+    strategy: { isSmartSuggestions: false },
   };
 
   const renderComponent = (contextProps = {}) => {

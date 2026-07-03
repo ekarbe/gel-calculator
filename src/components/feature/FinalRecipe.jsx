@@ -39,8 +39,7 @@ const FinalRecipe = () => {
   } = useCalculatorContext();
 
   const durationHours = duration / 60;
-  const effectiveCarbs = strategy.isSmartSuggestions ? strategy.suggestedStrategies.carbsPerHour : targetCarbs;
-  const costAnalysis = strategy.getCostAnalysis(effectiveCarbs * durationHours);
+  const costAnalysis = strategy.getCostAnalysis(targetCarbs * durationHours);
 
   const recipeItems = [];
 

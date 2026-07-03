@@ -37,7 +37,8 @@ const keyMap = {
   humidity: 'hum',
   ultraMode: 'ult',
   incCaffeine: 'ic',
-  cafHabituation: 'ch'
+  cafHabituation: 'ch',
+  sweatSodiumConcentration: 'ssc'
 };
 
 function encodeState(state) {
@@ -96,6 +97,7 @@ function encodeState(state) {
     if (state.strategy.ultraMode) parts.push(`ult_1`);
     if (state.strategy.includeCaffeine) parts.push(`ic_1`);
     if (state.strategy.caffeineHabituation !== 'habituated') parts.push(`ch_${state.strategy.caffeineHabituation}`);
+    if (state.strategy.sweatSodiumConcentration !== 'average') parts.push(`ssc_${state.strategy.sweatSodiumConcentration}`);
   }
 
   return parts.length > 0 ? parts.join('~') : 'tm2';
@@ -144,6 +146,7 @@ function decodeState(str) {
     else if (k === 'ult') { state.strategy = state.strategy || {}; state.strategy.ultraMode = v === '1'; }
     else if (k === 'ic') { state.strategy = state.strategy || {}; state.strategy.includeCaffeine = v === '1'; }
     else if (k === 'ch') { state.strategy = state.strategy || {}; state.strategy.caffeineHabituation = v; }
+    else if (k === 'ssc') { state.strategy = state.strategy || {}; state.strategy.sweatSodiumConcentration = v; }
   }
   return state;
 }
@@ -157,13 +160,12 @@ export function useCalculator() {
   const strategy = useStrategyCalculation({ durationHours });
 
   const effectiveTargetCarbs = strategy.isSmartSuggestions ? strategy.suggestedStrategies.carbsPerHour : targetCarbs;
-  const effectiveGlucoseParts = strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.glucose : undefined;
-  const effectiveFructoseParts = strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.fructose : undefined;
   const effectiveSweatRate = strategy.isSmartSuggestions ? strategy.suggestedStrategies.sweatRate : undefined;
 
   const {
     glucoseParts, setGlucoseParts,
     fructoseParts, setFructoseParts,
+    effectiveGlucoseParts, effectiveFructoseParts,
     glucoseSources, setGlucoseSources,
     fructoseSources, setFructoseSources,
     addCarbSource, updateCarbSource, removeCarbSource,
@@ -171,8 +173,8 @@ export function useCalculator() {
   } = useCarbCalculation({ 
     durationHours, 
     targetCarbs: effectiveTargetCarbs,
-    glucosePartsOverride: effectiveGlucoseParts,
-    fructosePartsOverride: effectiveFructoseParts
+    glucosePartsOverride: strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.glucose : undefined,
+    fructosePartsOverride: strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.fructose : undefined
   });
 
   const {
@@ -184,7 +186,12 @@ export function useCalculator() {
     manualTargets, setManualTargets,
     addElectrolyteSource, updateElectrolyteSource, removeElectrolyteSource,
     targetAmountsPerHour, electrolyteAnalysis, autoFillElectrolytes
-  } = useElectrolyteCalculation({ durationHours, sweatRateOverride: effectiveSweatRate });
+  } = useElectrolyteCalculation({ 
+    durationHours, 
+    sweatRateOverride: effectiveSweatRate,
+    isSmartSuggestions: strategy.isSmartSuggestions,
+    sodiumConcentrationOverride: strategy.suggestedStrategies.suggestedSodiumConcentration
+  });
 
   const addSource = (type) => {
     if (type === "glucose" || type === "fructose") addCarbSource(type);
@@ -257,6 +264,7 @@ export function useCalculator() {
             if (state.strategy.ultraMode !== undefined) strategy.setUltraMode(state.strategy.ultraMode);
             if (state.strategy.includeCaffeine !== undefined) strategy.setIncludeCaffeine(state.strategy.includeCaffeine);
             if (state.strategy.caffeineHabituation !== undefined) strategy.setCaffeineHabituation(state.strategy.caffeineHabituation);
+            if (state.strategy.sweatSodiumConcentration !== undefined) strategy.setSweatSodiumConcentration(state.strategy.sweatSodiumConcentration);
           }
         } catch (e) {
           console.error("Failed to parse share link", e);
@@ -302,7 +310,8 @@ export function useCalculator() {
         humidity: strategy.humidity,
         ultraMode: strategy.ultraMode,
         includeCaffeine: strategy.includeCaffeine,
-        caffeineHabituation: strategy.caffeineHabituation
+        caffeineHabituation: strategy.caffeineHabituation,
+        sweatSodiumConcentration: strategy.sweatSodiumConcentration
       }
     };
     try {
@@ -366,7 +375,11 @@ export function useCalculator() {
   const onOpenShare = () => setIsShareModalOpen(true);
 
   return {
-    duration, setDuration, targetCarbs, setTargetCarbs, glucoseParts, setGlucoseParts, fructoseParts, setFructoseParts,
+    duration, setDuration, 
+    targetCarbs: effectiveTargetCarbs, setTargetCarbs, 
+    glucoseParts: effectiveGlucoseParts, setGlucoseParts, 
+    fructoseParts: effectiveFructoseParts, setFructoseParts,
+    rawTargetCarbs: targetCarbs, rawGlucoseParts: glucoseParts, rawFructoseParts: fructoseParts,
     glucoseSources, setGlucoseSources, fructoseSources, setFructoseSources, electrolyteSources, setElectrolyteSources,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness, activeElectrolytes, setActiveElectrolytes,
     manualTargets, setManualTargets, addSource, updateSource, removeSource, recipeView, setRecipeView, gelsPerHour, setGelsPerHour,

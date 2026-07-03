@@ -162,6 +162,7 @@ export function useCarbCalculation({ durationHours, targetCarbs, glucosePartsOve
   return {
     glucoseParts, setGlucoseParts,
     fructoseParts, setFructoseParts,
+    effectiveGlucoseParts, effectiveFructoseParts,
     glucoseSources, setGlucoseSources,
     fructoseSources, setFructoseSources,
     addCarbSource, updateCarbSource, removeCarbSource,

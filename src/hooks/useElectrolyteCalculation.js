@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { electrolyteSourceOptions, SWEAT_RATES, ELECTROLYTE_CONCENTRATIONS, CONVERSION_FACTORS } from "../constants/constants";
 
-export function useElectrolyteCalculation({ durationHours, sweatRateOverride }) {
+export function useElectrolyteCalculation({ durationHours, sweatRateOverride, isSmartSuggestions, sodiumConcentrationOverride }) {
   const [electrolyteSources, setElectrolyteSources] = useState([]);
   const [isSweatRate, setIsSweatRate] = useState(true);
   const [sweatRate, setSweatRate] = useState(2); // 0-5 index
@@ -29,17 +29,29 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride }) 
 
   const targetAmountsPerHour = useMemo(() => {
     const targets = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
-    if (!isSweatRate) {
+    if (!isSweatRate && !isSmartSuggestions) {
       Object.keys(targets).forEach(key => targets[key] = activeElectrolytes[key] ? manualTargets[key] : 0);
       return targets;
     }
 
-    const rateL = sweatRateOverride !== undefined ? sweatRateOverride : SWEAT_RATES[sweatRate];
+    const rateL = isSmartSuggestions && sweatRateOverride !== undefined ? sweatRateOverride : (sweatRateOverride !== undefined ? sweatRateOverride : SWEAT_RATES[sweatRate]);
     Object.keys(targets).forEach(key => {
-      if (!activeElectrolytes[key]) {
+      if (!isSmartSuggestions && !activeElectrolytes[key]) {
         targets[key] = 0;
         return;
       }
+
+      if (isSmartSuggestions && (key === 'Potassium' || key === 'Magnesium' || key === 'Calcium')) {
+        targets[key] = 0;
+        return;
+      }
+
+      if (isSmartSuggestions && (key === 'Sodium' || key === 'Chloride')) {
+        const conversion = CONVERSION_FACTORS[key];
+        targets[key] = rateL * sodiumConcentrationOverride * conversion;
+        return;
+      }
+
       const concentrations = ELECTROLYTE_CONCENTRATIONS[key];
       if (concentrations) {
         const conc_mmolL = concentrations[saltiness];
@@ -48,7 +60,7 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride }) 
       }
     });
     return targets;
-  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes, sweatRateOverride]);
+  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes, sweatRateOverride, isSmartSuggestions, sodiumConcentrationOverride]);
 
   const electrolyteAnalysis = useMemo(() => {
     const analysis = {};

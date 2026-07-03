@@ -59,7 +59,7 @@ const ActivityBasics = () => {
           <div className="relative">
             <input
               type="number"
-              value={strategy.isSmartSuggestions ? strategy.suggestedStrategies.carbsPerHour : targetCarbs}
+              value={targetCarbs}
               onChange={(e) => setTargetCarbs(Number(e.target.value))}
               disabled={strategy.isSmartSuggestions}
               className={`w-full pl-4 pr-10 py-2.5 border rounded-xl outline-none transition-all font-semibold ${
@@ -150,6 +150,18 @@ const ActivityBasics = () => {
                   onChange={(e) => strategy.setHumidity(Number(e.target.value))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1"><Droplets size={12}/> Sweat Saltiness</label>
+                <select
+                  value={strategy.sweatSodiumConcentration}
+                  onChange={(e) => strategy.setSweatSodiumConcentration(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none bg-white"
+                >
+                  <option value="low">Low (Light white marks)</option>
+                  <option value="average">Average</option>
+                  <option value="high">Salty (Heavy white crusting)</option>
+                </select>
               </div>
               <div className="flex flex-col justify-end pb-1">
                 <label className="relative inline-flex items-center cursor-pointer">

@@ -31,7 +31,8 @@ const CarbMatrix = () => {
     addSource,
     updateSource,
     removeSource,
-    calculatedSourceGrams
+    calculatedSourceGrams,
+    strategy
   } = useCalculatorContext();
 
   const totalGlucosePercentage = glucoseSources.reduce((sum, s) => sum + (s.percentage || 0), 0);
@@ -82,7 +83,8 @@ const CarbMatrix = () => {
                     Math.max(0.0, Number((p - 0.05).toFixed(2))),
                   )
                 }
-                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#5e5ce6] hover:text-[#5e5ce6] shadow-sm"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-slate-600 hover:border-[#5e5ce6] hover:text-[#5e5ce6]'}`}
               >
                 <Minus size={14} />
               </button>
@@ -93,7 +95,8 @@ const CarbMatrix = () => {
                 step="0.05"
                 value={glucoseParts}
                 onChange={(e) => setGlucoseParts(Number(e.target.value))}
-                className="w-full h-2.5 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-[#5e5ce6]"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-full h-2.5 bg-blue-100 rounded-lg appearance-none accent-[#5e5ce6] ${strategy.isSmartSuggestions ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
               />
               <button
                 onClick={() =>
@@ -101,7 +104,8 @@ const CarbMatrix = () => {
                     Math.min(2.0, Number((p + 0.05).toFixed(2))),
                   )
                 }
-                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#5e5ce6] hover:text-[#5e5ce6] shadow-sm"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-slate-600 hover:border-[#5e5ce6] hover:text-[#5e5ce6]'}`}
               >
                 <Plus size={14} />
               </button>
@@ -121,7 +125,8 @@ const CarbMatrix = () => {
                     Math.max(0.0, Number((p - 0.05).toFixed(2))),
                   )
                 }
-                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#9333ea] hover:text-[#9333ea] shadow-sm"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-slate-600 hover:border-[#9333ea] hover:text-[#9333ea]'}`}
               >
                 <Minus size={14} />
               </button>
@@ -132,7 +137,8 @@ const CarbMatrix = () => {
                 step="0.05"
                 value={fructoseParts}
                 onChange={(e) => setFructoseParts(Number(e.target.value))}
-                className="w-full h-2.5 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-[#9333ea]"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-full h-2.5 bg-purple-100 rounded-lg appearance-none accent-[#9333ea] ${strategy.isSmartSuggestions ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
               />
               <button
                 onClick={() =>
@@ -140,7 +146,8 @@ const CarbMatrix = () => {
                     Math.min(2.0, Number((p + 0.05).toFixed(2))),
                   )
                 }
-                className="w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#9333ea] hover:text-[#9333ea] shadow-sm"
+                disabled={strategy.isSmartSuggestions}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-white border border-slate-200 rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-slate-600 hover:border-[#9333ea] hover:text-[#9333ea]'}`}
               >
                 <Plus size={14} />
               </button>

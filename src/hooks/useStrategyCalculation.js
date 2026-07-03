@@ -11,37 +11,43 @@ export function useStrategyCalculation({ durationHours }) {
   const [ultraMode, setUltraMode] = useState(false);
   const [includeCaffeine, setIncludeCaffeine] = useState(false);
   const [caffeineHabituation, setCaffeineHabituation] = useState("habituated"); // naive, habituated
+  const [sweatSodiumConcentration, setSweatSodiumConcentration] = useState("average"); // low, average, high
 
   const suggestedStrategies = useMemo(() => {
     let carbsPerHour = 60;
     let targetRatio = { glucose: 1.0, fructose: 0.8 };
     
     // 1. Carbohydrate Logic (Absolute duration-based, not weight-based)
+    let baseCarbs = 60;
     if (durationHours < 1.0) {
-      carbsPerHour = 30; // 0-30g or mouth rinse
+      baseCarbs = 30; // 0-30g or mouth rinse
       targetRatio = { glucose: 1.0, fructose: 0.0 };
     } else if (durationHours >= 1.0 && durationHours <= 2.5) {
-      carbsPerHour = 45; // 30-60g
+      baseCarbs = 45; // 30-60g
       targetRatio = { glucose: 2.0, fructose: 1.0 }; // 2:1 is optimal here
     } else if (durationHours > 2.5) {
       if (ultraMode) {
-        carbsPerHour = 105; // 90-120g range
+        baseCarbs = 90; // 90-120g range
         targetRatio = { glucose: 1.0, fructose: 0.8 }; // 1:0.8 required for extreme intake
       } else {
-        carbsPerHour = 75; // 60-90g range
+        baseCarbs = 75; // 60-90g range
         targetRatio = { glucose: 2.0, fructose: 1.0 };
       }
     }
 
-    // 2. Sweat Rate Logic (USARIEM proxy based on MHP and Env)
-    const baseSweat = gender === "female" ? 0.5 : 0.8;
-    
     let intensityModifier = 1.0;
     if (intensity === "recovery") intensityModifier = 0.8;
     else if (intensity === "tempo") intensityModifier = 1.2;
     else if (intensity === "threshold") intensityModifier = 1.5;
     else if (intensity === "maximum") intensityModifier = 1.8;
 
+    carbsPerHour = Math.round(baseCarbs * intensityModifier);
+    // Cap carbsPerHour to sensible limits (30g to 120g)
+    carbsPerHour = Math.max(30, Math.min(carbsPerHour, 120));
+
+    // 2. Sweat Rate Logic (USARIEM proxy based on MHP and Env)
+    const baseSweat = gender === "female" ? 0.5 : 0.8;
+    
     // Environmental modifiers
     const heatLoad = (temperature - 15) * 0.03; 
     const humidityLoad = (humidity - 50) * 0.005; // high humidity increases sweat due to poor evaporation
@@ -83,13 +89,19 @@ export function useStrategyCalculation({ durationHours }) {
       }
     }
 
+    // 4. Electrolyte Logic (Sodium Concentration)
+    let suggestedSodiumConcentration = 40; // average
+    if (sweatSodiumConcentration === "low") suggestedSodiumConcentration = 20;
+    else if (sweatSodiumConcentration === "high") suggestedSodiumConcentration = 60;
+
     return {
       carbsPerHour,
       targetRatio,
       sweatRate,
-      caffeineStrategy
+      caffeineStrategy,
+      suggestedSodiumConcentration
     };
-  }, [durationHours, weight, gender, intensity, temperature, humidity, ultraMode, includeCaffeine, caffeineHabituation]);
+  }, [durationHours, weight, gender, intensity, temperature, humidity, ultraMode, includeCaffeine, caffeineHabituation, sweatSodiumConcentration]);
 
   // 4. Cost Logic
   const getCostAnalysis = (totalCarbs) => {
@@ -115,6 +127,7 @@ export function useStrategyCalculation({ durationHours }) {
     ultraMode, setUltraMode,
     includeCaffeine, setIncludeCaffeine,
     caffeineHabituation, setCaffeineHabituation,
+    sweatSodiumConcentration, setSweatSodiumConcentration,
     suggestedStrategies,
     getCostAnalysis
   };
