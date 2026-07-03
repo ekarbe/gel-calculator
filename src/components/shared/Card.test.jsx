@@ -16,7 +16,6 @@ describe('Card Component', () => {
   it('applies custom className over default base classes', () => {
     const { container } = render(<Card className="my-custom-class">Content</Card>);
     expect(container.firstChild).toHaveClass('my-custom-class');
-    expect(container.firstChild).toHaveClass('bg-white'); // One of the default classes
-    expect(container.firstChild).toHaveClass('rounded-2xl');
+    expect(container.firstChild).toHaveClass('glass-card');
   });
 });

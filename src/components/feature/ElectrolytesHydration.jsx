@@ -39,39 +39,39 @@ const ElectrolytesHydration = () => {
   return (
     <Card>
       <div className="flex items-center gap-3 mb-6">
-        <div className="bg-[#eef2ff] p-2 rounded-lg text-[#5e5ce6]">
+        <div className="bg-apple-blue/10 p-2 rounded-lg text-apple-blue">
           <Droplet size={20} />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-text-primary">
             Electrolytes & Hydration
           </h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-text-secondary">
             Calculate sodium and mineral losses.
           </p>
         </div>
       </div>
-      <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
+      <div className="flex p-1 bg-card-border/50 rounded-xl mb-6">
         <button 
           onClick={() => setIsSweatRate(true)}
-          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${isSweatRate ? 'font-semibold bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'font-medium text-slate-600 hover:text-slate-800'}`}>
+          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${isSweatRate ? 'font-semibold bg-card text-text-primary shadow-sm border border-card-border/60' : 'font-medium text-text-secondary hover:text-text-primary'}`}>
           Sweat Profile
         </button>
         <button 
           onClick={() => setIsSweatRate(false)}
-          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${!isSweatRate ? 'font-semibold bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'font-medium text-slate-600 hover:text-slate-800'}`}>
+          className={`flex-1 py-2 text-sm rounded-lg transition-colors ${!isSweatRate ? 'font-semibold bg-card text-text-primary shadow-sm border border-card-border/60' : 'font-medium text-text-secondary hover:text-text-primary'}`}>
           Manual Targets
         </button>
       </div>
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 ${!isSweatRate ? 'opacity-50 pointer-events-none' : ''}`}>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label className="block text-sm font-medium text-text-primary mb-1.5">
             Sweat Rate
           </label>
           <select 
             value={sweatRate}
             onChange={(e) => setSweatRate(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
+            className="w-full px-4 py-2.5 border border-card-border rounded-xl outline-none font-medium">
             {SWEAT_RATES.map((rate, index) => (
               <option key={rate} value={index}>
                 {SWEAT_RATE_DESCRIPTIONS[index].split(':')[0]} ({rate} L/hr)
@@ -80,13 +80,14 @@ const ElectrolytesHydration = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Saltiness
+          <label className="text-sm font-medium text-text-primary mb-1.5 flex items-center">
+            Target Sodium (mg/hr)
+            <TooltipInfo content="How much sodium you aim to replenish per hour. Standard endurance targets vary from 300mg/hr (light sweating) to 1000mg/hr+ (heavy/salty sweaters in heat)." />
           </label>
           <select 
             value={saltiness}
             onChange={(e) => setSaltiness(Number(e.target.value))}
-            className="w-full px-4 py-2.5 border border-slate-200 rounded-xl outline-none font-medium">
+            className="w-full px-4 py-2.5 border border-card-border rounded-xl outline-none font-medium">
             {SALTINESS_DESCRIPTIONS.map((desc, index) => {
               const mgPerL = Math.round(ELECTROLYTE_CONCENTRATIONS.Sodium[index] * CONVERSION_FACTORS.Sodium);
               return (
@@ -99,16 +100,16 @@ const ElectrolytesHydration = () => {
         </div>
       </div>
 
-      <div className="pt-6 border-t border-slate-100 mb-8">
+      <div className="pt-6 border-t border-card-border mb-8">
         <button 
           onClick={() => setIsTargetsExpanded(!isTargetsExpanded)}
           className="flex items-center justify-between w-full mb-4 group focus:outline-none"
         >
-          <h3 className="font-semibold text-slate-800">Electrolyte Targets (per hour)</h3>
+          <h3 className="font-semibold text-text-primary">Electrolyte Targets (per hour)</h3>
           {isTargetsExpanded ? (
-            <ChevronUp className="text-slate-400 group-hover:text-slate-600 transition-colors" size={20} />
+            <ChevronUp className="text-text-secondary group-hover:text-text-secondary transition-colors" size={20} />
           ) : (
-            <ChevronDown className="text-slate-400 group-hover:text-slate-600 transition-colors" size={20} />
+            <ChevronDown className="text-text-secondary group-hover:text-text-secondary transition-colors" size={20} />
           )}
         </button>
         {isTargetsExpanded && (
@@ -120,12 +121,12 @@ const ElectrolytesHydration = () => {
                     type="checkbox" 
                     checked={activeElectrolytes[electrolyte]}
                     onChange={(e) => setActiveElectrolytes(prev => ({ ...prev, [electrolyte]: e.target.checked }))}
-                    className="rounded text-[#5e5ce6] focus:ring-[#5e5ce6]"
+                    className="rounded text-apple-blue focus:ring-[#007AFF]"
                   />
-                  <span className={`text-sm font-medium ${activeElectrolytes[electrolyte] ? 'text-slate-700' : 'text-slate-400'}`}>{electrolyte}</span>
+                  <span className={`text-sm font-medium ${activeElectrolytes[electrolyte] ? 'text-text-primary' : 'text-text-secondary'}`}>{electrolyte}</span>
                 </label>
                 {isSweatRate ? (
-                  <span className={`text-sm font-bold ${activeElectrolytes[electrolyte] ? 'text-slate-900' : 'text-slate-400'}`}>
+                  <span className={`text-sm font-bold ${activeElectrolytes[electrolyte] ? 'text-text-primary' : 'text-text-secondary'}`}>
                     {activeElectrolytes[electrolyte] ? Math.round(targetAmountsPerHour[electrolyte]) : 0} mg
                   </span>
                 ) : (
@@ -135,9 +136,9 @@ const ElectrolytesHydration = () => {
                       value={manualTargets[electrolyte] || 0}
                       onChange={(e) => setManualTargets(prev => ({ ...prev, [electrolyte]: Number(e.target.value) }))}
                       disabled={!activeElectrolytes[electrolyte]}
-                      className="w-20 px-2 py-1 text-sm border border-slate-200 rounded-lg text-right font-bold disabled:bg-slate-50 disabled:text-slate-400 outline-none focus:ring-2 focus:ring-[#5e5ce6]"
+                      className="w-20 px-2 py-1 text-sm border border-card-border rounded-lg text-right font-bold disabled:bg-card-border/30 disabled:text-text-secondary outline-none focus:ring-2 focus:ring-[#007AFF]"
                     />
-                    <span className="text-sm text-slate-500 w-6">mg</span>
+                    <span className="text-sm text-text-secondary w-6">mg</span>
                   </div>
                 )}
               </div>
@@ -146,19 +147,19 @@ const ElectrolytesHydration = () => {
         )}
       </div>
 
-      <div className="pt-6 border-t border-slate-100">
+      <div className="pt-6 border-t border-card-border">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="font-semibold text-slate-800">Added Sources</h3>
+          <h3 className="font-semibold text-text-primary">Added Sources</h3>
           <div className="flex items-center gap-4">
             <button 
               onClick={autoFillElectrolytes}
-              className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+              className="text-sm text-apple-blue font-medium flex items-center gap-1 hover:underline"
             >
               Auto-Fill
             </button>
             <button 
               onClick={() => addSource("electrolyte")}
-              className="text-sm text-[#5e5ce6] font-medium flex items-center gap-1 hover:underline"
+              className="text-sm text-apple-blue font-medium flex items-center gap-1 hover:underline"
             >
               <Plus size={16} /> Add
             </button>
@@ -170,11 +171,11 @@ const ElectrolytesHydration = () => {
             const tooltipContent = currentOption ? `Contains ${currentOption.components.map(c => `${(c.ratio * 100).toFixed(1)}% ${c.name}`).join(", ")}` : "";
             
             return (
-              <div key={source.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border border-slate-200 rounded-xl bg-white shadow-sm">
+              <div key={source.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border border-card-border rounded-xl bg-card shadow-sm">
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("electrolyte", source.id, "name", e.target.value)}
-                  className="flex-1 min-w-[120px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none"
+                  className="flex-1 min-w-[120px] bg-card-border/30 border border-card-border rounded-lg px-3 py-2 text-sm font-medium outline-none"
                 >
                   {electrolyteSourceOptions.map((opt) => (
                     <option 
@@ -191,12 +192,12 @@ const ElectrolytesHydration = () => {
                   type="number"
                   value={source.amount}
                   onChange={(e) => updateSource("electrolyte", source.id, "amount", Number(e.target.value))}
-                  className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg text-right font-bold"
+                  className="w-24 px-3 py-2 text-sm border border-card-border rounded-lg text-right font-bold"
                 />{" "}
                 <span className="text-sm">mg</span>
                 <button 
                   onClick={() => removeSource("electrolyte", source.id)}
-                  className="text-slate-400 hover:text-red-500 p-2"
+                  className="text-text-secondary hover:text-red-500 p-2"
                 >
                   <Trash2 size={16} />
                 </button>

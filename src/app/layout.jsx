@@ -15,6 +15,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import "./globals.css";
+import { Inter } from "next/font/google";
+import { ThemeProvider } from "../components/shared/ThemeProvider";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata = {
   title: 'Gel Calculator',
@@ -33,11 +41,11 @@ export const metadata = {
       media: '(prefers-color-scheme: dark)'
     }
   ],
-}
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning className={`${inter.variable}`}>
       <head>
         <script
           type="application/ld+json"
@@ -52,7 +60,11 @@ export default function RootLayout({ children }) {
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

@@ -28,7 +28,7 @@ const VisualTimeline = () => {
       type: "caffeine",
       title: "Pre-race Caffeine Bolus",
       desc: `${Math.round(strat.caffeineStrategy.preRace)}mg`,
-      color: "bg-amber-100 text-amber-600 border-amber-200",
+      color: "bg-amber-100 text-apple-amber border-amber-200",
       icon: <Coffee size={16} />
     });
   }
@@ -38,7 +38,7 @@ const VisualTimeline = () => {
     type: "start",
     title: "Activity Start",
     desc: `Begin activity.${gelsPerHour > 0 ? ' Take 1st Gel.' : ''}`,
-    color: "bg-blue-100 text-blue-600 border-blue-200",
+    color: "bg-apple-greenlue-100 text-apple-greenlue-600 border-blue-200",
     icon: <Clock size={16} />
   });
 
@@ -80,7 +80,7 @@ const VisualTimeline = () => {
       type: "hydration",
       title: "Hydration Only",
       desc: `Drink ${Math.round(effectiveSweatRate * 1000)}ml per hour`,
-      color: "bg-cyan-100 text-cyan-600 border-cyan-200",
+      color: "bg-apple-blueyan-100 text-apple-blueyan-600 border-cyan-200",
       icon: <Droplets size={16} />
     });
   }
@@ -101,22 +101,22 @@ const VisualTimeline = () => {
   return (
     <Card>
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-slate-900">Execution Timeline</h2>
-        <p className="text-sm text-slate-600">Your personalized physiological strategy timeline</p>
+        <h2 className="text-lg font-bold text-text-primary">Execution Timeline</h2>
+        <p className="text-sm text-text-secondary">Your personalized physiological strategy timeline</p>
       </div>
       
-      <div className="relative border-l-2 border-slate-100 ml-4 pl-6 space-y-8">
+      <div className="relative border-l-2 border-card-border ml-4 pl-6 space-y-8">
         {events.map((event, index) => (
           <div key={index} className="relative">
-            <div className={`absolute -left-[37px] top-1 w-8 h-8 rounded-full border-2 bg-white flex items-center justify-center ${event.color}`}>
+            <div className={`absolute -left-[37px] top-1 w-8 h-8 rounded-full border-2 bg-card flex items-center justify-center ${event.color}`}>
               {event.icon}
             </div>
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary block mb-1">
                 {event.time}
               </span>
-              <h3 className="text-md font-bold text-slate-800">{event.title}</h3>
-              <p className="text-sm text-slate-600 mt-1">{event.desc}</p>
+              <h3 className="text-md font-bold text-text-primary">{event.title}</h3>
+              <p className="text-sm text-text-secondary mt-1">{event.desc}</p>
             </div>
           </div>
         ))}

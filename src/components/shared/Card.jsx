@@ -15,12 +15,44 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 
-const Card = ({ children, className = "" }) => (
-  <div
-    className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-6 ${className}`}
-  >
-    {children}
-  </div>
-);
+"use client";
+import React, { useRef, useState } from "react";
+
+const Card = ({ children, className = "" }) => {
+  const cardRef = useRef(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleMouseMove = (e) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    setPosition({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`glass-card p-10 relative overflow-hidden group ${className}`}
+      style={{
+        "--mouse-x": `${position.x}px`,
+        "--mouse-y": `${position.y}px`,
+      }}
+    >
+      <div
+        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
+        style={{
+          background: `radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.1), transparent 40%)`,
+        }}
+      />
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+};
 
 export default Card;

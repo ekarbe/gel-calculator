@@ -16,6 +16,7 @@
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
 import { Settings } from "lucide-react";
+import Card from "../shared/Card";
 
 const BalanceAnalysis = () => {
   const { totals, duration, targetCarbs, electrolyteAnalysis, glucoseParts, fructoseParts, activeElectrolytes } = useCalculatorContext();
@@ -28,7 +29,7 @@ const BalanceAnalysis = () => {
   const fructoseCarbs = (totals.fructoseRatio / 100) * targetCarbs;
   
   let pathwayStatus = "Optimal";
-  let pathwayColor = "text-[#a2a0fa]";
+  let pathwayColor = "text-apple-blue";
   if (glucoseCarbs > 67 && fructoseCarbs > 53) {
     pathwayStatus = "Both Overloaded";
     pathwayColor = "text-red-400";
@@ -45,21 +46,21 @@ const BalanceAnalysis = () => {
     : `0:1`;
 
   return (
-    <div className="bg-[#1e1e2d] rounded-2xl shadow-xl shadow-[#5e5ce6]/10 p-6 text-white">
+    <Card className="h-full">
       <div className="flex items-center gap-2 mb-6">
-        <Settings size={18} className="text-[#a2a0fa]" />
+        <Settings size={18} className="text-apple-blue" />
         <h3 className="font-bold text-lg">Balance Analysis</h3>
       </div>
-      <div className="hidden sm:block pt-2 border-b border-slate-700 pb-5 mb-5">
+      <div className="hidden sm:block pt-2 border-b border-card-border/50 pb-5 mb-5">
         <div className="flex justify-between text-sm mb-1">
-          <span className="text-slate-300 font-medium">
+          <span className="text-text-secondary font-medium">
             Total Activity Carbs
           </span>
-          <span className="text-white font-bold text-lg">
+          <span className="text-text-primary font-bold text-lg">
             {Math.round((duration / 60) * targetCarbs)}g
           </span>
         </div>
-        <div className="text-xs text-slate-400 text-right">
+        <div className="text-xs text-text-secondary text-right">
           Targeting {targetCarbs}g / hour
         </div>
       </div>
@@ -84,18 +85,18 @@ const BalanceAnalysis = () => {
           return (
             <div key={electrolyte}>
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-slate-300 font-medium">{electrolyte} Match</span>
+                <span className="text-text-secondary font-medium">{electrolyte} Match</span>
                 <span className={`${colorClass} font-bold`}>
                   {match}%
                 </span>
               </div>
-              <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-card-border/30 rounded-full overflow-hidden">
                 <div
                   className={`h-full ${bgClass} rounded-full transition-all duration-300`}
                   style={{ width: `${match}%` }}
                 ></div>
               </div>
-              <div className="text-xs text-slate-400 mt-2">
+              <div className="text-xs text-text-secondary mt-2">
                 {message}
               </div>
             </div>
@@ -103,27 +104,27 @@ const BalanceAnalysis = () => {
         })}
         <div className="pt-2">
           <div className="flex justify-between text-sm mb-2">
-            <span className="text-slate-300 font-medium">
+            <span className="text-text-secondary font-medium">
               Carb Pathway Limit
             </span>
             <span className={`${pathwayColor} font-bold`}>{pathwayStatus}</span>
           </div>
-          <div className="w-full h-1.5 bg-slate-700 rounded-full flex overflow-hidden">
+          <div className="w-full h-1.5 bg-card-border/30 rounded-full flex overflow-hidden">
             <div
-              className="h-full bg-[#5e5ce6]"
+              className="h-full bg-apple-blue"
               style={{ width: `${totals.glucoseRatio}%` }}
             ></div>
             <div
-              className="h-full bg-[#9333ea]"
+              className="h-full bg-apple-purple"
               style={{ width: `${totals.fructoseRatio}%` }}
             ></div>
           </div>
-          <div className="text-xs text-slate-400 mt-2">
+          <div className="text-xs text-text-secondary mt-2">
             Ratio ({formattedRatio})
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };
 

@@ -18,7 +18,7 @@ import { Github } from "lucide-react";
 import StravaIcon from "./StravaIcon";
 
 const Footer = () => (
-  <footer className="max-w-7xl mx-auto px-4 sm:px-6 pb-12 pt-6 flex flex-col items-center justify-center gap-4 text-slate-500 border-t border-slate-200 mt-4">
+  <footer className="max-w-7xl mx-auto px-4 sm:px-6 pb-12 pt-6 flex flex-col items-center justify-center gap-4 text-text-secondary border-t border-card-border mt-4">
     <p className="text-sm font-medium">By Eike Christian Karbe</p>
     <div className="flex gap-4">
       <a
@@ -34,7 +34,7 @@ const Footer = () => (
         href="https://github.com/ekarbe"
         target="_blank"
         rel="noopener noreferrer"
-        className="hover:text-slate-900 transition-colors"
+        className="hover:text-text-primary transition-colors"
         aria-label="GitHub"
       >
         <Github size={20} />

@@ -18,6 +18,7 @@ import { useCalculatorContext } from "../../context/CalculatorContext";
 import { ListRestart, ChevronRight } from "lucide-react";
 import { sourceDataMap } from "../../constants/constants";
 import TooltipInfo from "../shared/TooltipInfo";
+import Card from "../shared/Card";
 
 const FinalRecipe = () => {
   const {
@@ -56,7 +57,7 @@ const FinalRecipe = () => {
           tooltipContent = (
             <div className="flex flex-col gap-1 text-left min-w-max">
               <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
-              <span className="text-xs text-slate-300">
+              <span className="text-xs text-text-secondary">
                 Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
               </span>
             </div>
@@ -66,7 +67,7 @@ const FinalRecipe = () => {
         recipeItems.push({
           label: source.name,
           value: `${getDisplayValue(powderAmount)}g`,
-          color: "bg-[#5e5ce6]",
+          color: "bg-apple-blue",
           tooltipContent,
         });
       }
@@ -86,7 +87,7 @@ const FinalRecipe = () => {
           tooltipContent = (
             <div className="flex flex-col gap-1 text-left min-w-max">
               <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
-              <span className="text-xs text-slate-300">
+              <span className="text-xs text-text-secondary">
                 Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
               </span>
             </div>
@@ -96,7 +97,7 @@ const FinalRecipe = () => {
         recipeItems.push({
           label: source.name,
           value: `${getDisplayValue(powderAmount)}g`,
-          color: "bg-[#9333ea]",
+          color: "bg-apple-purple",
           tooltipContent,
         });
       }
@@ -114,26 +115,24 @@ const FinalRecipe = () => {
   });
 
   return (
-    <div
-      ref={recipeRef}
-      className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden sticky top-24"
-    >
+    <div ref={recipeRef} className="sticky top-24">
+      <Card className="!p-0 flex flex-col h-full">
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <ListRestart size={20} className="text-[#5e5ce6]" />
-            <h3 className="text-lg font-bold text-slate-900">Final Recipe</h3>
+            <ListRestart size={20} className="text-apple-blue" />
+            <h3 className="text-lg font-bold text-text-primary">Final Recipe</h3>
           </div>
-          <div className="flex bg-slate-100 p-1 rounded-lg">
+          <div className="flex bg-card-border/50 p-1 rounded-lg">
             <button
               onClick={() => setRecipeView("total")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-[#5e5ce6] text-white shadow-sm" : "text-slate-600"}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-apple-blue text-text-primary shadow-sm" : "text-text-secondary"}`}
             >
               Total Batch
             </button>
             <button
               onClick={() => setRecipeView("perGel")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-[#5e5ce6] text-white shadow-sm" : "text-slate-600"}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-apple-blue text-text-primary shadow-sm" : "text-text-secondary"}`}
             >
               Per Gel
             </button>
@@ -141,20 +140,20 @@ const FinalRecipe = () => {
         </div>
 
         {recipeView === "perGel" && (
-          <div className="mb-6 p-4 bg-[#eef2ff] rounded-xl border border-[#c7d2fe] flex items-center justify-between">
-            <label className="text-sm font-semibold text-[#5e5ce6]">
+          <div className="mb-6 p-4 bg-apple-blue/10 rounded-xl border border-[#c7d2fe] flex items-center justify-between">
+            <label className="text-sm font-semibold text-apple-blue">
               Gels per Hour
             </label>
             <input
               type="number"
               value={gelsPerHour}
               onChange={(e) => setGelsPerHour(Number(e.target.value))}
-              className="w-20 px-3 py-1.5 text-sm font-bold text-slate-800 text-right border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#5e5ce6]"
+              className="w-20 px-3 py-1.5 text-sm font-bold text-text-primary text-right border border-card-border rounded-lg outline-none focus:ring-2 focus:ring-[#007AFF]"
             />
           </div>
         )}
 
-        <div className="text-sm text-slate-600 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+        <div className="text-sm text-text-secondary mb-6 bg-card-border/30 p-3 rounded-xl border border-card-border">
           {recipeView === "total"
             ? `Total batch for a ${(duration / 60).toFixed(1)} hour activity.`
             : `Amounts to mix for one single gel flask (${gelsPerHour} gels/hr).`}
@@ -164,38 +163,38 @@ const FinalRecipe = () => {
           {recipeItems.map((item, idx) => (
             <div
               key={idx}
-              className={`flex justify-between items-center py-2 ${item.noBorder ? "pt-2" : "border-b border-slate-100 border-dashed"}`}
+              className={`flex justify-between items-center py-2 ${item.noBorder ? "pt-2" : "border-b border-card-border border-dashed"}`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
                 <div className="flex items-center">
-                  <span className="font-medium text-slate-700">{item.label}</span>
+                  <span className="font-medium text-text-primary">{item.label}</span>
                   {item.tooltipContent && (
                     <TooltipInfo content={item.tooltipContent} />
                   )}
                 </div>
               </div>
-              <span className="font-bold text-slate-900">{item.value}</span>
+              <span className="font-bold text-text-primary">{item.value}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="px-6 py-4 bg-green-50/50 border-t border-slate-100 flex items-center justify-between">
+      <div className="px-6 py-4 bg-apple-green/10 border-t border-card-border flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-bold text-slate-800">Est. Cost (DIY)</h4>
-          <p className="text-xs text-slate-500">${costAnalysis.diyTotal.toFixed(2)}</p>
+          <h4 className="text-sm font-bold text-text-primary">Est. Cost (DIY)</h4>
+          <p className="text-xs text-text-secondary">${costAnalysis.diyTotal.toFixed(2)}</p>
         </div>
         <div className="text-right">
-          <h4 className="text-sm font-bold text-green-700">You Save</h4>
-          <p className="text-xs font-semibold text-green-600">${costAnalysis.savings.toFixed(2)} vs Commercial</p>
+          <h4 className="text-sm font-bold text-apple-green">You Save</h4>
+          <p className="text-xs font-semibold text-apple-green/80">${costAnalysis.savings.toFixed(2)} vs Commercial</p>
         </div>
       </div>
 
-      <div className="p-6 bg-slate-50 border-t border-slate-100">
+      <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem]">
         <button
           onClick={onOpenInstructions}
-          className="w-full bg-[#5e5ce6] hover:bg-[#4b49c6] text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group"
+          className="w-full bg-apple-blue hover:bg-[#4b49c6] text-text-primary font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group"
         >
           View Mixing Instructions{" "}
           <ChevronRight
@@ -204,6 +203,7 @@ const FinalRecipe = () => {
           />
         </button>
       </div>
+      </Card>
     </div>
   );
 };

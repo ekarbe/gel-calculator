@@ -34,21 +34,33 @@ import VisualTimeline from "../components/feature/VisualTimeline";
 export default function App() {
   const {} = useCalculatorContext();
   return (
-    <div className="min-h-screen bg-[#f8f9fc] text-slate-800 pb-28 lg:pb-8 font-sans">
+    <div className="min-h-screen bg-bg-primary text-text-primary pb-28 lg:pb-8 font-sans transition-colors duration-300">
       <Header/>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-7 xl:col-span-8 space-y-6">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
+          {/* Row 1 */}
+          <div className="md:col-span-2">
             <ActivityBasics />
-            <CarbMatrix />
+          </div>
+          <div className="md:col-span-1">
             <ElectrolytesHydration />
           </div>
 
-          <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-            <VisualTimeline />
-            <BalanceAnalysis />
+          {/* Row 2 */}
+          <div className="md:col-span-2">
+            <CarbMatrix />
+          </div>
+          <div className="md:col-span-1 row-span-2">
             <FinalRecipe />
+          </div>
+
+          {/* Row 3 */}
+          <div className="md:col-span-1">
+            <BalanceAnalysis />
+          </div>
+          <div className="md:col-span-1">
+            <VisualTimeline />
           </div>
         </div>
       </main>

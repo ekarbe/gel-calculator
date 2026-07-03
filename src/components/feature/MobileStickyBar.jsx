@@ -40,7 +40,7 @@ const MobileStickyBar = () => {
   const fructoseCarbs = (totals.fructoseRatio / 100) * targetCarbs;
   
   let pathwayStatus = "Optimal";
-  let pathwayColor = "text-[#a2a0fa]";
+  let pathwayColor = "text-apple-blue";
   if (glucoseCarbs > 67 && fructoseCarbs > 53) {
     pathwayStatus = "Both Overloaded";
     pathwayColor = "text-red-400";
@@ -57,20 +57,20 @@ const MobileStickyBar = () => {
     : `0:1`;
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-30 pb-safe">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-card-border shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-30 pb-safe">
       <div className="flex justify-between items-center max-w-7xl mx-auto p-4">
         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-            <Zap size={14} className="text-[#5e5ce6]" fill="currentColor" />{" "}
+          <div className="flex items-center gap-2 text-sm font-bold text-text-primary">
+            <Zap size={14} className="text-apple-blue" fill="currentColor" />{" "}
             Target: {Math.round((duration / 60) * targetCarbs)}g
             {pathwayStatus !== "Optimal" && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 ${pathwayColor}`}>{pathwayStatus}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-card-border/50 ${pathwayColor}`}>{pathwayStatus}</span>
             )}
           </div>
           <div className="flex gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
-              <Scale size={12} className="text-[#a2a0fa]" /> Ratio:{" "}
-              <span className="text-[#a2a0fa] font-bold">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
+              <Scale size={12} className="text-apple-blue" /> Ratio:{" "}
+              <span className="text-apple-blue font-bold">
                 {formattedRatio}
               </span>
             </div>
@@ -86,7 +86,7 @@ const MobileStickyBar = () => {
               }
 
               return (
-                <div key={electrolyte} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                <div key={electrolyte} className="flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
                   <Droplet
                     size={12}
                     className="text-[#2dd4bf]"
@@ -103,7 +103,7 @@ const MobileStickyBar = () => {
         </div>
         <button
           onClick={scrollToRecipe}
-          className="bg-[#1e1e2d] text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform shrink-0 ml-4"
+          className="bg-card text-text-primary px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform shrink-0 ml-4"
         >
           Recipe <ChevronRight size={16} />
         </button>
