@@ -33,8 +33,14 @@ const FinalRecipe = () => {
     onOpenInstructions,
     glucoseSources,
     fructoseSources,
-    electrolyteSources
+    electrolyteSources,
+    strategy,
+    targetCarbs
   } = useCalculatorContext();
+
+  const durationHours = duration / 60;
+  const effectiveCarbs = strategy.isSmartSuggestions ? strategy.suggestedStrategies.carbsPerHour : targetCarbs;
+  const costAnalysis = strategy.getCostAnalysis(effectiveCarbs * durationHours);
 
   const recipeItems = [];
 
@@ -173,6 +179,17 @@ const FinalRecipe = () => {
               <span className="font-bold text-slate-900">{item.value}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="px-6 py-4 bg-green-50/50 border-t border-slate-100 flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-slate-800">Est. Cost (DIY)</h4>
+          <p className="text-xs text-slate-500">${costAnalysis.diyTotal.toFixed(2)}</p>
+        </div>
+        <div className="text-right">
+          <h4 className="text-sm font-bold text-green-700">You Save</h4>
+          <p className="text-xs font-semibold text-green-600">${costAnalysis.savings.toFixed(2)} vs Commercial</p>
         </div>
       </div>
 

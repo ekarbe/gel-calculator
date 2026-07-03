@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { allSourcesOptions, sourceDataByIdMap } from "../constants/constants";
 import { useCarbCalculation } from "./useCarbCalculation";
 import { useElectrolyteCalculation } from "./useElectrolyteCalculation";
+import { useStrategyCalculation } from "./useStrategyCalculation";
 
 const keyMap = {
   duration: 'd',
@@ -27,7 +28,16 @@ const keyMap = {
   Chloride: 'c',
   Potassium: 'po',
   Magnesium: 'm',
-  Calcium: 'ca'
+  Calcium: 'ca',
+  isSmart: 'ism',
+  weight: 'wt',
+  gender: 'gnd',
+  intensity: 'int',
+  temp: 'tmp',
+  humidity: 'hum',
+  ultraMode: 'ult',
+  incCaffeine: 'ic',
+  cafHabituation: 'ch'
 };
 
 function encodeState(state) {
@@ -75,6 +85,18 @@ function encodeState(state) {
   
   if (state.recipeView !== 'total') parts.push(`rv_${state.recipeView === 'perGel' ? 'g' : 't'}`);
   if (state.gelsPerHour !== 2) parts.push(`gph_${state.gelsPerHour}`);
+  
+  if (state.strategy) {
+    if (state.strategy.isSmartSuggestions) parts.push(`ism_1`);
+    if (state.strategy.weight !== 70) parts.push(`wt_${state.strategy.weight}`);
+    if (state.strategy.gender !== 'male') parts.push(`gnd_${state.strategy.gender}`);
+    if (state.strategy.intensity !== 'tempo') parts.push(`int_${state.strategy.intensity}`);
+    if (state.strategy.temperature !== 20) parts.push(`tmp_${state.strategy.temperature}`);
+    if (state.strategy.humidity !== 50) parts.push(`hum_${state.strategy.humidity}`);
+    if (state.strategy.ultraMode) parts.push(`ult_1`);
+    if (state.strategy.includeCaffeine) parts.push(`ic_1`);
+    if (state.strategy.caffeineHabituation !== 'habituated') parts.push(`ch_${state.strategy.caffeineHabituation}`);
+  }
 
   return parts.length > 0 ? parts.join('~') : 'tm2';
 }
@@ -111,14 +133,17 @@ function decodeState(str) {
       state.activeElectrolytes = {};
       for (let i = 0; i < keys.length; i++) state.activeElectrolytes[keys[i]] = v[i] === '1';
     }
-    else if (k === 'mt') {
-      const keys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'];
-      const vals = v.split('-');
-      state.manualTargets = {};
-      for (let i = 0; i < keys.length; i++) state.manualTargets[keys[i]] = Number(vals[i]);
-    }
     else if (k === 'rv') state.recipeView = v === 'g' ? 'perGel' : 'total';
     else if (k === 'gph') state.gelsPerHour = Number(v);
+    else if (k === 'ism') { state.strategy = state.strategy || {}; state.strategy.isSmartSuggestions = v === '1'; }
+    else if (k === 'wt') { state.strategy = state.strategy || {}; state.strategy.weight = Number(v); }
+    else if (k === 'gnd') { state.strategy = state.strategy || {}; state.strategy.gender = v; }
+    else if (k === 'int') { state.strategy = state.strategy || {}; state.strategy.intensity = v; }
+    else if (k === 'tmp') { state.strategy = state.strategy || {}; state.strategy.temperature = Number(v); }
+    else if (k === 'hum') { state.strategy = state.strategy || {}; state.strategy.humidity = Number(v); }
+    else if (k === 'ult') { state.strategy = state.strategy || {}; state.strategy.ultraMode = v === '1'; }
+    else if (k === 'ic') { state.strategy = state.strategy || {}; state.strategy.includeCaffeine = v === '1'; }
+    else if (k === 'ch') { state.strategy = state.strategy || {}; state.strategy.caffeineHabituation = v; }
   }
   return state;
 }
@@ -129,6 +154,13 @@ export function useCalculator() {
   
   const durationHours = duration / 60;
 
+  const strategy = useStrategyCalculation({ durationHours });
+
+  const effectiveTargetCarbs = strategy.isSmartSuggestions ? strategy.suggestedStrategies.carbsPerHour : targetCarbs;
+  const effectiveGlucoseParts = strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.glucose : undefined;
+  const effectiveFructoseParts = strategy.isSmartSuggestions ? strategy.suggestedStrategies.targetRatio.fructose : undefined;
+  const effectiveSweatRate = strategy.isSmartSuggestions ? strategy.suggestedStrategies.sweatRate : undefined;
+
   const {
     glucoseParts, setGlucoseParts,
     fructoseParts, setFructoseParts,
@@ -136,7 +168,12 @@ export function useCalculator() {
     fructoseSources, setFructoseSources,
     addCarbSource, updateCarbSource, removeCarbSource,
     calculatedSourceGrams, totals
-  } = useCarbCalculation({ durationHours, targetCarbs });
+  } = useCarbCalculation({ 
+    durationHours, 
+    targetCarbs: effectiveTargetCarbs,
+    glucosePartsOverride: effectiveGlucoseParts,
+    fructosePartsOverride: effectiveFructoseParts
+  });
 
   const {
     electrolyteSources, setElectrolyteSources,
@@ -147,7 +184,7 @@ export function useCalculator() {
     manualTargets, setManualTargets,
     addElectrolyteSource, updateElectrolyteSource, removeElectrolyteSource,
     targetAmountsPerHour, electrolyteAnalysis, autoFillElectrolytes
-  } = useElectrolyteCalculation({ durationHours });
+  } = useElectrolyteCalculation({ durationHours, sweatRateOverride: effectiveSweatRate });
 
   const addSource = (type) => {
     if (type === "glucose" || type === "fructose") addCarbSource(type);
@@ -209,6 +246,18 @@ export function useCalculator() {
           if (state.manualTargets !== undefined) setManualTargets(state.manualTargets);
           if (state.recipeView !== undefined) setRecipeView(state.recipeView);
           if (state.gelsPerHour !== undefined) setGelsPerHour(state.gelsPerHour);
+          
+          if (state.strategy) {
+            if (state.strategy.isSmartSuggestions !== undefined) strategy.setIsSmartSuggestions(state.strategy.isSmartSuggestions);
+            if (state.strategy.weight !== undefined) strategy.setWeight(state.strategy.weight);
+            if (state.strategy.gender !== undefined) strategy.setGender(state.strategy.gender);
+            if (state.strategy.intensity !== undefined) strategy.setIntensity(state.strategy.intensity);
+            if (state.strategy.temperature !== undefined) strategy.setTemperature(state.strategy.temperature);
+            if (state.strategy.humidity !== undefined) strategy.setHumidity(state.strategy.humidity);
+            if (state.strategy.ultraMode !== undefined) strategy.setUltraMode(state.strategy.ultraMode);
+            if (state.strategy.includeCaffeine !== undefined) strategy.setIncludeCaffeine(state.strategy.includeCaffeine);
+            if (state.strategy.caffeineHabituation !== undefined) strategy.setCaffeineHabituation(state.strategy.caffeineHabituation);
+          }
         } catch (e) {
           console.error("Failed to parse share link", e);
         }
@@ -243,7 +292,18 @@ export function useCalculator() {
       fructoseSources: compressSources(fructoseSources),
       electrolyteSources: compressSources(electrolyteSources),
       isSweatRate, sweatRate, saltiness, activeElectrolytes,
-      manualTargets, recipeView, gelsPerHour
+      manualTargets, recipeView, gelsPerHour,
+      strategy: {
+        isSmartSuggestions: strategy.isSmartSuggestions,
+        weight: strategy.weight,
+        gender: strategy.gender,
+        intensity: strategy.intensity,
+        temperature: strategy.temperature,
+        humidity: strategy.humidity,
+        ultraMode: strategy.ultraMode,
+        includeCaffeine: strategy.includeCaffeine,
+        caffeineHabituation: strategy.caffeineHabituation
+      }
     };
     try {
       const base64String = encodeState(stateToSave);
@@ -314,6 +374,6 @@ export function useCalculator() {
     isMixingModalOpen, setIsMixingModalOpen, isTemplateModalOpen, setIsTemplateModalOpen, isShareModalOpen, setIsShareModalOpen,
     shareView, setShareView, toastMessage, setToastMessage, totals, calculatedSourceGrams, targetAmountsPerHour, electrolyteAnalysis,
     recipeRef, scrollToRecipe, getDisplayValue, showToast, handleCopyLink, handleCopyImage, applyTemplate, onOpenInstructions,
-    onOpenTemplates, onOpenShare,
+    onOpenTemplates, onOpenShare, strategy
   };
 }

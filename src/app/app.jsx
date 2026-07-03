@@ -29,6 +29,7 @@ import MixingModal from "../components/modal/MixingModal";
 import TemplateModal from "../components/modal/TemplateModal";
 import ShareModal from "../components/modal/ShareModal";
 import Toast from "../components/shared/Toast";
+import VisualTimeline from "../components/feature/VisualTimeline";
 
 export default function App() {
   const {} = useCalculatorContext();
@@ -45,6 +46,7 @@ export default function App() {
           </div>
 
           <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+            <VisualTimeline />
             <BalanceAnalysis />
             <FinalRecipe />
           </div>

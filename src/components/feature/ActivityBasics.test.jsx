@@ -10,6 +10,10 @@ describe('ActivityBasics Component', () => {
       setDuration: vi.fn(),
       targetCarbs: 80,
       setTargetCarbs: vi.fn(),
+      strategy: {
+        isSmartSuggestions: false,
+        setIsSmartSuggestions: vi.fn(),
+      }
     };
 
     render(
@@ -31,6 +35,10 @@ describe('ActivityBasics Component', () => {
       setDuration: vi.fn(),
       targetCarbs: 80,
       setTargetCarbs: vi.fn(),
+      strategy: {
+        isSmartSuggestions: false,
+        setIsSmartSuggestions: vi.fn(),
+      }
     };
 
     render(

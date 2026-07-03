@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { electrolyteSourceOptions, SWEAT_RATES, ELECTROLYTE_CONCENTRATIONS, CONVERSION_FACTORS } from "../constants/constants";
 
-export function useElectrolyteCalculation({ durationHours }) {
+export function useElectrolyteCalculation({ durationHours, sweatRateOverride }) {
   const [electrolyteSources, setElectrolyteSources] = useState([]);
   const [isSweatRate, setIsSweatRate] = useState(true);
   const [sweatRate, setSweatRate] = useState(2); // 0-5 index
@@ -34,7 +34,7 @@ export function useElectrolyteCalculation({ durationHours }) {
       return targets;
     }
 
-    const rateL = SWEAT_RATES[sweatRate];
+    const rateL = sweatRateOverride !== undefined ? sweatRateOverride : SWEAT_RATES[sweatRate];
     Object.keys(targets).forEach(key => {
       if (!activeElectrolytes[key]) {
         targets[key] = 0;
@@ -48,7 +48,7 @@ export function useElectrolyteCalculation({ durationHours }) {
       }
     });
     return targets;
-  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes]);
+  }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes, sweatRateOverride]);
 
   const electrolyteAnalysis = useMemo(() => {
     const analysis = {};

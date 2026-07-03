@@ -2,9 +2,12 @@
 import { useState, useMemo } from "react";
 import { glucoseSourceOptions, fructoseSourceOptions, sourceDataMap } from "../constants/constants";
 
-export function useCarbCalculation({ durationHours, targetCarbs }) {
+export function useCarbCalculation({ durationHours, targetCarbs, glucosePartsOverride, fructosePartsOverride }) {
   const [glucoseParts, setGlucoseParts] = useState(1.0);
   const [fructoseParts, setFructoseParts] = useState(0.8);
+
+  const effectiveGlucoseParts = glucosePartsOverride !== undefined ? glucosePartsOverride : glucoseParts;
+  const effectiveFructoseParts = fructosePartsOverride !== undefined ? fructosePartsOverride : fructoseParts;
 
   const [glucoseSources, setGlucoseSources] = useState([
     { id: 1, name: "Maltodextrin", percentage: 100 },
@@ -56,10 +59,10 @@ export function useCarbCalculation({ durationHours, targetCarbs }) {
     let fructoseAccountedByMixed = 0;
     let canAchieveRatio = true;
 
-    const totalParts = glucoseParts + fructoseParts;
+    const totalParts = effectiveGlucoseParts + effectiveFructoseParts;
     const validTotalParts = totalParts > 0 ? totalParts : 1;
-    const targetGlucose = (glucoseParts / validTotalParts) * totalCarbsNeeded;
-    const targetFructose = (fructoseParts / validTotalParts) * totalCarbsNeeded;
+    const targetGlucose = (effectiveGlucoseParts / validTotalParts) * totalCarbsNeeded;
+    const targetFructose = (effectiveFructoseParts / validTotalParts) * totalCarbsNeeded;
 
     const allUserSources = [
       ...glucoseSources.map(s => ({ ...s, targetPool: 'glucose', target: targetGlucose })),
@@ -145,16 +148,16 @@ export function useCarbCalculation({ durationHours, targetCarbs }) {
     }
 
     return { finalGrams, glucoseAccountedByMixed, fructoseAccountedByMixed, canAchieveRatio };
-  }, [durationHours, targetCarbs, glucoseParts, fructoseParts, glucoseSources, fructoseSources]);
+  }, [durationHours, targetCarbs, effectiveGlucoseParts, effectiveFructoseParts, glucoseSources, fructoseSources]);
 
   const totals = useMemo(() => {
     return {
-      glucoseRatio: Math.round((glucoseParts / (glucoseParts + fructoseParts)) * 100),
-      fructoseRatio: Math.round((fructoseParts / (glucoseParts + fructoseParts)) * 100),
+      glucoseRatio: Math.round((effectiveGlucoseParts / (effectiveGlucoseParts + effectiveFructoseParts)) * 100),
+      fructoseRatio: Math.round((effectiveFructoseParts / (effectiveGlucoseParts + effectiveFructoseParts)) * 100),
       malto: 0,
       fructose: 0,
     };
-  }, [glucoseParts, fructoseParts]);
+  }, [effectiveGlucoseParts, effectiveFructoseParts]);
 
   return {
     glucoseParts, setGlucoseParts,

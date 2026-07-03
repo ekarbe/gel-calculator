@@ -24,7 +24,12 @@ describe('FinalRecipe Component', () => {
     onOpenInstructions: vi.fn(),
     glucoseSources: [{ id: 1, name: 'Maltodextrin', percentage: 100 }],
     fructoseSources: [{ id: 2, name: 'Fructose', percentage: 100 }],
-    electrolyteSources: [{ id: 3, name: 'Sodium Citrate', amount: 1000 }]
+    electrolyteSources: [{ id: 3, name: 'Sodium Citrate', amount: 1000 }],
+    targetCarbs: 90,
+    strategy: {
+      isSmartSuggestions: false,
+      getCostAnalysis: () => ({ diyTotal: 1.5, savings: 5.0 })
+    }
   };
 
   const renderComponent = (contextProps = {}) => {

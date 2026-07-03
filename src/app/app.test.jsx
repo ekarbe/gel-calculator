@@ -13,6 +13,7 @@ vi.mock('../components/feature/ActivityBasics', () => ({ default: () => <div dat
 vi.mock('../components/feature/CarbMatrix', () => ({ default: () => <div data-testid="carb-matrix" /> }));
 vi.mock('../components/feature/ElectrolytesHydration', () => ({ default: () => <div data-testid="electrolytes-hydration" /> }));
 vi.mock('../components/feature/BalanceAnalysis', () => ({ default: () => <div data-testid="balance-analysis" /> }));
+vi.mock('../components/feature/VisualTimeline', () => ({ default: () => <div data-testid="visual-timeline" /> }));
 vi.mock('../components/feature/FinalRecipe', () => ({ default: () => <div data-testid="final-recipe" /> }));
 vi.mock('../components/shared/Footer', () => ({ default: () => <div data-testid="footer" /> }));
 vi.mock('../components/feature/MobileStickyBar', () => ({ default: () => <div data-testid="mobile-sticky-bar" /> }));
@@ -29,6 +30,7 @@ describe('App Component', () => {
     expect(getByTestId('activity-basics')).toBeInTheDocument();
     expect(getByTestId('carb-matrix')).toBeInTheDocument();
     expect(getByTestId('electrolytes-hydration')).toBeInTheDocument();
+    expect(getByTestId('visual-timeline')).toBeInTheDocument();
     expect(getByTestId('balance-analysis')).toBeInTheDocument();
     expect(getByTestId('final-recipe')).toBeInTheDocument();
     expect(getByTestId('footer')).toBeInTheDocument();
