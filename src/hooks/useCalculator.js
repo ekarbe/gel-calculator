@@ -34,9 +34,11 @@ const keyMap = {
   gender: 'gnd',
   intensity: 'int',
   temp: 'tmp',
+  tempUnit: 'tu',
   humidity: 'hum',
   ultraMode: 'ult',
   incCaffeine: 'ic',
+  incBicarb: 'ib',
   cafHabituation: 'ch',
   sweatSodiumConcentration: 'ssc'
 };
@@ -90,12 +92,15 @@ function encodeState(state) {
   if (state.strategy) {
     if (state.strategy.isSmartSuggestions) parts.push(`ism_1`);
     if (state.strategy.weight !== 70) parts.push(`wt_${state.strategy.weight}`);
+    if (state.strategy.weightUnit !== 'kg') parts.push(`wu_${state.strategy.weightUnit}`);
     if (state.strategy.gender !== 'male') parts.push(`gnd_${state.strategy.gender}`);
     if (state.strategy.intensity !== 'tempo') parts.push(`int_${state.strategy.intensity}`);
     if (state.strategy.temperature !== 20) parts.push(`tmp_${state.strategy.temperature}`);
+    if (state.strategy.temperatureUnit !== 'C') parts.push(`tu_${state.strategy.temperatureUnit}`);
     if (state.strategy.humidity !== 50) parts.push(`hum_${state.strategy.humidity}`);
     if (state.strategy.ultraMode) parts.push(`ult_1`);
     if (state.strategy.includeCaffeine) parts.push(`ic_1`);
+    if (state.strategy.includeBicarb) parts.push(`ib_1`);
     if (state.strategy.caffeineHabituation !== 'habituated') parts.push(`ch_${state.strategy.caffeineHabituation}`);
     if (state.strategy.sweatSodiumConcentration !== 'average') parts.push(`ssc_${state.strategy.sweatSodiumConcentration}`);
   }
@@ -139,12 +144,15 @@ function decodeState(str) {
     else if (k === 'gph') state.gelsPerHour = Number(v);
     else if (k === 'ism') { state.strategy = state.strategy || {}; state.strategy.isSmartSuggestions = v === '1'; }
     else if (k === 'wt') { state.strategy = state.strategy || {}; state.strategy.weight = Number(v); }
+    else if (k === 'wu') { state.strategy = state.strategy || {}; state.strategy.weightUnit = v; }
     else if (k === 'gnd') { state.strategy = state.strategy || {}; state.strategy.gender = v; }
     else if (k === 'int') { state.strategy = state.strategy || {}; state.strategy.intensity = v; }
     else if (k === 'tmp') { state.strategy = state.strategy || {}; state.strategy.temperature = Number(v); }
+    else if (k === 'tu') { state.strategy = state.strategy || {}; state.strategy.temperatureUnit = v; }
     else if (k === 'hum') { state.strategy = state.strategy || {}; state.strategy.humidity = Number(v); }
     else if (k === 'ult') { state.strategy = state.strategy || {}; state.strategy.ultraMode = v === '1'; }
     else if (k === 'ic') { state.strategy = state.strategy || {}; state.strategy.includeCaffeine = v === '1'; }
+    else if (k === 'ib') { state.strategy = state.strategy || {}; state.strategy.includeBicarb = v === '1'; }
     else if (k === 'ch') { state.strategy = state.strategy || {}; state.strategy.caffeineHabituation = v; }
     else if (k === 'ssc') { state.strategy = state.strategy || {}; state.strategy.sweatSodiumConcentration = v; }
   }
@@ -257,12 +265,15 @@ export function useCalculator() {
           if (state.strategy) {
             if (state.strategy.isSmartSuggestions !== undefined) strategy.setIsSmartSuggestions(state.strategy.isSmartSuggestions);
             if (state.strategy.weight !== undefined) strategy.setWeight(state.strategy.weight);
+            if (state.strategy.weightUnit !== undefined) strategy.setWeightUnit(state.strategy.weightUnit);
             if (state.strategy.gender !== undefined) strategy.setGender(state.strategy.gender);
             if (state.strategy.intensity !== undefined) strategy.setIntensity(state.strategy.intensity);
             if (state.strategy.temperature !== undefined) strategy.setTemperature(state.strategy.temperature);
+            if (state.strategy.temperatureUnit !== undefined) strategy.setTemperatureUnit(state.strategy.temperatureUnit);
             if (state.strategy.humidity !== undefined) strategy.setHumidity(state.strategy.humidity);
             if (state.strategy.ultraMode !== undefined) strategy.setUltraMode(state.strategy.ultraMode);
             if (state.strategy.includeCaffeine !== undefined) strategy.setIncludeCaffeine(state.strategy.includeCaffeine);
+            if (state.strategy.includeBicarb !== undefined) strategy.setIncludeBicarb(state.strategy.includeBicarb);
             if (state.strategy.caffeineHabituation !== undefined) strategy.setCaffeineHabituation(state.strategy.caffeineHabituation);
             if (state.strategy.sweatSodiumConcentration !== undefined) strategy.setSweatSodiumConcentration(state.strategy.sweatSodiumConcentration);
           }
@@ -304,12 +315,15 @@ export function useCalculator() {
       strategy: {
         isSmartSuggestions: strategy.isSmartSuggestions,
         weight: strategy.weight,
+        weightUnit: strategy.weightUnit,
         gender: strategy.gender,
         intensity: strategy.intensity,
         temperature: strategy.temperature,
+        temperatureUnit: strategy.temperatureUnit,
         humidity: strategy.humidity,
         ultraMode: strategy.ultraMode,
         includeCaffeine: strategy.includeCaffeine,
+        includeBicarb: strategy.includeBicarb,
         caffeineHabituation: strategy.caffeineHabituation,
         sweatSodiumConcentration: strategy.sweatSodiumConcentration
       }
@@ -374,6 +388,8 @@ export function useCalculator() {
   const onOpenTemplates = () => setIsTemplateModalOpen(true);
   const onOpenShare = () => setIsShareModalOpen(true);
 
+  const totalCalories = totals.carbs * 4; // 4 kcal per gram of carbohydrate
+
   return {
     duration, setDuration, 
     targetCarbs: effectiveTargetCarbs, setTargetCarbs, 
@@ -383,7 +399,7 @@ export function useCalculator() {
     glucoseSources, setGlucoseSources, fructoseSources, setFructoseSources, electrolyteSources, setElectrolyteSources,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness, activeElectrolytes, setActiveElectrolytes,
     manualTargets, setManualTargets, addSource, updateSource, removeSource, recipeView, setRecipeView, gelsPerHour, setGelsPerHour,
-    autoFillElectrolytes,
+    autoFillElectrolytes, totalCalories, durationHours,
     isMixingModalOpen, setIsMixingModalOpen, isTemplateModalOpen, setIsTemplateModalOpen, isShareModalOpen, setIsShareModalOpen,
     shareView, setShareView, toastMessage, setToastMessage, totals, calculatedSourceGrams, targetAmountsPerHour, electrolyteAnalysis,
     recipeRef, scrollToRecipe, getDisplayValue, showToast, handleCopyLink, handleCopyImage, applyTemplate, onOpenInstructions,

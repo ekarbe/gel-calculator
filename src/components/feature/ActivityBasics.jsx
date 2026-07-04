@@ -22,6 +22,16 @@ import TooltipInfo from "../shared/TooltipInfo";
 const ActivityBasics = () => {
   const { duration, setDuration, targetCarbs, setTargetCarbs, strategy } = useCalculatorContext();
 
+  const handleDurationChange = (type, value) => {
+    let newHours = Math.floor(duration / 60);
+    let newMinutes = duration % 60;
+    
+    if (type === "hours") newHours = parseInt(value) || 0;
+    if (type === "minutes") newMinutes = parseInt(value) || 0;
+    
+    setDuration((newHours * 60) + newMinutes);
+  };
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-6">
@@ -39,18 +49,31 @@ const ActivityBasics = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-text-primary mb-1.5">
-            Duration (Minutes)
-          </label>
-          <div className="relative">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">
+              Duration (Hours)
+            </label>
             <input
               type="number"
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-full pl-4 pr-10 py-2.5 border border-card-border rounded-xl focus:ring-2 focus:ring-[#007AFF] focus:border-transparent outline-none transition-all font-semibold text-text-primary"
+              min="0"
+              value={Math.floor(duration / 60)}
+              onChange={(e) => handleDurationChange("hours", e.target.value)}
+              className="w-full px-4 py-2.5 border border-card-border rounded-xl outline-none font-medium text-text-primary bg-card"
             />
-            <Clock size={16} className="absolute right-3 top-3 text-text-secondary" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">
+              (Minutes)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="59"
+              value={duration % 60}
+              onChange={(e) => handleDurationChange("minutes", e.target.value)}
+              className="w-full px-4 py-2.5 border border-card-border rounded-xl outline-none font-medium text-text-primary bg-card"
+            />
           </div>
         </div>
         <div>
@@ -103,14 +126,82 @@ const ActivityBasics = () => {
           <div className="bg-apple-blue/10 p-4 rounded-xl border border-apple-blue/20 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1 flex items-center gap-1"><User size={12}/> Weight (kg)</label>
-                <input
-                  type="number"
-                  value={strategy.weight}
-                  onChange={(e) => strategy.setWeight(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-card-border rounded-lg text-sm focus:ring-2 focus:ring-apple-blue/50 focus:border-transparent outline-none"
-                />
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="text-sm font-medium text-text-primary">Body Weight</label>
+              <div className="flex bg-card-border/50 rounded-lg p-0.5">
+                <button
+                  onClick={() => {
+                    if (strategy.weightUnit !== "kg") {
+                      strategy.setWeight(Math.round(strategy.weight / 2.20462));
+                      strategy.setWeightUnit("kg");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${strategy.weightUnit === "kg" ? "bg-card text-text-primary shadow-sm font-bold" : "text-text-secondary hover:text-text-primary"}`}
+                >
+                  kg
+                </button>
+                <button
+                  onClick={() => {
+                    if (strategy.weightUnit !== "lbs") {
+                      strategy.setWeight(Math.round(strategy.weight * 2.20462));
+                      strategy.setWeightUnit("lbs");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${strategy.weightUnit === "lbs" ? "bg-card text-text-primary shadow-sm font-bold" : "text-text-secondary hover:text-text-primary"}`}
+                >
+                  lbs
+                </button>
               </div>
+            </div>
+            <input
+              type="number"
+              value={strategy.weight}
+              onChange={(e) => strategy.setWeight(Number(e.target.value))}
+              className="w-full px-4 py-2.5 border border-card-border rounded-xl outline-none font-medium text-text-primary bg-card"
+            />
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="text-sm font-medium text-text-primary">Temperature</label>
+              <div className="flex bg-card-border/50 rounded-lg p-0.5">
+                <button
+                  onClick={() => {
+                    if (strategy.temperatureUnit !== "C") {
+                      strategy.setTemperature(Math.round((strategy.temperature - 32) * 5 / 9));
+                      strategy.setTemperatureUnit("C");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${strategy.temperatureUnit === "C" ? "bg-card text-text-primary shadow-sm font-bold" : "text-text-secondary hover:text-text-primary"}`}
+                >
+                  °C
+                </button>
+                <button
+                  onClick={() => {
+                    if (strategy.temperatureUnit !== "F") {
+                      strategy.setTemperature(Math.round(strategy.temperature * 9 / 5 + 32));
+                      strategy.setTemperatureUnit("F");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${strategy.temperatureUnit === "F" ? "bg-card text-text-primary shadow-sm font-bold" : "text-text-secondary hover:text-text-primary"}`}
+                >
+                  °F
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 bg-card-border/30 px-4 py-2.5 rounded-xl border border-card-border">
+              <input
+                type="range"
+                min={strategy.temperatureUnit === "C" ? -5 : 23}
+                max={strategy.temperatureUnit === "C" ? 40 : 104}
+                value={strategy.temperature}
+                onChange={(e) => strategy.setTemperature(Number(e.target.value))}
+                className="w-full accent-apple-amber"
+              />
+              <span className="font-bold text-apple-amber min-w-[3rem] text-right">
+                {strategy.temperature}°{strategy.temperatureUnit}
+              </span>
+            </div>
+          </div>
               <div>
                 <label className="block text-xs font-semibold text-text-secondary mb-1 flex items-center gap-1"><User size={12}/> Gender</label>
                 <select
@@ -166,7 +257,7 @@ const ActivityBasics = () => {
                 </select>
               </div>
               <div className="flex flex-col justify-end pb-1">
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className="inline-flex items-center cursor-pointer relative">
                   <input type="checkbox" className="sr-only peer" checked={strategy.ultraMode} onChange={(e) => strategy.setUltraMode(e.target.checked)}/>
                   <div className="w-9 h-5 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:border-card-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-apple-blue"></div>
                   <span className="ml-3 text-sm font-semibold text-text-primary flex items-center gap-1">Ultra Mode (1:0.8 Ratio) <TooltipInfo content="Shifts the target glucose:fructose ratio from 1:0.5 (standard) to 1:0.8, which is highly recommended for pushing carbohydrate intake beyond 90g/hr to avoid gut distress." /></span>
@@ -176,14 +267,21 @@ const ActivityBasics = () => {
 
             <div className="border-t border-apple-blue/20 pt-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Coffee size={16} className="text-apple-amber" />
-                  <h4 className="text-sm font-bold text-text-primary">Caffeine Strategy</h4>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+              <label className="inline-flex items-center cursor-pointer justify-between w-full p-4 border border-card-border rounded-xl bg-card hover:bg-card-border/50 transition-colors">
+                <span className="text-sm font-semibold text-text-primary flex items-center gap-2"><Coffee size={18} className="text-amber-600"/> Include Caffeine Strategy</span>
+                <div className="relative flex items-center">
                   <input type="checkbox" className="sr-only peer" checked={strategy.includeCaffeine} onChange={(e) => strategy.setIncludeCaffeine(e.target.checked)}/>
-                  <div className="w-9 h-5 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:border-card-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-apple-amber"></div>
-                </label>
+                  <div className="w-11 h-6 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-apple-blue"></div>
+                </div>
+              </label>
+
+              <label className="inline-flex items-center cursor-pointer justify-between w-full p-4 border border-card-border rounded-xl bg-card hover:bg-card-border/50 transition-colors">
+                <span className="text-sm font-semibold text-text-primary flex items-center gap-2"><div className="w-4 h-4 bg-slate-200 rounded-sm text-[10px] flex items-center justify-center font-bold text-slate-800">Na</div> Include Bicarb Strategy <TooltipInfo content="Sodium Bicarbonate buffers blood acidity, improving high-intensity performance. Requires 300mg/kg ingested 90 mins pre-exercise."/></span>
+                <div className="relative flex items-center">
+                  <input type="checkbox" className="sr-only peer" checked={strategy.includeBicarb} onChange={(e) => strategy.setIncludeBicarb(e.target.checked)}/>
+                  <div className="w-11 h-6 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-apple-blue"></div>
+                </div>
+              </label>
               </div>
               
               {strategy.includeCaffeine && (

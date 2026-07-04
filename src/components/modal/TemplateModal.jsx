@@ -25,8 +25,8 @@ const TemplateModal = () => {
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-      <div className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+      <div className="bg-modal border border-card-border backdrop-blur-3xl shadow-2xl rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex justify-between items-center px-6 py-4 border-b border-card-border flex-shrink-0">
           <h3 className="font-bold text-lg text-text-primary flex items-center gap-2">
             <BookTemplate size={20} className="text-apple-blue" /> Pre-Mix

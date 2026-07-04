@@ -156,7 +156,7 @@ const CarbMatrix = () => {
         </div>
 
         {!calculatedSourceGrams?.canAchieveRatio && (
-          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-3">
+          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-500 flex items-start gap-3">
             <span className="font-bold shrink-0 mt-0.5">⚠️ Warning:</span>
             <p>
               The target ratio cannot be achieved with the current sources. 

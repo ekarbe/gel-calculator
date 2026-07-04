@@ -34,7 +34,6 @@ describe('App Component', () => {
     expect(getByTestId('balance-analysis')).toBeInTheDocument();
     expect(getByTestId('final-recipe')).toBeInTheDocument();
     expect(getByTestId('footer')).toBeInTheDocument();
-    expect(getByTestId('mobile-sticky-bar')).toBeInTheDocument();
     
     // Modals
     expect(getByTestId('mixing-modal')).toBeInTheDocument();

@@ -22,10 +22,12 @@ describe('ActivityBasics Component', () => {
       </CalculatorContext.Provider>
     );
 
-    const durationInput = screen.getAllByRole('spinbutton')[0];
-    const carbsInput = screen.getAllByRole('spinbutton')[1];
+    const hoursInput = screen.getAllByRole('spinbutton')[0];
+    const minutesInput = screen.getAllByRole('spinbutton')[1];
+    const carbsInput = screen.getAllByRole('spinbutton')[2];
 
-    expect(durationInput).toHaveValue(120);
+    expect(hoursInput).toHaveValue(2);
+    expect(minutesInput).toHaveValue(0);
     expect(carbsInput).toHaveValue(80);
   });
 
@@ -47,11 +49,12 @@ describe('ActivityBasics Component', () => {
       </CalculatorContext.Provider>
     );
 
-    const durationInput = screen.getAllByRole('spinbutton')[0];
-    const carbsInput = screen.getAllByRole('spinbutton')[1];
+    const hoursInput = screen.getAllByRole('spinbutton')[0];
+    const minutesInput = screen.getAllByRole('spinbutton')[1];
+    const carbsInput = screen.getAllByRole('spinbutton')[2];
 
-    fireEvent.change(durationInput, { target: { value: '150' } });
-    expect(mockContextValue.setDuration).toHaveBeenCalledWith(150);
+    fireEvent.change(hoursInput, { target: { value: '3' } });
+    expect(mockContextValue.setDuration).toHaveBeenCalledWith(180);
 
     fireEvent.change(carbsInput, { target: { value: '100' } });
     expect(mockContextValue.setTargetCarbs).toHaveBeenCalledWith(100);

@@ -116,7 +116,7 @@ const ShareModal = () => {
       className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-card w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-modal w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-card-border backdrop-blur-3xl">
         <div className="flex justify-between items-center px-6 py-4 border-b border-card-border">
           <h3 className="font-bold text-lg text-text-primary">
             {shareView === "menu" ? "Share Recipe" : "Recipe Image"}
@@ -132,9 +132,9 @@ const ShareModal = () => {
           <div className="p-6 space-y-3">
             <button
               onClick={handleCopyLink}
-              className="w-full flex items-center gap-4 p-4 border border-card-border rounded-xl hover:border-[#007AFF] hover:bg-indigo-50 transition-all text-left"
+              className="w-full flex items-center gap-4 p-4 border border-card-border rounded-xl hover:border-apple-blue hover:bg-apple-blue/5 transition-all text-left group"
             >
-              <div className="bg-indigo-100 p-2.5 rounded-lg text-apple-blue">
+              <div className="bg-apple-blue/10 p-2.5 rounded-lg text-apple-blue group-hover:bg-apple-blue/20 transition-colors">
                 <Link2 size={20} />
               </div>
               <div>
@@ -144,9 +144,9 @@ const ShareModal = () => {
             </button>
             <button
               onClick={() => setShareView("image")}
-              className="w-full flex items-center gap-4 p-4 border border-card-border rounded-xl hover:border-[#007AFF] hover:bg-indigo-50 transition-all text-left"
+              className="w-full flex items-center gap-4 p-4 border border-card-border rounded-xl hover:border-apple-blue hover:bg-apple-blue/5 transition-all text-left group"
             >
-              <div className="bg-indigo-100 p-2.5 rounded-lg text-apple-blue">
+              <div className="bg-apple-blue/10 p-2.5 rounded-lg text-apple-blue group-hover:bg-apple-blue/20 transition-colors">
                 <ImageIcon size={20} />
               </div>
               <div>
@@ -207,20 +207,20 @@ const ShareModal = () => {
             <div className="p-4 border-t border-card-border flex gap-2 bg-card shrink-0">
               <button
                 onClick={() => setShareView("menu")}
-                className="px-4 py-3 text-text-secondary bg-card-border/50 rounded-xl font-semibold hover:bg-card-border transition-colors"
+                className="px-4 py-3 text-text-secondary bg-card-border/50 rounded-full font-semibold hover:bg-card-border transition-colors"
                 title="Back"
               >
                 Back
               </button>
               <button
                 onClick={handleCopyLink}
-                className="flex-1 bg-indigo-50 text-apple-blue font-semibold py-3 rounded-xl flex justify-center items-center gap-2 hover:bg-indigo-100 transition-colors"
+                className="flex-1 bg-apple-blue/10 text-apple-blue font-semibold py-3 rounded-full flex justify-center items-center gap-2 hover:bg-apple-blue/20 transition-colors"
               >
                 <Copy size={18} /> Copy Link
               </button>
               <button
                 onClick={handleDownloadImage}
-                className="flex-1 bg-apple-blue text-text-primary font-semibold py-3 rounded-xl flex justify-center items-center gap-2 hover:bg-[#4b49c6] transition-colors"
+                className="flex-1 bg-apple-blue text-white font-semibold py-3 rounded-full flex justify-center items-center gap-2 hover:bg-[#4b49c6] transition-colors"
               >
                 <Download size={18} /> Download
               </button>

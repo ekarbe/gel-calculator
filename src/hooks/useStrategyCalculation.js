@@ -3,13 +3,16 @@ import { useState, useMemo } from "react";
 
 export function useStrategyCalculation({ durationHours }) {
   const [weight, setWeight] = useState(70);
+  const [weightUnit, setWeightUnit] = useState("kg");
   const [isSmartSuggestions, setIsSmartSuggestions] = useState(false);
   const [gender, setGender] = useState("male");
   const [intensity, setIntensity] = useState("tempo"); // recovery, tempo, threshold, maximum
   const [temperature, setTemperature] = useState(20);
+  const [temperatureUnit, setTemperatureUnit] = useState("C");
   const [humidity, setHumidity] = useState(50);
   const [ultraMode, setUltraMode] = useState(false);
   const [includeCaffeine, setIncludeCaffeine] = useState(false);
+  const [includeBicarb, setIncludeBicarb] = useState(false);
   const [caffeineHabituation, setCaffeineHabituation] = useState("habituated"); // naive, habituated
   const [sweatSodiumConcentration, setSweatSodiumConcentration] = useState("average"); // low, average, high
 
@@ -45,11 +48,14 @@ export function useStrategyCalculation({ durationHours }) {
     // Cap carbsPerHour to sensible limits (30g to 120g)
     carbsPerHour = Math.max(30, Math.min(carbsPerHour, 120));
 
+    const weightInKg = weightUnit === "lbs" ? weight / 2.20462 : weight;
+    const tempInC = temperatureUnit === "F" ? (temperature - 32) * 5/9 : temperature;
+
     // 2. Sweat Rate Logic (USARIEM proxy based on MHP and Env)
     const baseSweat = gender === "female" ? 0.5 : 0.8;
     
     // Environmental modifiers
-    const heatLoad = (temperature - 15) * 0.03; 
+    const heatLoad = (tempInC - 15) * 0.03; 
     const humidityLoad = (humidity - 50) * 0.005; // high humidity increases sweat due to poor evaporation
     
     let sweatRate = (baseSweat * intensityModifier) + heatLoad + humidityLoad;
@@ -67,11 +73,11 @@ export function useStrategyCalculation({ durationHours }) {
       if (durationHours < 2.0) {
         // Single bolus dose 60 mins prior
         const mgPerKg = caffeineHabituation === "naive" ? 2 : 5;
-        caffeineStrategy.preRace = Math.min(mgPerKg * weight, 450); // cap at safe limits
+        caffeineStrategy.preRace = Math.min(mgPerKg * weightInKg, 450); // cap at safe limits
       } else if (durationHours >= 2.0 && durationHours <= 5.0) {
         // Split delivery
         caffeineStrategy.preRace = 100;
-        caffeineStrategy.intraRacePerHour = 1.0 * weight; // 1 mg/kg/hr maintenance
+        caffeineStrategy.intraRacePerHour = 1.0 * weightInKg; // 1 mg/kg/hr maintenance
       } else {
         // Ultra (> 5 hours) - combat sleep monster later in race
         caffeineStrategy.preRace = 0;
@@ -80,13 +86,25 @@ export function useStrategyCalculation({ durationHours }) {
       }
       
       // Toxicity failsafe check (max 6mg/kg in a 2hr window)
-      const maxSafeWindow = 6 * weight;
+      const maxSafeWindow = 6 * weightInKg;
       const proposedWindow = caffeineStrategy.preRace + (caffeineStrategy.intraRacePerHour * 2);
       if (proposedWindow > maxSafeWindow) {
         caffeineStrategy.warning = "Toxicity threshold exceeded. Dose capped.";
         caffeineStrategy.preRace = Math.min(caffeineStrategy.preRace, maxSafeWindow * 0.6);
         caffeineStrategy.intraRacePerHour = Math.min(caffeineStrategy.intraRacePerHour, (maxSafeWindow * 0.4) / 2);
       }
+    }
+
+    let bicarbStrategy = {
+      preRaceDoseMg: 0,
+      sodiumLoadMg: 0
+    };
+
+    if (includeBicarb) {
+      // 300mg per kg of bodyweight, 90 mins pre-race
+      bicarbStrategy.preRaceDoseMg = 300 * weightInKg;
+      // Sodium makes up 27.37% of sodium bicarbonate
+      bicarbStrategy.sodiumLoadMg = bicarbStrategy.preRaceDoseMg * 0.2737;
     }
 
     // 4. Electrolyte Logic (Sodium Concentration)
@@ -99,9 +117,11 @@ export function useStrategyCalculation({ durationHours }) {
       targetRatio,
       sweatRate,
       caffeineStrategy,
-      suggestedSodiumConcentration
+      bicarbStrategy,
+      suggestedSodiumConcentration,
+      weightInKg
     };
-  }, [durationHours, weight, gender, intensity, temperature, humidity, ultraMode, includeCaffeine, caffeineHabituation, sweatSodiumConcentration]);
+  }, [durationHours, weight, weightUnit, gender, intensity, temperature, temperatureUnit, humidity, ultraMode, includeCaffeine, includeBicarb, caffeineHabituation, sweatSodiumConcentration]);
 
   // 4. Cost Logic
   const getCostAnalysis = (totalCarbs) => {
@@ -119,13 +139,16 @@ export function useStrategyCalculation({ durationHours }) {
 
   return {
     weight, setWeight,
+    weightUnit, setWeightUnit,
     isSmartSuggestions, setIsSmartSuggestions,
     gender, setGender,
     intensity, setIntensity,
     temperature, setTemperature,
+    temperatureUnit, setTemperatureUnit,
     humidity, setHumidity,
     ultraMode, setUltraMode,
     includeCaffeine, setIncludeCaffeine,
+    includeBicarb, setIncludeBicarb,
     caffeineHabituation, setCaffeineHabituation,
     sweatSodiumConcentration, setSweatSodiumConcentration,
     suggestedStrategies,

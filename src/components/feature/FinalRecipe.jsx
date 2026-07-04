@@ -15,7 +15,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import { ListRestart, ChevronRight } from "lucide-react";
+import { ListRestart, ChevronRight, Download } from "lucide-react";
+import * as htmlToImage from "html-to-image";
+import { jsPDF } from "jspdf";
 import { sourceDataMap } from "../../constants/constants";
 import TooltipInfo from "../shared/TooltipInfo";
 import Card from "../shared/Card";
@@ -41,6 +43,26 @@ const FinalRecipe = () => {
 
   const durationHours = duration / 60;
   const costAnalysis = strategy.getCostAnalysis(targetCarbs * durationHours);
+
+  const handleDownloadPDF = async () => {
+    if (!recipeRef.current) return;
+    try {
+      const dataUrl = await htmlToImage.toPng(recipeRef.current, { 
+        cacheBust: true, 
+        pixelRatio: 2, 
+        backgroundColor: '#1C1C1E' 
+      });
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      // Estimate height based on the aspect ratio of the DOM node
+      const rect = recipeRef.current.getBoundingClientRect();
+      const pdfHeight = (rect.height * pdfWidth) / rect.width;
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save('Fueling-Recipe.pdf');
+    } catch (e) {
+      console.error('Failed to generate PDF', e);
+    }
+  };
 
   const recipeItems = [];
 
@@ -180,7 +202,7 @@ const FinalRecipe = () => {
         </div>
       </div>
 
-      <div className="px-6 py-4 bg-apple-green/10 border-t border-card-border flex items-center justify-between">
+      <div className="px-6 py-4 bg-card-border/10 border-t border-card-border flex items-center justify-between">
         <div>
           <h4 className="text-sm font-bold text-text-primary">Est. Cost (DIY)</h4>
           <p className="text-xs text-text-secondary">${costAnalysis.diyTotal.toFixed(2)}</p>
@@ -191,16 +213,23 @@ const FinalRecipe = () => {
         </div>
       </div>
 
-      <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem]">
+      <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem] flex flex-col gap-3">
         <button
           onClick={onOpenInstructions}
-          className="w-full bg-apple-blue hover:bg-[#4b49c6] text-text-primary font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group"
+          className="w-full bg-apple-blue hover:bg-[#4b49c6] text-white font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 group"
         >
           View Mixing Instructions{" "}
           <ChevronRight
             size={18}
             className="group-hover:translate-x-1 transition-transform"
           />
+        </button>
+        <button
+          onClick={handleDownloadPDF}
+          className="w-full bg-card hover:bg-card-border/50 text-text-primary font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 border border-card-border"
+        >
+          <Download size={18} />
+          Save as PDF
         </button>
       </div>
       </Card>

@@ -33,7 +33,7 @@ const MixingModal = () => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4 transition-all">
-      <div className="bg-card w-full sm:max-w-xl sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-modal w-full sm:max-w-xl sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-card-border backdrop-blur-3xl">
         <div className="flex justify-between items-center px-6 py-4 border-b border-card-border bg-card-border/30">
           <h3 className="font-bold text-lg text-text-primary flex items-center gap-2">
             <FlaskConical size={20} className="text-apple-blue" /> DIY Mix
@@ -106,7 +106,7 @@ const MixingModal = () => {
         <div className="p-4 border-t border-card-border bg-card">
           <button
             onClick={onClose}
-            className="w-full bg-slate-900 text-text-primary font-semibold py-3 rounded-xl hover:bg-slate-800"
+            className="w-full bg-apple-blue text-white font-semibold py-3 rounded-full hover:bg-[#4b49c6] transition-colors shadow-sm"
           >
             Got It
           </button>

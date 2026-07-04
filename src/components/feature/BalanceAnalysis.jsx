@@ -1,45 +1,62 @@
-/*  Gel-Calculator - Personalized fuel calculator for endurance athletes.
-    Copyright (C) 2026  Eike Christian Karbe
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>. */
-
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import { Settings } from "lucide-react";
+import { Settings, Flame } from "lucide-react";
 import Card from "../shared/Card";
 
-const BalanceAnalysis = () => {
-  const { totals, duration, targetCarbs, electrolyteAnalysis, glucoseParts, fructoseParts, activeElectrolytes } = useCalculatorContext();
+const CircularProgress = ({ value, max, label, color, subValue, subLabel }) => {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = max && max > 0 
+    ? circumference - (Math.min(value, max) / max) * circumference 
+    : circumference;
 
-  const activeElectrolyteKeys = ['Sodium', 'Chloride', 'Potassium', 'Magnesium', 'Calcium'].filter(
-    (key) => activeElectrolytes?.[key]
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-24 h-24 mb-3">
+        {/* Background Circle */}
+        <svg className="w-full h-full transform -rotate-90">
+          <circle
+            cx="48"
+            cy="48"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            className="text-card-border/50"
+          />
+          {/* Progress Circle */}
+          <circle
+            cx="48"
+            cy="48"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className={`${color} transition-all duration-1000 ease-out`}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-black text-text-primary">{Number.isNaN(value) ? 0 : value}</span>
+          {subValue && <span className="text-[10px] font-bold text-text-secondary -mt-1">{subValue}</span>}
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs font-bold text-text-primary uppercase tracking-wider">{label}</div>
+        {subLabel && <div className="text-[10px] text-text-secondary mt-0.5">{subLabel}</div>}
+      </div>
+    </div>
   );
+};
+
+const BalanceAnalysis = () => {
+  const { totals, duration, targetCarbs, electrolyteAnalysis, glucoseParts, fructoseParts, totalCalories } = useCalculatorContext();
+
+  const sodiumMatch = Math.min(100, Math.round(electrolyteAnalysis?.Sodium?.percentage || 0));
 
   const glucoseCarbs = (totals.glucoseRatio / 100) * targetCarbs;
   const fructoseCarbs = (totals.fructoseRatio / 100) * targetCarbs;
-  
-  let pathwayStatus = "Optimal";
-  let pathwayColor = "text-apple-blue";
-  if (glucoseCarbs > 67 && fructoseCarbs > 53) {
-    pathwayStatus = "Both Overloaded";
-    pathwayColor = "text-red-400";
-  } else if (glucoseCarbs > 67) {
-    pathwayStatus = "SGLT1 Overload";
-    pathwayColor = "text-orange-400";
-  } else if (fructoseCarbs > 53) {
-    pathwayStatus = "GLUT5 Overload";
-    pathwayColor = "text-orange-400";
-  }
 
   const formattedRatio = glucoseParts > 0 
     ? `1:${Number((fructoseParts / glucoseParts).toFixed(2))}`
@@ -47,83 +64,59 @@ const BalanceAnalysis = () => {
 
   return (
     <Card className="h-full">
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-8">
         <Settings size={18} className="text-apple-blue" />
-        <h3 className="font-bold text-lg">Balance Analysis</h3>
+        <h3 className="font-bold text-lg">Activity Summary</h3>
       </div>
-      <div className="hidden sm:block pt-2 border-b border-card-border/50 pb-5 mb-5">
-        <div className="flex justify-between text-sm mb-1">
-          <span className="text-text-secondary font-medium">
-            Total Activity Carbs
-          </span>
-          <span className="text-text-primary font-bold text-lg">
-            {Math.round((duration / 60) * targetCarbs)}g
-          </span>
-        </div>
-        <div className="text-xs text-text-secondary text-right">
-          Targeting {targetCarbs}g / hour
-        </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+        <CircularProgress 
+          value={Math.round((duration / 60) * targetCarbs)} 
+          max={((duration / 60) * targetCarbs) * 1.2} 
+          label="Total Carbs" 
+          subValue="grams"
+          color="text-apple-blue" 
+          subLabel={`Targeting ${targetCarbs}g/hr`}
+        />
+        <CircularProgress 
+          value={sodiumMatch} 
+          max={100} 
+          label="Sodium Match" 
+          subValue="%"
+          color={sodiumMatch < 50 ? "text-red-400" : sodiumMatch < 80 ? "text-orange-400" : "text-[#2dd4bf]"} 
+          subLabel={electrolyteAnalysis?.Sodium?.message || "Optimal"}
+        />
+        <CircularProgress 
+          value={Math.round(totalCalories)} 
+          max={Math.round(totalCalories) * 1.2} 
+          label="Total Energy" 
+          subValue="kcal"
+          color="text-apple-amber" 
+          subLabel="From carbohydrates"
+        />
       </div>
-      <div className="space-y-5">
-        {activeElectrolyteKeys.map(electrolyte => {
-          const match = Math.min(100, Math.round(electrolyteAnalysis?.[electrolyte]?.percentage || 0));
-          const message = electrolyteAnalysis?.[electrolyte]?.message || "No sources added";
-          
-          let colorClass = "text-[#2dd4bf]";
-          let bgClass = "bg-[#2dd4bf]";
-          if (match < 50) {
-            colorClass = "text-red-400";
-            bgClass = "bg-red-400";
-          } else if (match < 80) {
-            colorClass = "text-orange-400";
-            bgClass = "bg-orange-400";
-          } else if (match > 100) {
-            colorClass = "text-orange-400";
-            bgClass = "bg-orange-400";
-          }
 
-          return (
-            <div key={electrolyte}>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-text-secondary font-medium">{electrolyte} Match</span>
-                <span className={`${colorClass} font-bold`}>
-                  {match}%
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-card-border/30 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${bgClass} rounded-full transition-all duration-300`}
-                  style={{ width: `${match}%` }}
-                ></div>
-              </div>
-              <div className="text-xs text-text-secondary mt-2">
-                {message}
-              </div>
-            </div>
-          );
-        })}
-        <div className="pt-2">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-text-secondary font-medium">
-              Carb Pathway Limit
-            </span>
-            <span className={`${pathwayColor} font-bold`}>{pathwayStatus}</span>
-          </div>
-          <div className="w-full h-1.5 bg-card-border/30 rounded-full flex overflow-hidden">
-            <div
-              className="h-full bg-apple-blue"
-              style={{ width: `${totals.glucoseRatio}%` }}
-            ></div>
-            <div
-              className="h-full bg-apple-purple"
-              style={{ width: `${totals.fructoseRatio}%` }}
-            ></div>
-          </div>
-          <div className="text-xs text-text-secondary mt-2">
-            Ratio ({formattedRatio})
-          </div>
+      <div className="bg-card-border/20 rounded-2xl p-4 border border-card-border/50">
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-sm font-bold text-text-secondary">Carb Ratio Limit</span>
+          <span className="text-sm font-black text-text-primary">{formattedRatio}</span>
+        </div>
+        <div className="w-full h-3 bg-card-border/50 rounded-full flex overflow-hidden shadow-inner mb-2">
+          <div
+            className="h-full bg-apple-primary-blue"
+            style={{ width: `${totals.glucoseRatio}%` }}
+          ></div>
+          <div
+            className="h-full bg-orange-400"
+            style={{ width: `${totals.fructoseRatio}%` }}
+          ></div>
+        </div>
+        <div className="flex justify-between text-xs font-semibold text-text-secondary">
+          <span>Glu: {Math.round(glucoseCarbs)}g/hr</span>
+          <span>Fru: {Math.round(fructoseCarbs)}g/hr</span>
         </div>
       </div>
+
     </Card>
   );
 };
