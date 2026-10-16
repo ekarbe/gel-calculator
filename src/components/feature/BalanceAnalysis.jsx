@@ -83,7 +83,7 @@ const BalanceAnalysis = () => {
           max={100} 
           label="Sodium Match" 
           subValue="%"
-          color={sodiumMatch < 50 ? "text-red-400" : sodiumMatch < 80 ? "text-orange-400" : "text-[#2dd4bf]"} 
+          color={sodiumMatch < 50 ? "text-red-400" : sodiumMatch < 80 ? "text-orange-400" : "text-apple-teal"} 
           subLabel={electrolyteAnalysis?.Sodium?.message || "Optimal"}
         />
         <CircularProgress 
@@ -98,16 +98,16 @@ const BalanceAnalysis = () => {
 
       <div className="bg-card-border/20 rounded-2xl p-4 border border-card-border/50">
         <div className="flex justify-between items-center mb-3">
-          <span className="text-sm font-bold text-text-secondary">Carb Ratio Limit</span>
+          <span className="text-sm font-bold text-text-secondary">Carb Ratio</span>
           <span className="text-sm font-black text-text-primary">{formattedRatio}</span>
         </div>
         <div className="w-full h-3 bg-card-border/50 rounded-full flex overflow-hidden shadow-inner mb-2">
           <div
-            className="h-full bg-apple-primary-blue"
+            className="h-full bg-apple-blue"
             style={{ width: `${totals.glucoseRatio}%` }}
           ></div>
           <div
-            className="h-full bg-orange-400"
+            className="h-full bg-apple-purple"
             style={{ width: `${totals.fructoseRatio}%` }}
           ></div>
         </div>

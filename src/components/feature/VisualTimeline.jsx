@@ -1,34 +1,35 @@
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import { Clock, Droplets, Zap, Coffee, CheckCircle2, List, Table } from "lucide-react";
+import { Clock, Droplets, Zap, Coffee, CheckCircle2, List, Table, Info } from "lucide-react";
 import Card from "../shared/Card";
 import { SWEAT_RATES } from "../../constants/constants";
+import { getGelTimes, formatElapsed } from "../../lib/schedule";
+import { getSuggestedFluidMlPerHour, FLUID_ADVICE } from "../../lib/safety";
 import { useState } from "react";
 
 const VisualTimeline = () => {
   const { duration, strategy, gelsPerHour, sweatRate, isSweatRate } = useCalculatorContext();
   const [viewMode, setViewMode] = useState('timeline'); // 'timeline' or 'table'
 
-  const durationHours = duration / 60;
   const strat = strategy.suggestedStrategies;
-  
+
   const events = [];
-  
+
+  const gelTimes = getGelTimes(duration, gelsPerHour);
   const gelInterval = gelsPerHour > 0 ? 60 / gelsPerHour : 0;
-  const effectiveSweatRate = strategy.isSmartSuggestions 
-    ? strat.sweatRate 
+  const effectiveSweatRate = strategy.isSmartSuggestions
+    ? strat.sweatRate
     : (isSweatRate ? SWEAT_RATES[sweatRate] : 0);
-  
-  const hydrationPerChunk = effectiveSweatRate > 0 && gelInterval > 0 
-    ? (effectiveSweatRate * 1000 * (gelInterval / 60)) 
-    : 0;
+
+  const drinkPerHour = getSuggestedFluidMlPerHour(effectiveSweatRate);
+  const drinkPerGel = drinkPerHour > 0 && gelInterval > 0 ? drinkPerHour * (gelInterval / 60) : 0;
 
   if (strategy.isSmartSuggestions && strat.bicarbStrategy && strat.bicarbStrategy.preRaceDoseMg > 0) {
     events.push({
       time: "T-90 min",
       type: "bicarb",
       title: "Pre-race Bicarbonate",
-      desc: `${Math.round(strat.bicarbStrategy.preRaceDoseMg / 1000)}g (yields ${Math.round(strat.bicarbStrategy.sodiumLoadMg)}mg Na+)`,
-      color: "bg-apple-blue/20 text-apple-blue border-apple-blue/30",
+      desc: `${Math.round(strat.bicarbStrategy.preRaceDoseMg / 1000)}g (adds ${(strat.bicarbStrategy.sodiumLoadMg / 1000).toFixed(1)}g sodium). Trial it in training first: GI distress is common.`,
+      color: "text-apple-purple border-apple-purple/40",
       icon: <div className="font-black text-[10px]">Na</div>
     });
   }
@@ -39,73 +40,60 @@ const VisualTimeline = () => {
       type: "caffeine",
       title: "Pre-race Caffeine Bolus",
       desc: `${Math.round(strat.caffeineStrategy.preRace)}mg`,
-      color: "bg-amber-100 text-apple-amber border-amber-200",
+      color: "text-apple-amber border-apple-amber/40",
       icon: <Coffee size={16} />
     });
   }
-  
+
   events.push({
     time: "T=0 (Start)",
     type: "start",
     title: "Activity Start",
-    desc: `Begin activity.${gelsPerHour > 0 ? ' Take 1st Gel.' : ''}`,
-    color: "bg-apple-greenlue-100 text-apple-greenlue-600 border-blue-200",
+    desc: `Begin activity.${gelTimes.length > 0 ? ' Take 1st Gel.' : ''}`,
+    color: "text-text-secondary border-card-border",
     icon: <Clock size={16} />
   });
 
-  if (gelsPerHour > 0) {
-    for (let t = gelInterval; t < duration; t += gelInterval) {
-      let desc = `Take 1 Gel`;
-      if (hydrationPerChunk > 0) {
-        desc += ` + Drink ${Math.round(hydrationPerChunk)}ml`;
-      }
-      
-      if (strategy.isSmartSuggestions && strat.caffeineStrategy && strat.caffeineStrategy.intraRacePerHour > 0) {
-        if (t >= strat.caffeineStrategy.delayStartHours * 60) {
-          const caffeineAmount = strat.caffeineStrategy.intraRacePerHour * (gelInterval / 60);
-          desc += ` + ${Math.round(caffeineAmount)}mg Caff.`;
-        }
-      }
-      
-      const hours = Math.floor(t / 60);
-      const mins = Math.round(t % 60);
-      let timeStr = "";
-      if (hours > 0) {
-        timeStr = `T+${hours}h${mins > 0 ? ` ${mins}m` : ''}`;
-      } else {
-        timeStr = `T+${mins}m`;
-      }
-      
-      events.push({
-        time: timeStr,
-        type: "fuel",
-        title: "Fuel & Hydrate",
-        desc: desc,
-        color: "bg-yellow-100 text-yellow-600 border-yellow-200",
-        icon: <Zap size={16} />
-      });
+  gelTimes.slice(1).forEach((t) => {
+    let desc = `Take 1 Gel`;
+    if (drinkPerGel > 0) {
+      desc += ` + ~${Math.round(drinkPerGel)}ml fluid`;
     }
-  } else if (effectiveSweatRate > 0) {
+
+    if (strategy.isSmartSuggestions && strat.caffeineStrategy && strat.caffeineStrategy.intraRacePerHour > 0) {
+      if (t >= strat.caffeineStrategy.delayStartHours * 60) {
+        const caffeineAmount = strat.caffeineStrategy.intraRacePerHour * (gelInterval / 60);
+        desc += ` + ${Math.round(caffeineAmount)}mg Caff.`;
+      }
+    }
+
+    events.push({
+      time: formatElapsed(t),
+      type: "fuel",
+      title: "Fuel & Hydrate",
+      desc: desc,
+      color: "text-apple-blue border-apple-blue/40",
+      icon: <Zap size={16} />
+    });
+  });
+
+  if (gelTimes.length === 0 && drinkPerHour > 0) {
     events.push({
       time: "Continuous",
       type: "hydration",
       title: "Hydration Only",
-      desc: `Drink ${Math.round(effectiveSweatRate * 1000)}ml per hour`,
-      color: "bg-apple-blueyan-100 text-apple-blueyan-600 border-cyan-200",
+      desc: `Drink to thirst, about ${Math.round(drinkPerHour)}ml per hour`,
+      color: "text-apple-teal border-apple-teal/40",
       icon: <Droplets size={16} />
     });
   }
 
-  const finishHours = Math.floor(duration / 60);
-  const finishMins = Math.round(duration % 60);
-  const finishTimeStr = finishHours > 0 ? `T+${finishHours}h${finishMins > 0 ? ` ${finishMins}m` : ''}` : `T+${finishMins}m`;
-
   events.push({
-    time: finishTimeStr,
+    time: formatElapsed(duration),
     type: "finish",
     title: "Finish",
     desc: "Begin recovery",
-    color: "bg-green-100 text-green-600 border-green-200",
+    color: "text-apple-green border-apple-green/40",
     icon: <CheckCircle2 size={16} />
   });
 
@@ -121,6 +109,7 @@ const VisualTimeline = () => {
             onClick={() => setViewMode('timeline')}
             className={`p-1.5 rounded-md transition-colors ${viewMode === 'timeline' ? 'bg-card text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
             title="Timeline View"
+            aria-label="Timeline view"
           >
             <List size={18} />
           </button>
@@ -128,6 +117,7 @@ const VisualTimeline = () => {
             onClick={() => setViewMode('table')}
             className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-card text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
             title="Table View"
+            aria-label="Table view"
           >
             <Table size={18} />
           </button>
@@ -138,14 +128,14 @@ const VisualTimeline = () => {
         <div className="relative border-l-2 border-card-border ml-4 pl-6 space-y-8 mt-4">
           {events.map((event, index) => (
             <div key={index} className="relative">
-              <div className={`absolute -left-[37px] top-1 w-8 h-8 rounded-full border-2 bg-card flex items-center justify-center ${event.color}`}>
+              <div className={`absolute -left-[37px] top-1 w-8 h-8 rounded-full border-2 bg-modal flex items-center justify-center ${event.color}`}>
                 {event.icon}
               </div>
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-text-secondary block mb-1">
                   {event.time}
                 </span>
-                <h3 className="text-md font-bold text-text-primary">{event.title}</h3>
+                <h3 className="text-base font-bold text-text-primary">{event.title}</h3>
                 <p className="text-sm text-text-secondary mt-1">{event.desc}</p>
               </div>
             </div>
@@ -168,7 +158,7 @@ const VisualTimeline = () => {
                     <span className="text-sm font-bold text-text-primary">{event.time}</span>
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center border bg-card ${event.color}`}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center border bg-modal ${event.color}`}>
                       {/* Scale icon down slightly for table */}
                       <div className="scale-75">{event.icon}</div>
                     </div>
@@ -182,6 +172,12 @@ const VisualTimeline = () => {
             </tbody>
           </table>
         </div>
+      )}
+      {drinkPerHour > 0 && (
+        <p className="mt-6 text-xs text-text-secondary flex gap-2 items-start">
+          <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+          {FLUID_ADVICE}
+        </p>
       )}
     </Card>
   );

@@ -15,19 +15,21 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
-import { Activity, Clock, Zap, BrainCircuit, Droplets, Thermometer, User, Dumbbell, Coffee, ShieldAlert } from "lucide-react";
+import { Activity, Zap, BrainCircuit, Droplets, Thermometer, User, Dumbbell, Coffee, ShieldAlert } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";
+import { getCarbIntakeWarning } from "../../lib/safety";
 
 const ActivityBasics = () => {
   const { duration, setDuration, targetCarbs, setTargetCarbs, strategy } = useCalculatorContext();
+  const carbWarning = getCarbIntakeWarning(targetCarbs);
 
   const handleDurationChange = (type, value) => {
     let newHours = Math.floor(duration / 60);
     let newMinutes = duration % 60;
     
-    if (type === "hours") newHours = parseInt(value) || 0;
-    if (type === "minutes") newMinutes = parseInt(value) || 0;
+    if (type === "hours") newHours = Math.max(0, parseInt(value) || 0);
+    if (type === "minutes") newMinutes = Math.max(0, parseInt(value) || 0);
     
     setDuration((newHours * 60) + newMinutes);
   };
@@ -79,7 +81,7 @@ const ActivityBasics = () => {
         <div>
           <label className="text-sm font-medium text-text-primary mb-1.5 flex items-center">
             Target Carbs (g/hr)
-            <TooltipInfo content="How many grams of carbohydrates you aim to consume per hour of exercise. Standard endurance targets are 60-90g/hr, but can go up to 120g/hr with gut training." />
+            <TooltipInfo content="Grams of carbohydrate per hour of exercise. Guidance: little or none under ~1 h, 30–60 g/h for 1–2.5 h, up to 90 g/h beyond 2.5 h. Up to 120 g/h only with gut training." />
           </label>
           <div className="relative">
             <input
@@ -90,7 +92,7 @@ const ActivityBasics = () => {
               className={`w-full pl-4 pr-10 py-2.5 border rounded-xl outline-none transition-all font-semibold ${
                 strategy.isSmartSuggestions 
                   ? "bg-apple-blue/10 border-apple-blue/30 text-apple-blue cursor-not-allowed" 
-                  : "border-card-border focus:ring-2 focus:ring-[#007AFF] focus:border-transparent text-text-primary"
+                  : "border-card-border focus:ring-2 focus:ring-apple-blue focus:border-transparent text-text-primary"
               }`}
             />
             <Zap size={16} className={`absolute right-3 top-3 ${strategy.isSmartSuggestions ? "text-apple-blue/70" : "text-text-secondary"}`} />
@@ -99,6 +101,9 @@ const ActivityBasics = () => {
             <p className="text-xs text-apple-blue mt-1 flex items-center gap-1">
               <BrainCircuit size={12} /> Auto-calculated by physiological logic
             </p>
+          )}
+          {carbWarning && (
+            <p className="text-xs text-apple-amber mt-1">{carbWarning}</p>
           )}
         </div>
       </div>
@@ -109,7 +114,7 @@ const ActivityBasics = () => {
             <div className="bg-apple-blue/20 p-1.5 rounded-lg text-apple-blue">
               <BrainCircuit size={16} />
             </div>
-            <h3 className="text-md font-bold text-text-primary">Smart Physiology Suggestions</h3>
+            <h3 className="text-base font-bold text-text-primary">Smart Physiology Suggestions</h3>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -118,12 +123,12 @@ const ActivityBasics = () => {
               checked={strategy.isSmartSuggestions}
               onChange={(e) => strategy.setIsSmartSuggestions(e.target.checked)}
             />
-            <div className="w-11 h-6 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:border-card-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-apple-blue"></div>
+            <div className="w-11 h-6 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-card-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-apple-blue"></div>
           </label>
         </div>
 
         {strategy.isSmartSuggestions && (
-          <div className="bg-apple-blue/10 p-4 rounded-xl border border-apple-blue/20 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="bg-apple-blue/10 p-4 rounded-xl border border-apple-blue/20 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
             <div className="flex justify-between items-center mb-1.5">
@@ -162,7 +167,7 @@ const ActivityBasics = () => {
           </div>
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-sm font-medium text-text-primary">Temperature</label>
+              <label className="text-sm font-medium text-text-primary flex items-center gap-1"><Thermometer size={14}/> Temperature</label>
               <div className="flex bg-card-border/50 rounded-lg p-0.5">
                 <button
                   onClick={() => {
@@ -227,15 +232,6 @@ const ActivityBasics = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1 flex items-center gap-1"><Thermometer size={12}/> Temperature (°C)</label>
-                <input
-                  type="number"
-                  value={strategy.temperature}
-                  onChange={(e) => strategy.setTemperature(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-card-border rounded-lg text-sm focus:ring-2 focus:ring-apple-blue/50 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
                 <label className="block text-xs font-semibold text-text-secondary mb-1 flex items-center gap-1"><Droplets size={12}/> Humidity (%)</label>
                 <input
                   type="number"
@@ -259,7 +255,7 @@ const ActivityBasics = () => {
               <div className="flex flex-col justify-end pb-1">
                 <label className="inline-flex items-center cursor-pointer relative">
                   <input type="checkbox" className="sr-only peer" checked={strategy.ultraMode} onChange={(e) => strategy.setUltraMode(e.target.checked)}/>
-                  <div className="w-9 h-5 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:border-card-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-apple-blue"></div>
+                  <div className="w-9 h-5 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-card-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-apple-blue"></div>
                   <span className="ml-3 text-sm font-semibold text-text-primary flex items-center gap-1">Ultra Mode (1:0.8 Ratio) <TooltipInfo content="Shifts the target glucose:fructose ratio from 1:0.5 (standard) to 1:0.8, which is highly recommended for pushing carbohydrate intake beyond 90g/hr to avoid gut distress." /></span>
                 </label>
               </div>
@@ -276,7 +272,7 @@ const ActivityBasics = () => {
               </label>
 
               <label className="inline-flex items-center cursor-pointer justify-between w-full p-4 border border-card-border rounded-xl bg-card hover:bg-card-border/50 transition-colors">
-                <span className="text-sm font-semibold text-text-primary flex items-center gap-2"><div className="w-4 h-4 bg-slate-200 rounded-sm text-[10px] flex items-center justify-center font-bold text-slate-800">Na</div> Include Bicarb Strategy <TooltipInfo content="Sodium Bicarbonate buffers blood acidity, improving high-intensity performance. Requires 300mg/kg ingested 90 mins pre-exercise."/></span>
+                <span className="text-sm font-semibold text-text-primary flex items-center gap-2"><div className="w-4 h-4 bg-slate-200 rounded-sm text-[10px] flex items-center justify-center font-bold text-slate-800">Na</div> Include Bicarb Strategy <TooltipInfo content="Sodium bicarbonate buffers acidity during hard efforts of ~30 s to 60 min; there is no evidence for multi-hour events. 0.2–0.3 g/kg taken 60–180 min before. Adds ~5–6 g of sodium at 70 kg and often causes GI distress, so trial it in training."/></span>
                 <div className="relative flex items-center">
                   <input type="checkbox" className="sr-only peer" checked={strategy.includeBicarb} onChange={(e) => strategy.setIncludeBicarb(e.target.checked)}/>
                   <div className="w-11 h-6 bg-card-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-apple-blue"></div>
@@ -298,7 +294,7 @@ const ActivityBasics = () => {
                     </select>
                   </div>
                   {strategy.suggestedStrategies?.caffeineStrategy?.warning && (
-                    <div className="bg-red-50 text-red-700 text-xs p-2 rounded-lg flex gap-2 items-start border border-red-100">
+                    <div className="bg-apple-red/10 text-apple-red text-xs p-2 rounded-lg flex gap-2 items-start border border-apple-red/30">
                       <ShieldAlert size={14} className="mt-0.5 shrink-0" />
                       <p>{strategy.suggestedStrategies.caffeineStrategy.warning}</p>
                     </div>

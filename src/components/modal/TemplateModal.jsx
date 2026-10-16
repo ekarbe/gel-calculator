@@ -34,6 +34,7 @@ const TemplateModal = () => {
           </h3>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-2 text-text-secondary bg-card-border/30 rounded-full hover:bg-card-border/50 transition-colors"
           >
             <X size={18} />
@@ -44,11 +45,11 @@ const TemplateModal = () => {
             <button
               key={idx}
               onClick={() => applyTemplate(tpl)}
-              className="bg-card border border-card-border p-5 rounded-xl text-left hover:border-[#007AFF] hover:shadow-md transition-all flex flex-col group"
+              className="bg-card border border-card-border p-5 rounded-xl text-left hover:border-apple-blue hover:shadow-md transition-all flex flex-col group"
             >
               <div className="flex justify-between items-start mb-2">
                 <h4 className="font-bold text-text-primary group-hover:text-apple-blue transition-colors">{tpl.name}</h4>
-                <span className="text-xs font-medium text-apple-blue bg-indigo-50 px-2 py-1 rounded-full whitespace-nowrap ml-2">
+                <span className="text-xs font-medium text-apple-blue bg-apple-blue/10 px-2 py-1 rounded-full whitespace-nowrap ml-2">
                   Ratio {tpl.glucoseParts}:{tpl.fructoseParts}
                 </span>
               </div>

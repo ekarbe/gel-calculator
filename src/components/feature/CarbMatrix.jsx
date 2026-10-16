@@ -58,7 +58,7 @@ const CarbMatrix = () => {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
             <Scale size={18} className="text-apple-blue" />
-            <span className="font-semibold text-text-primary flex items-center">Pathway Ratio <TooltipInfo content="Your gut uses different pathways to absorb carbohydrates (SGLT1 for glucose, GLUT5 for fructose). A 1:0.8 ratio maximizes total hourly absorption without overwhelming a single pathway." /></span>
+            <span className="font-semibold text-text-primary flex items-center">Pathway Ratio <TooltipInfo content="Glucose (SGLT1) and fructose (GLUT5) use different gut transporters. Up to ~60 g/h glucose alone is fine; above that add fructose: about 2:1 for 60–90 g/h and about 1:0.8 for 90–120 g/h." /></span>
           </div>
           <div className="text-sm bg-card px-3 py-1 rounded-lg border border-card-border shadow-sm">
             Target:{" "}
@@ -78,13 +78,14 @@ const CarbMatrix = () => {
             </div>
             <div className="flex items-center gap-4">
               <button
+                aria-label="Decrease glucose parts"
                 onClick={() =>
                   setGlucoseParts((p) =>
                     Math.max(0.0, Number((p - 0.05).toFixed(2))),
                   )
                 }
                 disabled={strategy.isSmartSuggestions}
-                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-[#007AFF] hover:text-apple-blue'}`}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-apple-blue hover:text-apple-blue'}`}
               >
                 <Minus size={14} />
               </button>
@@ -99,13 +100,14 @@ const CarbMatrix = () => {
                 className={`w-full h-2.5 bg-apple-blue/20 rounded-lg appearance-none accent-apple-blue ${strategy.isSmartSuggestions ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
               />
               <button
+                aria-label="Increase glucose parts"
                 onClick={() =>
                   setGlucoseParts((p) =>
                     Math.min(2.0, Number((p + 0.05).toFixed(2))),
                   )
                 }
                 disabled={strategy.isSmartSuggestions}
-                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-[#007AFF] hover:text-apple-blue'}`}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-apple-blue hover:text-apple-blue'}`}
               >
                 <Plus size={14} />
               </button>
@@ -120,13 +122,14 @@ const CarbMatrix = () => {
             </div>
             <div className="flex items-center gap-4">
               <button
+                aria-label="Decrease fructose parts"
                 onClick={() =>
                   setFructoseParts((p) =>
                     Math.max(0.0, Number((p - 0.05).toFixed(2))),
                   )
                 }
                 disabled={strategy.isSmartSuggestions}
-                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-[#AF52DE] hover:text-[#AF52DE]'}`}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-apple-purple hover:text-apple-purple'}`}
               >
                 <Minus size={14} />
               </button>
@@ -138,16 +141,17 @@ const CarbMatrix = () => {
                 value={fructoseParts}
                 onChange={(e) => setFructoseParts(Number(e.target.value))}
                 disabled={strategy.isSmartSuggestions}
-                className={`w-full h-2.5 bg-apple-blue/20 rounded-lg appearance-none accent-[#AF52DE] ${strategy.isSmartSuggestions ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                className={`w-full h-2.5 bg-apple-purple/20 rounded-lg appearance-none accent-apple-purple ${strategy.isSmartSuggestions ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
               />
               <button
+                aria-label="Increase fructose parts"
                 onClick={() =>
                   setFructoseParts((p) =>
                     Math.min(2.0, Number((p + 0.05).toFixed(2))),
                   )
                 }
                 disabled={strategy.isSmartSuggestions}
-                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-[#AF52DE] hover:text-[#AF52DE]'}`}
+                className={`w-8 h-8 shrink-0 flex items-center justify-center bg-card border border-card-border rounded-full shadow-sm ${strategy.isSmartSuggestions ? 'opacity-50 cursor-not-allowed' : 'text-text-secondary hover:border-apple-purple hover:text-apple-purple'}`}
               >
                 <Plus size={14} />
               </button>
@@ -199,7 +203,7 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {glucoseSources.map((source) => (
-              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-card shadow-sm transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200/60' : 'border-blue-200/60'}`}>
+              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-card shadow-sm transition-colors ${totalGlucosePercentage > 100 ? 'border-apple-red/40' : 'border-apple-blue/30'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("glucose", source.id, "name", e.target.value)}
@@ -223,7 +227,7 @@ const CarbMatrix = () => {
                     </span>
                   </div>
                 } />
-                <div className={`flex items-center gap-1 text-sm bg-card-border/30 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalGlucosePercentage > 100 ? 'border-red-200' : 'border-card-border'}`}>
+                <div className={`flex items-center gap-1 text-sm bg-card-border/30 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalGlucosePercentage > 100 ? 'border-apple-red/40' : 'border-card-border'}`}>
                   <input
                     type="number"
                     min="0"
@@ -234,15 +238,16 @@ const CarbMatrix = () => {
                       if (val < 0) val = 0; // Only block negative numbers
                       updateSource("glucose", source.id, "percentage", val);
                     }}
-                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalGlucosePercentage > 100 ? 'text-red-600' : 'text-text-primary'}`}
+                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalGlucosePercentage > 100 ? 'text-apple-red' : 'text-text-primary'}`}
                   />
-                  <span className={totalGlucosePercentage > 100 ? "text-red-400" : "text-text-secondary"}>%</span>
+                  <span className={totalGlucosePercentage > 100 ? "text-apple-red" : "text-text-secondary"}>%</span>
                 </div>
                 <button 
+                  aria-label={`Remove ${source.name}`}
                   onClick={() => removeSource("glucose", source.id)}
-                  className="text-text-secondary hover:text-red-500 p-2"
+                  className="text-text-secondary hover:text-apple-red p-2"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -272,7 +277,7 @@ const CarbMatrix = () => {
               </span>
               <button 
                 onClick={() => addSource("fructose")}
-                className="text-xs text-[#AF52DE] font-medium flex items-center gap-1 hover:underline"
+                className="text-xs text-apple-purple font-medium flex items-center gap-1 hover:underline"
               >
                 <Plus size={14} /> Add
               </button>
@@ -280,7 +285,7 @@ const CarbMatrix = () => {
           </div>
           <div className="space-y-3">
             {fructoseSources.map((source) => (
-              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-card shadow-sm transition-colors ${totalFructosePercentage > 100 ? 'border-red-200/60' : 'border-apple-blue/30/60'}`}>
+              <div key={source.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 border rounded-xl bg-card shadow-sm transition-colors ${totalFructosePercentage > 100 ? 'border-apple-red/40' : 'border-apple-purple/30'}`}>
                 <select 
                   value={source.name}
                   onChange={(e) => updateSource("fructose", source.id, "name", e.target.value)}
@@ -304,7 +309,7 @@ const CarbMatrix = () => {
                     </span>
                   </div>
                 } />
-                <div className={`flex items-center gap-1 text-sm bg-card-border/30 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalFructosePercentage > 100 ? 'border-red-200' : 'border-card-border'}`}>
+                <div className={`flex items-center gap-1 text-sm bg-card-border/30 px-3 py-2 rounded-lg border ml-1 transition-colors ${totalFructosePercentage > 100 ? 'border-apple-red/40' : 'border-card-border'}`}>
                   <input
                     type="number"
                     min="0"
@@ -315,15 +320,16 @@ const CarbMatrix = () => {
                       if (val < 0) val = 0; // Only block negative numbers
                       updateSource("fructose", source.id, "percentage", val);
                     }}
-                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalFructosePercentage > 100 ? 'text-red-600' : 'text-text-primary'}`}
+                    className={`w-12 bg-transparent outline-none font-semibold text-right transition-colors ${totalFructosePercentage > 100 ? 'text-apple-red' : 'text-text-primary'}`}
                   />
-                  <span className={totalFructosePercentage > 100 ? "text-red-400" : "text-text-secondary"}>%</span>
+                  <span className={totalFructosePercentage > 100 ? "text-apple-red" : "text-text-secondary"}>%</span>
                 </div>
                 <button 
+                  aria-label={`Remove ${source.name}`}
                   onClick={() => removeSource("fructose", source.id)}
-                  className="text-text-secondary hover:text-red-500 p-2"
+                  className="text-text-secondary hover:text-apple-red p-2"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
               </div>
             ))}

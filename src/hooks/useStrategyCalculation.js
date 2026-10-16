@@ -85,11 +85,11 @@ export function useStrategyCalculation({ durationHours }) {
         caffeineStrategy.intraRacePerHour = 75; // 50-100mg/hr flat
       }
       
-      // Toxicity failsafe check (max 6mg/kg in a 2hr window)
+      // High-dose check (max 6 mg/kg in a 2 h window); above this side effects become likely
       const maxSafeWindow = 6 * weightInKg;
       const proposedWindow = caffeineStrategy.preRace + (caffeineStrategy.intraRacePerHour * 2);
       if (proposedWindow > maxSafeWindow) {
-        caffeineStrategy.warning = "Toxicity threshold exceeded. Dose capped.";
+        caffeineStrategy.warning = "High dose: side effects likely, so the dose was capped.";
         caffeineStrategy.preRace = Math.min(caffeineStrategy.preRace, maxSafeWindow * 0.6);
         caffeineStrategy.intraRacePerHour = Math.min(caffeineStrategy.intraRacePerHour, (maxSafeWindow * 0.4) / 2);
       }

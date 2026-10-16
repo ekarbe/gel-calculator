@@ -16,8 +16,6 @@
 
 import { useCalculatorContext } from "../../context/CalculatorContext";
 import { ListRestart, ChevronRight, Download } from "lucide-react";
-import * as htmlToImage from "html-to-image";
-import { jsPDF } from "jspdf";
 import { sourceDataMap } from "../../constants/constants";
 import TooltipInfo from "../shared/TooltipInfo";
 import Card from "../shared/Card";
@@ -47,10 +45,13 @@ const FinalRecipe = () => {
   const handleDownloadPDF = async () => {
     if (!recipeRef.current) return;
     try {
-      const dataUrl = await htmlToImage.toPng(recipeRef.current, { 
-        cacheBust: true, 
-        pixelRatio: 2, 
-        backgroundColor: '#1C1C1E' 
+      // Loaded on demand: these two libraries are the largest part of the bundle.
+      const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
+      const isDark = document.documentElement.classList.contains("dark");
+      const dataUrl = await toPng(recipeRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
       });
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -131,7 +132,7 @@ const FinalRecipe = () => {
       recipeItems.push({
         label: source.name,
         value: `${getDisplayValue(source.amount)}mg`,
-        color: "bg-[#2dd4bf]",
+        color: "bg-apple-teal",
       });
     }
   });
@@ -148,13 +149,13 @@ const FinalRecipe = () => {
           <div className="flex bg-card-border/50 p-1 rounded-lg">
             <button
               onClick={() => setRecipeView("total")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-apple-blue text-text-primary shadow-sm" : "text-text-secondary"}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-apple-blue text-white shadow-sm" : "text-text-secondary"}`}
             >
               Total Batch
             </button>
             <button
               onClick={() => setRecipeView("perGel")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-apple-blue text-text-primary shadow-sm" : "text-text-secondary"}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-apple-blue text-white shadow-sm" : "text-text-secondary"}`}
             >
               Per Gel
             </button>
@@ -162,7 +163,7 @@ const FinalRecipe = () => {
         </div>
 
         {recipeView === "perGel" && (
-          <div className="mb-6 p-4 bg-apple-blue/10 rounded-xl border border-[#c7d2fe] flex items-center justify-between">
+          <div className="mb-6 p-4 bg-apple-blue/10 rounded-xl border border-apple-blue/30 flex items-center justify-between">
             <label className="text-sm font-semibold text-apple-blue">
               Gels per Hour
             </label>
@@ -170,7 +171,7 @@ const FinalRecipe = () => {
               type="number"
               value={gelsPerHour}
               onChange={(e) => setGelsPerHour(Number(e.target.value))}
-              className="w-20 px-3 py-1.5 text-sm font-bold text-text-primary text-right border border-card-border rounded-lg outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-20 px-3 py-1.5 text-sm font-bold text-text-primary text-right border border-card-border rounded-lg outline-none focus:ring-2 focus:ring-apple-blue"
             />
           </div>
         )}
@@ -216,7 +217,7 @@ const FinalRecipe = () => {
       <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem] flex flex-col gap-3">
         <button
           onClick={onOpenInstructions}
-          className="w-full bg-apple-blue hover:bg-[#4b49c6] text-white font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 group"
+          className="w-full bg-apple-blue hover:bg-apple-blue/90 text-white font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 group"
         >
           View Mixing Instructions{" "}
           <ChevronRight

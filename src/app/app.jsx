@@ -33,7 +33,7 @@ import Toast from "../components/shared/Toast";
 import VisualTimeline from "../components/feature/VisualTimeline";
 
 export default function App() {
-  const {} = useCalculatorContext();
+  const { toastMessage } = useCalculatorContext();
   const [activeMobileTab, setActiveMobileTab] = useState('inputs'); // 'inputs', 'recipe', 'analysis'
 
   return (
@@ -96,7 +96,7 @@ export default function App() {
       <MixingModal />
       <TemplateModal />
       <ShareModal />
-      <Toast />
+      <Toast message={toastMessage} visible={Boolean(toastMessage)} />
     </div>
   );
 }

@@ -22,9 +22,9 @@ import { ThemeToggle } from "../shared/ThemeToggle";
 const Header = () => {
   const { onOpenTemplates, onOpenShare } = useCalculatorContext();
   return (
-    <header className="bg-card border-b border-card-border px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-40">
+    <header className="bg-card backdrop-blur-xl border-b border-card-border px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-40">
       <div className="flex items-center gap-2">
-        <div className="bg-apple-blue text-text-primary p-1.5 rounded-lg flex items-center justify-center">
+        <div className="bg-apple-blue text-white p-1.5 rounded-lg flex items-center justify-center">
           <FuelBeakerIcon className="w-5 h-5" />
         </div>
         <h1 className="text-xl font-bold text-text-primary tracking-tight hidden sm:block">
@@ -42,7 +42,7 @@ const Header = () => {
         </button>
         <button
           onClick={onOpenShare}
-          className="flex items-center gap-2 text-sm font-medium text-text-primary bg-card hover:bg-slate-800 px-3 py-2 rounded-lg transition-colors shadow-sm"
+          className="flex items-center gap-2 text-sm font-medium text-text-primary bg-card hover:bg-card-border/50 border border-card-border px-3 py-2 rounded-lg transition-colors shadow-sm"
         >
           <Share2 size={16} />{" "}
           <span className="hidden sm:inline">Share Link</span>
