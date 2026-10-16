@@ -43,10 +43,10 @@ const TooltipInfo = ({ content }) => {
       onMouseLeave={() => setIsOpen(false)}
       onClick={() => setIsOpen(!isOpen)}
     >
-      <div className={`p-1.5 rounded-full transition-colors ${isOpen ? 'bg-apple-blue text-text-primary' : 'bg-card-border/50 text-text-secondary hover:bg-apple-blue hover:text-text-primary'}`}>
+      <div className={`p-1.5 rounded-full transition-colors ${isOpen ? 'bg-apple-blue text-white' : 'bg-card-border/50 text-text-secondary hover:bg-apple-blue hover:text-white'}`}>
         <Info size={14} />
       </div>
-      <div className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-[240px] sm:max-w-xs px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-xl pointer-events-none transition-all z-20 origin-bottom text-center ${isOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
+      <div className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-[240px] sm:max-w-xs px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-xl pointer-events-none transition-all z-20 origin-bottom text-center ${isOpen ? 'block' : 'hidden'}`}>
         {content}
         <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
       </div>

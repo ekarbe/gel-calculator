@@ -41,14 +41,15 @@ const MixingModal = () => {
           </h3>
           <button
             onClick={onClose}
-            className="p-2 text-text-secondary hover:text-text-secondary bg-card rounded-full border border-card-border"
+            aria-label="Close"
+            className="p-2 text-text-secondary hover:text-text-primary bg-card rounded-full border border-card-border"
           >
             <X size={18} />
           </button>
         </div>
         <div className="p-6 overflow-y-auto">
           <div className="text-sm text-text-primary leading-relaxed space-y-6">
-            <div className="bg-[#f8f9fc] p-4 rounded-xl border border-card-border">
+            <div className="bg-card-border/30 p-4 rounded-xl border border-card-border">
               <div className="font-semibold text-text-primary">
                 Total Carbs:{" "}
                 <span className="font-bold text-apple-blue">
@@ -106,7 +107,7 @@ const MixingModal = () => {
         <div className="p-4 border-t border-card-border bg-card">
           <button
             onClick={onClose}
-            className="w-full bg-apple-blue text-white font-semibold py-3 rounded-full hover:bg-[#4b49c6] transition-colors shadow-sm"
+            className="w-full bg-apple-blue text-white font-semibold py-3 rounded-full hover:bg-apple-blue/90 transition-colors shadow-sm"
           >
             Got It
           </button>

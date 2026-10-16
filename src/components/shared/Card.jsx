@@ -15,61 +15,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 
-"use client";
-import React, { useRef, useState } from "react";
-
-const Card = ({ children, className = "" }) => {
-  const cardRef = useRef(null);
-  const [position, setPosition] = useState({ x: 0, y: 0, rotateX: 0, rotateY: 0 });
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleMouseMove = (e) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // 3D Tilt calculation
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -5;
-    const rotateY = ((x - centerX) / centerX) * 5;
-
-    setPosition({ x, y, rotateX, rotateY });
-  };
-
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setPosition((prev) => ({ ...prev, rotateX: 0, rotateY: 0 }));
-  };
-
-  return (
-    <div
-      ref={cardRef}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={handleMouseLeave}
-      className={`glass-card p-8 sm:p-10 relative overflow-visible group ${className}`}
-      style={{
-        "--mouse-x": `${position.x}px`,
-        "--mouse-y": `${position.y}px`,
-        transform: isHovered 
-          ? `perspective(1000px) rotateX(${position.rotateX}deg) rotateY(${position.rotateY}deg) scale3d(1.01, 1.01, 1.01)` 
-          : `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`,
-        transition: isHovered 
-          ? "transform 0.1s ease-out" 
-          : "transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
-      }}
-    >
-      <div
-        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
-        style={{
-          background: `radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.1), transparent 40%)`,
-        }}
-      />
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
-};
+const Card = ({ children, className = "" }) => (
+  <div className={`glass-card p-6 sm:p-8 lg:p-10 relative ${className}`}>
+    {children}
+  </div>
+);
 
 export default Card;

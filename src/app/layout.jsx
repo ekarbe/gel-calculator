@@ -25,6 +25,7 @@ const inter = Inter({
 });
 
 export const metadata = {
+  metadataBase: new URL('https://eikekarbe.com'),
   title: 'Gel Calculator',
   description: 'Calculate your energy gel mixture',
   icons: [

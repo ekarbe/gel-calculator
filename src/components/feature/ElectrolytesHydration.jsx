@@ -19,6 +19,7 @@ import { useState } from "react";
 import { Droplet, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Card from "../shared/Card";
 import TooltipInfo from "../shared/TooltipInfo";
+import { getSodiumWarning } from "../../lib/safety";
 import { 
   electrolyteSourceOptions,
   SWEAT_RATES,
@@ -34,8 +35,10 @@ const ElectrolytesHydration = () => {
     electrolyteSources, addSource, updateSource, removeSource,
     isSweatRate, setIsSweatRate, sweatRate, setSweatRate, saltiness, setSaltiness,
     activeElectrolytes, setActiveElectrolytes, manualTargets, setManualTargets, targetAmountsPerHour,
-    autoFillElectrolytes
+    autoFillElectrolytes, strategy, sodiumCapped, uncappedSodiumPerHour
   } = useCalculatorContext();
+  const isSmart = strategy?.isSmartSuggestions;
+  const sodiumWarning = getSodiumWarning(targetAmountsPerHour?.Sodium || 0, { capped: sodiumCapped, uncapped: uncappedSodiumPerHour });
   return (
     <Card>
       <div className="flex items-center gap-3 mb-6">
@@ -51,7 +54,12 @@ const ElectrolytesHydration = () => {
           </p>
         </div>
       </div>
-      <div className="flex p-1 bg-card-border/50 rounded-xl mb-6">
+      {isSmart && (
+        <div className="mb-4 p-3 rounded-xl border border-apple-blue/30 bg-apple-blue/10 text-sm text-apple-blue">
+          Smart Physiology Suggestions is on: sweat rate and sodium targets come from your profile in Activity Basics.
+        </div>
+      )}
+      <div className={`flex p-1 bg-card-border/50 rounded-xl mb-6 ${isSmart ? 'opacity-50 pointer-events-none' : ''}`}>
         <button 
           onClick={() => setIsSweatRate(true)}
           className={`flex-1 py-2 text-sm rounded-lg transition-colors ${isSweatRate ? 'font-semibold bg-card text-text-primary shadow-sm border border-card-border/60' : 'font-medium text-text-secondary hover:text-text-primary'}`}>
@@ -63,7 +71,7 @@ const ElectrolytesHydration = () => {
           Manual Targets
         </button>
       </div>
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 ${!isSweatRate ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 ${!isSweatRate || isSmart ? 'opacity-50 pointer-events-none' : ''}`}>
         <div>
           <label className="block text-sm font-medium text-text-primary mb-1.5">
             Sweat Rate
@@ -81,8 +89,8 @@ const ElectrolytesHydration = () => {
         </div>
         <div>
           <label className="text-sm font-medium text-text-primary mb-1.5 flex items-center">
-            Target Sodium (mg/hr)
-            <TooltipInfo content="How much sodium you aim to replenish per hour. Standard endurance targets vary from 300mg/hr (light sweating) to 1000mg/hr+ (heavy/salty sweaters in heat)." />
+            Sweat Saltiness
+            <TooltipInfo content="How salty your sweat is (sodium per liter of sweat). Most athletes lose 0.5–1.5 g sodium per liter; white salt marks on dark clothing suggest saltier sweat." />
           </label>
           <select 
             value={saltiness}
@@ -101,15 +109,20 @@ const ElectrolytesHydration = () => {
       </div>
 
       <div className="pt-6 border-t border-card-border mb-8">
+        {sodiumWarning && (
+          <p className="mb-4 p-3 rounded-xl border border-apple-amber/30 bg-apple-amber/10 text-xs text-apple-amber">
+            {sodiumWarning}
+          </p>
+        )}
         <button 
           onClick={() => setIsTargetsExpanded(!isTargetsExpanded)}
           className="flex items-center justify-between w-full mb-4 group focus:outline-none"
         >
           <h3 className="font-semibold text-text-primary">Electrolyte Targets (per hour)</h3>
           {isTargetsExpanded ? (
-            <ChevronUp className="text-text-secondary group-hover:text-text-secondary transition-colors" size={20} />
+            <ChevronUp className="text-text-secondary group-hover:text-text-primary transition-colors" size={20} />
           ) : (
-            <ChevronDown className="text-text-secondary group-hover:text-text-secondary transition-colors" size={20} />
+            <ChevronDown className="text-text-secondary group-hover:text-text-primary transition-colors" size={20} />
           )}
         </button>
         {isTargetsExpanded && (
@@ -121,7 +134,7 @@ const ElectrolytesHydration = () => {
                     type="checkbox" 
                     checked={activeElectrolytes[electrolyte]}
                     onChange={(e) => setActiveElectrolytes(prev => ({ ...prev, [electrolyte]: e.target.checked }))}
-                    className="rounded text-apple-blue focus:ring-[#007AFF]"
+                    className="rounded text-apple-blue focus:ring-apple-blue"
                   />
                   <span className={`text-sm font-medium ${activeElectrolytes[electrolyte] ? 'text-text-primary' : 'text-text-secondary'}`}>{electrolyte}</span>
                 </label>
@@ -136,7 +149,7 @@ const ElectrolytesHydration = () => {
                       value={manualTargets[electrolyte] || 0}
                       onChange={(e) => setManualTargets(prev => ({ ...prev, [electrolyte]: Number(e.target.value) }))}
                       disabled={!activeElectrolytes[electrolyte]}
-                      className="w-20 px-2 py-1 text-sm border border-card-border rounded-lg text-right font-bold disabled:bg-card-border/30 disabled:text-text-secondary outline-none focus:ring-2 focus:ring-[#007AFF]"
+                      className="w-20 px-2 py-1 text-sm border border-card-border rounded-lg text-right font-bold disabled:bg-card-border/30 disabled:text-text-secondary outline-none focus:ring-2 focus:ring-apple-blue"
                     />
                     <span className="text-sm text-text-secondary w-6">mg</span>
                   </div>
@@ -192,12 +205,14 @@ const ElectrolytesHydration = () => {
                   type="number"
                   value={source.amount}
                   onChange={(e) => updateSource("electrolyte", source.id, "amount", Number(e.target.value))}
+                  aria-label={`${source.name} amount in mg for the whole activity`}
                   className="w-24 px-3 py-2 text-sm border border-card-border rounded-lg text-right font-bold"
                 />{" "}
-                <span className="text-sm">mg</span>
+                <span className="text-sm text-text-secondary">mg total</span>
                 <button 
+                  aria-label={`Remove ${source.name}`}
                   onClick={() => removeSource("electrolyte", source.id)}
-                  className="text-text-secondary hover:text-red-500 p-2"
+                  className="text-text-secondary hover:text-apple-red p-2"
                 >
                   <Trash2 size={16} />
                 </button>

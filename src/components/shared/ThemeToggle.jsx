@@ -1,32 +1,21 @@
 "use client";
 
-import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <div className="w-10 h-10" />;
-  }
-
+  // Icons switch via the `dark` class next-themes sets on <html>, so the button
+  // renders identically on the server and needs no mounted-state guard.
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-card-border/50 transition-colors"
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? (
-        <Moon size={20} className="text-apple-purple" />
-      ) : (
-        <Sun size={20} className="text-apple-amber" />
-      )}
+      <Sun size={20} className="text-apple-amber dark:hidden" />
+      <Moon size={20} className="hidden text-apple-purple dark:block" />
     </button>
   );
 }

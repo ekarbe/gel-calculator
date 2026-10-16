@@ -20,7 +20,7 @@ const Toast = ({ message, visible }) => (
   <div
     className={`fixed bottom-24 left-1/2 -translate-x-1/2 bg-card text-text-primary px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all duration-300 z-50 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"}`}
   >
-    <CheckCircle2 size={18} className="text-[#2dd4bf]" />
+    <CheckCircle2 size={18} className="text-apple-teal" />
     <span className="text-sm font-medium">{message}</span>
   </div>
 );

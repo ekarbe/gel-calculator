@@ -1,6 +1,10 @@
 "use client";
 import { useState, useMemo } from "react";
-import { electrolyteSourceOptions, SWEAT_RATES, ELECTROLYTE_CONCENTRATIONS, CONVERSION_FACTORS } from "../constants/constants";
+import { electrolyteSourceOptions, sourceDataByIdMap, SWEAT_RATES, ELECTROLYTE_CONCENTRATIONS, CONVERSION_FACTORS } from "../constants/constants";
+import { capSodiumTargets } from "../lib/safety";
+
+const SODIUM_CHLORIDE_ID = 31;
+const PREFERRED_SOURCE_IDS = { Sodium: 33, Potassium: 39, Magnesium: 34, Calcium: 35 };
 
 export function useElectrolyteCalculation({ durationHours, sweatRateOverride, isSmartSuggestions, sodiumConcentrationOverride }) {
   const [electrolyteSources, setElectrolyteSources] = useState([]);
@@ -27,11 +31,12 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride, is
     setElectrolyteSources((prev) => prev.filter((s) => s.id !== id));
   };
 
-  const targetAmountsPerHour = useMemo(() => {
+  const sodiumTarget = useMemo(() => {
     const targets = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
     if (!isSweatRate && !isSmartSuggestions) {
+      // Manual targets are the user's own numbers: never capped, only warned about.
       Object.keys(targets).forEach(key => targets[key] = activeElectrolytes[key] ? manualTargets[key] : 0);
-      return targets;
+      return { targets, sodiumCapped: false, uncappedSodium: targets.Sodium };
     }
 
     const rateL = isSmartSuggestions && sweatRateOverride !== undefined ? sweatRateOverride : (sweatRateOverride !== undefined ? sweatRateOverride : SWEAT_RATES[sweatRate]);
@@ -59,8 +64,10 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride, is
         targets[key] = rateL * conc_mmolL * conversion;
       }
     });
-    return targets;
+    return capSodiumTargets(targets);
   }, [isSweatRate, sweatRate, saltiness, manualTargets, activeElectrolytes, sweatRateOverride, isSmartSuggestions, sodiumConcentrationOverride]);
+
+  const targetAmountsPerHour = sodiumTarget.targets;
 
   const electrolyteAnalysis = useMemo(() => {
     const analysis = {};
@@ -120,7 +127,7 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride, is
     };
 
     if (totalTargets.Chloride > 0) {
-        const opt = electrolyteSourceOptions.find(o => o.label === 'Sodium Chloride (Table Salt)');
+        const opt = sourceDataByIdMap.get(SODIUM_CHLORIDE_ID);
         if (opt) {
           const clComp = opt.components.find(c => c.name === 'Chloride');
           const naComp = opt.components.find(c => c.name === 'Sodium');
@@ -131,26 +138,19 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride, is
           if (powder * naRatio > totalTargets.Sodium && totalTargets.Sodium > 0) {
               powder = totalTargets.Sodium / naRatio;
           }
-          addSourceAmount('Sodium Chloride (Table Salt)', powder);
+          addSourceAmount(opt.label, powder);
           totalTargets.Chloride -= powder * clRatio;
           totalTargets.Sodium -= powder * naRatio;
         }
     }
 
-    const preferred = {
-        Sodium: 'Sodium Citrate',
-        Potassium: 'Potassium Citrate',
-        Magnesium: 'Magnesium Citrate',
-        Calcium: 'Calcium Citrate'
-    };
-
     ['Sodium', 'Potassium', 'Magnesium', 'Calcium'].forEach(type => {
         if (totalTargets[type] > 0) {
-            const opt = electrolyteSourceOptions.find(o => o.label === preferred[type]);
+            const opt = sourceDataByIdMap.get(PREFERRED_SOURCE_IDS[type]);
             if (opt) {
                 const comp = opt.components.find(c => c.name === type);
                 const powder = totalTargets[type] / (comp.ratio * comp.absorptionRate);
-                addSourceAmount(preferred[type], powder);
+                addSourceAmount(opt.label, powder);
             }
         }
     });
@@ -166,6 +166,7 @@ export function useElectrolyteCalculation({ durationHours, sweatRateOverride, is
     activeElectrolytes, setActiveElectrolytes,
     manualTargets, setManualTargets,
     addElectrolyteSource, updateElectrolyteSource, removeElectrolyteSource,
-    targetAmountsPerHour, electrolyteAnalysis, autoFillElectrolytes
+    targetAmountsPerHour, electrolyteAnalysis, autoFillElectrolytes,
+    sodiumCapped: sodiumTarget.sodiumCapped, uncappedSodiumPerHour: sodiumTarget.uncappedSodium
   };
 }

@@ -151,11 +151,11 @@ export function useCarbCalculation({ durationHours, targetCarbs, glucosePartsOve
   }, [durationHours, targetCarbs, effectiveGlucoseParts, effectiveFructoseParts, glucoseSources, fructoseSources]);
 
   const totals = useMemo(() => {
+    const totalParts = effectiveGlucoseParts + effectiveFructoseParts;
+    if (totalParts <= 0) return { glucoseRatio: 0, fructoseRatio: 0 };
     return {
-      glucoseRatio: Math.round((effectiveGlucoseParts / (effectiveGlucoseParts + effectiveFructoseParts)) * 100),
-      fructoseRatio: Math.round((effectiveFructoseParts / (effectiveGlucoseParts + effectiveFructoseParts)) * 100),
-      malto: 0,
-      fructose: 0,
+      glucoseRatio: Math.round((effectiveGlucoseParts / totalParts) * 100),
+      fructoseRatio: Math.round((effectiveFructoseParts / totalParts) * 100),
     };
   }, [effectiveGlucoseParts, effectiveFructoseParts]);
 
