@@ -17,16 +17,45 @@
 "use client";
 
 import { useId } from "react";
-import { Settings } from "lucide-react";
+import { Settings, Scale, Droplets } from "lucide-react";
 import Card from "../shared/Card";
 import Why from "../shared/Why";
-import { fmt, formatRange, formatRatio, shareToRatio } from "../shared/format";
-import { usePlan } from "../../state/PlanProvider";
+import BodyMassLevel from "../shared/BodyMassLevel";
+import { aboutKcal, fmt, formatRange } from "../shared/format";
+import { bodyMassText } from "../shared/bodyMass";
+import { deliveredShare } from "../shared/recipe";
+import { usePlan, usePlanInputs } from "../../state/PlanProvider";
+import { useUi } from "../../state/UiProvider";
+import { formatRatio } from "../../domain/carbs";
 
 /** @typedef {{ summary: { key: string }, details?: { key: string }[], citations: string[] }} Explanation */
+/** @typedef {import('../../domain/plan').Plan} Plan */
 
 /** Text for an `auto` / `manual` input mode. */
 const MODE_LABELS = { auto: "Auto", manual: "Adjusted" };
+
+/** Name of each sweat source (`plan.sweat.source`). */
+const SWEAT_SOURCE_LABELS = Object.freeze({
+  test: "Sweat test",
+  estimate: "Heat-balance estimate",
+  preset: "Self-assessed preset",
+});
+
+/**
+ * How the sweat rate was found: the source's name, plus a note when a sweat
+ * test was chosen but the estimate is used, or when the test is scaled to
+ * the event conditions.
+ * @param {Plan} plan
+ * @param {string} requested  `inputs.sweat.source`.
+ * @returns {string}
+ */
+function sweatSourceText(plan, requested) {
+  const { source, calibration } = plan.sweat;
+  const name = SWEAT_SOURCE_LABELS[source] ?? source;
+  if (requested === "test" && source !== "test") return `${name} (no usable sweat test)`;
+  if (source === "test" && calibration?.applied) return `${name}, scaled to this event`;
+  return name;
+}
 
 /**
  * A ring that shows how far `progress` (a share, 0–1) goes toward a real
@@ -34,10 +63,24 @@ const MODE_LABELS = { auto: "Auto", manual: "Adjusted" };
  * Shares above 1 draw a full ring; the text says by how much it is over.
  *
  * @param {{ label: string, value: string, unit: string, progress: number|null, color: string,
- *   target: string, note?: string|null, mode?: string|null, range?: string|null, why?: Explanation|null,
- *   testId: string }} props
+ *   target: string, note?: string|null, extra?: string|null, mode?: string|null, range?: string|null,
+ *   why?: Explanation|null, testId: string }} props
+ *   `extra` is one more line of context under the note.
  */
-function Ring({ label, value, unit, progress, color, target, note = null, mode = null, range = null, why = null, testId }) {
+function Ring({
+  label,
+  value,
+  unit,
+  progress,
+  color,
+  target,
+  note = null,
+  extra = null,
+  mode = null,
+  range = null,
+  why = null,
+  testId,
+}) {
   const labelId = useId();
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
@@ -93,6 +136,7 @@ function Ring({ label, value, unit, progress, color, target, note = null, mode =
           {percent !== null && <span className="sr-only"> ({percent}%)</span>}
         </div>
         {note && <div className="text-[10px] font-semibold text-text-secondary mt-0.5">{note}</div>}
+        {extra && <div className="text-[10px] text-text-secondary mt-0.5">{extra}</div>}
         {(mode || range) && (
           <div className="text-[10px] text-text-secondary mt-0.5">
             {[mode, range && `range ${range}`].filter(Boolean).join(" · ")}
@@ -105,20 +149,85 @@ function Ring({ label, value, unit, progress, color, target, note = null, mode =
 }
 
 /**
+ * Sweat rate and body-mass projection: the rate with its uncertainty and
+ * source (`plan.sweat`), and the projected change over the event
+ * (`plan.hydration`): what the scale shows afterwards, the water lost or
+ * gained and its level.
+ * @param {{ plan: Plan }} props
+ */
+function SweatAndBodyMass({ plan }) {
+  const headingId = useId();
+  const { inputs } = usePlanInputs();
+  const { massUnit } = useUi();
+  const { sweat, hydration } = plan;
+  const bodyMass = bodyMassText(hydration, massUnit);
+
+  return (
+    <div
+      role="group"
+      aria-labelledby={headingId}
+      className="bg-card-border/20 rounded-2xl p-4 border border-card-border/50 mb-4 space-y-3"
+    >
+      <span id={headingId} className="flex items-center gap-2 text-sm font-bold text-text-secondary">
+        <Droplets size={16} aria-hidden="true" className="text-sky-500" /> Sweat and Body Mass
+      </span>
+      <dl className="space-y-2 text-xs">
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-secondary">Sweat rate</dt>
+          <dd data-testid="summary-sweat-rate" className="font-bold text-text-primary text-right">
+            {fmt(sweat.rateLph, 2)} ± {fmt(sweat.uncertaintyLph, 2)} L/h
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-secondary">Source</dt>
+          <dd data-testid="summary-sweat-source" className="font-semibold text-text-primary text-right">
+            {sweatSourceText(plan, inputs.sweat.source)}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-secondary">On the scale after the event</dt>
+          <dd data-testid="summary-body-mass" className="font-bold text-text-primary text-right">
+            {bodyMass.scale}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-secondary">{bodyMass.waterTerm}</dt>
+          <dd data-testid="summary-body-water" className="font-semibold text-text-primary text-right">
+            {bodyMass.water}
+          </dd>
+        </div>
+      </dl>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-1 text-xs text-text-secondary">
+          <Scale size={14} aria-hidden="true" /> Projected body-mass change
+        </span>
+        <BodyMassLevel level={bodyMass.level} testId="summary-body-mass-level" />
+      </div>
+      <Why why={sweat.why} label="Why this sweat rate?" />
+    </div>
+  );
+}
+
+/**
  * Activity summary: four rings that each compare something with a real
- * target, and the carb ratio bar.
+ * target, the sweat rate and body-mass projection, and the carb ratio bar.
  *
  * - Carbs: grams the recipe delivers (`plan.carbs.deliveredG`) vs the
- *   whole-activity carb target. The ring turns orange when the sources cannot
- *   make the ratio (`plan.carbs.sources.canAchieveRatio`), the same rule the
- *   recipe and source warnings use.
+ *   whole-activity carb target. The ring turns orange (and says how much is
+ *   missing) when the recipe delivers less, e.g. without a carb ingredient.
  * - Sodium: mg the salts deliver vs the sodium target (`plan.salts.comparison`).
  *   A manual target below the evidence range says so instead of "On target".
  * - Fluid: the effective intake in ml/h vs the plan's recommendation.
  * - Energy: kcal from the carbs the recipe delivers (`plan.energy.deliveredKcal`)
- *   vs the planned kcal.
- * - Ratio bar: the effective glucose:fructose ratio (glucose blue, fructose
- *   purple), the g/h on each pathway, its recommendation, range and explanation.
+ *   vs the planned kcal, and the energy the event burns
+ *   (`plan.energy.expenditureKcal`, from the heat-balance estimate).
+ * - Sweat and body mass: the sweat rate ± its uncertainty and its source
+ *   (`plan.sweat`), and the projected scale change and water loss or gain
+ *   with its level (`plan.hydration`). Mass in the display unit.
+ * - Ratio bar: the glucose:fructose ratio the recipe delivers (glucose blue,
+ *   fructose purple; the text names both), the g/h on each pathway, the
+ *   target when the recipe cannot reach it, the recommendation, range and
+ *   explanation.
  *
  * Every number comes from the plan; the card only formats it.
  */
@@ -126,10 +235,11 @@ export default function BalanceAnalysis() {
   const plan = usePlan();
   const ratioLabelId = useId();
 
-  // Carbs: what the recipe actually contains. An infeasible mix has no items.
+  // Carbs: what the recipe actually contains.
   const carbTarget = plan.carbs.totalG;
   const carbDelivered = plan.carbs.deliveredG;
-  const carbShort = carbTarget > 0 && !plan.carbs.sources.canAchieveRatio;
+  const carbShort = carbTarget > 0 && Math.round(carbDelivered) < Math.round(carbTarget);
+  const gPerHourText = `${fmt(plan.carbs.gPerHour)} g/h`;
 
   // Sodium: delivered vs target from the salts comparison.
   const sodiumRow = plan.salts.comparison.Sodium ?? {
@@ -152,13 +262,17 @@ export default function BalanceAnalysis() {
   // Energy: kcal from the carbs in the recipe vs the planned kcal.
   const kcalPlanned = plan.energy.kcal;
   const kcalDelivered = plan.energy.deliveredKcal;
+  const kcalBurned = plan.energy.expenditureKcal;
 
-  // Ratio bar
+  // Ratio bar: the share the recipe delivers.
   const ratio = plan.carbs.ratio;
-  const parts = ratio.value.glucose + ratio.value.fructose;
-  const fructoseShare = parts > 0 ? ratio.share : 0;
-  const glucoseShare = parts > 0 ? 1 - ratio.share : 0;
+  const share = deliveredShare(plan);
+  const fructoseShare = share ?? 0;
+  const glucoseShare = share === null ? 0 : 1 - share;
+  const deliveredText = share === null ? "0:0" : formatRatio({ glucose: glucoseShare, fructose: fructoseShare });
+  const targetText = formatRatio(ratio.value);
   const recommendedRatio = ratio.recommended;
+  const shareText = (s) => formatRatio({ glucose: 1 - s, fructose: s });
 
   return (
     <Card className="h-full">
@@ -176,7 +290,7 @@ export default function BalanceAnalysis() {
           progress={carbTarget > 0 ? carbDelivered / carbTarget : null}
           color={carbShort ? "text-orange-400" : "text-apple-blue"}
           target={carbTarget > 0 ? `of ${fmt(carbTarget)} g target` : "No carb target"}
-          note={`${fmt(plan.carbs.gPerHour)} g/h`}
+          note={carbShort ? `${fmt(carbTarget - carbDelivered)} g short · ${gPerHourText}` : gPerHourText}
           mode={MODE_LABELS[plan.carbs.mode]}
           range={formatRange(plan.carbs.recommended.range, "g/h")}
           why={plan.carbs.recommended.why}
@@ -216,8 +330,11 @@ export default function BalanceAnalysis() {
           color={carbShort ? "text-orange-400" : "text-apple-amber"}
           target={kcalPlanned > 0 ? `of ${fmt(kcalPlanned)} kcal planned` : "No energy target"}
           note="From carbohydrates"
+          extra={kcalBurned > 0 ? `You burn about ${aboutKcal(kcalBurned)} kcal` : null}
         />
       </div>
+
+      <SweatAndBodyMass plan={plan} />
 
       <div
         role="group"
@@ -229,7 +346,7 @@ export default function BalanceAnalysis() {
             Carb Ratio
           </span>
           <span data-testid="ratio-value" className="text-sm font-black text-text-primary">
-            {formatRatio(ratio.value)}
+            {deliveredText}
           </span>
         </div>
         <div
@@ -244,9 +361,14 @@ export default function BalanceAnalysis() {
           <span>Glucose: {fmt(ratio.glucoseGPerHour)} g/h</span>
           <span>Fructose: {fmt(ratio.fructoseGPerHour)} g/h</span>
         </div>
+        {share !== null && deliveredText !== targetText && (
+          <p data-testid="ratio-target" className="mt-2 text-xs font-semibold text-text-primary">
+            Target {targetText}: the recipe delivers {deliveredText}.
+          </p>
+        )}
         <p className="mt-2 text-xs text-text-secondary">
           {MODE_LABELS[ratio.mode]} · recommended {formatRatio(recommendedRatio.ratio)} · range{" "}
-          {shareToRatio(recommendedRatio.minShare)}–{shareToRatio(recommendedRatio.maxShare)}
+          {shareText(recommendedRatio.minShare)}–{shareText(recommendedRatio.maxShare)}
         </p>
         <Why why={recommendedRatio.why} className="mt-1" />
       </div>

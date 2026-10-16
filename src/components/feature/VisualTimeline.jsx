@@ -17,11 +17,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Clock, Droplets, Zap, Coffee, CheckCircle2, List, Table, Info } from "lucide-react";
+import { Clock, CupSoda, Droplets, Zap, Coffee, CheckCircle2, List, Table, Info } from "lucide-react";
 import Card from "../shared/Card";
 import Warnings from "../shared/Warnings";
 import { CitationLinks } from "../shared/Why";
 import { fmt } from "../shared/format";
+import { servingsText } from "../shared/recipe";
 import { usePlan } from "../../state/PlanProvider";
 import { formatElapsed } from "../../domain/schedule";
 import { t } from "../../i18n";
@@ -29,14 +30,16 @@ import { t } from "../../i18n";
 /** @typedef {import('../../domain/schedule').ScheduleEvent} ScheduleEvent */
 
 /**
- * Look of each schedule event type: the ring color and the icon. Bicarbonate
- * uses the "Na" text badge instead of an icon.
+ * Look of each schedule event type: the ring color and the icon. Every type
+ * has its own icon shape (bicarbonate uses the "Na" text badge), and every
+ * event shows its title, so the type never depends on color alone.
  */
 const EVENT_STYLES = {
   bicarb: { color: "text-apple-purple border-apple-purple/40", Icon: null },
   caffeine: { color: "text-apple-amber border-apple-amber/40", Icon: Coffee },
   start: { color: "text-text-secondary border-card-border", Icon: Clock },
   fuel: { color: "text-apple-blue border-apple-blue/40", Icon: Zap },
+  drink: { color: "text-apple-teal border-apple-teal/40", Icon: CupSoda },
   hydration: { color: "text-apple-teal border-apple-teal/40", Icon: Droplets },
   finish: { color: "text-apple-green border-apple-green/40", Icon: CheckCircle2 },
 };
@@ -64,14 +67,33 @@ function EventIcon({ type }) {
 }
 
 /**
+ * What the drink sips are drunk from, for plans whose schedule lists drink
+ * events: the recipe's drink section in the words of the recipe card
+ * (`servingsText`: "4 bottles of 600 ml", with the bottle size when the
+ * bottles are not filled to the top). `null` when the schedule has no drink
+ * event or the recipe has no bottles.
+ *
+ * @param {import('../../domain/plan').Plan} plan
+ * @returns {string|null}
+ */
+function bottleNote(plan) {
+  const drink = plan.recipe.sections.find((section) => section.kind === "drink");
+  if (!drink || !(drink.servings > 0) || !plan.schedule.some((event) => event.type === "drink")) return null;
+  return `Drink from ${servingsText(drink, plan.inputs.format.bottleMl)}, one after the other. Each sip lists the bottle it comes from.`;
+}
+
+/**
  * Race-day schedule: every event of `plan.schedule` (bicarbonate, pre-race
- * caffeine, start, each gel with its fluid and caffeine, hydration, finish)
- * as a timeline or a table, followed by the fluid advice.
+ * caffeine, start, each gel with its fluid and caffeine, drink sips,
+ * hydration, finish) as a timeline or a table, followed by the fluid advice.
  *
  * Times use `formatElapsed` (`T−1h 30m`, `T+20m`). Event titles and
- * descriptions are domain messages rendered with `t()`. The fluid advice shows
- * the fluid recommendation's explanation (or, for a manual target, the chosen
- * and recommended values), the drink-to-thirst hint when it applies, the
+ * descriptions are domain messages rendered with `t()`. When the drink
+ * carries the fluid (a drink plan, or gels without fluid), the schedule lists
+ * a drink sip every 20 min with the bottle it comes from, and a note above
+ * the list says how many bottles there are. The fluid advice shows the fluid
+ * recommendation's explanation (or, for a manual target, the chosen and
+ * recommended values), the drink-to-thirst hint when it applies, the
  * citations and any fluid warnings. It is hidden when no fluid is planned.
  */
 const VisualTimeline = () => {
@@ -84,6 +106,8 @@ const VisualTimeline = () => {
   const { fluid } = plan;
   const fluidRec = fluid.recommended;
   const fluidDetails = Array.isArray(fluidRec.why?.details) ? fluidRec.why.details : [];
+
+  const bottles = bottleNote(plan);
 
   const rows = events.map((event, index) => ({
     key: `${event.type}-${event.timeMin}-${index}`,
@@ -130,6 +154,13 @@ const VisualTimeline = () => {
             </button>
           </div>
         </div>
+
+        {bottles && (
+          <p data-testid="bottle-note" className="text-sm text-text-secondary flex gap-2 items-start mb-2">
+            <CupSoda size={16} className="mt-0.5 shrink-0 text-apple-teal" aria-hidden="true" />
+            <span>{bottles}</span>
+          </p>
+        )}
 
         {viewMode === "timeline" ? (
           <ol aria-label="Schedule" className="relative border-l-2 border-card-border ml-4 pl-6 space-y-8 mt-4">

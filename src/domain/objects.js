@@ -30,3 +30,36 @@ export function isPlainObject(value) {
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
+
+/**
+ * Recursively freezes plain objects and arrays.
+ * @template T
+ * @param {T} value
+ * @returns {T} The same value, frozen.
+ */
+export function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/**
+ * Deep-merges `partial` onto `base`: plain objects merge key by key, anything
+ * else (arrays included) replaces. A `partial` that is not a plain object
+ * leaves `base` unchanged. An own `__proto__` key (from JSON) is skipped, so
+ * it never sets the prototype. Neither argument is changed.
+ * @param {unknown} base
+ * @param {unknown} partial
+ * @returns {unknown}
+ */
+export function mergeDeep(base, partial) {
+  if (!isPlainObject(partial)) return base;
+  const out = isPlainObject(base) ? { ...base } : {};
+  for (const [key, value] of Object.entries(partial)) {
+    if (key === '__proto__') continue;
+    out[key] = isPlainObject(value) && isPlainObject(out[key]) ? mergeDeep(out[key], value) : value;
+  }
+  return out;
+}

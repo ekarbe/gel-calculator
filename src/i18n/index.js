@@ -26,6 +26,7 @@
 import bicarb from './en/bicarb';
 import caffeine from './en/caffeine';
 import carbs from './en/carbs';
+import concentration from './en/concentration';
 import electrolytes from './en/electrolytes';
 import fluid from './en/fluid';
 import plan from './en/plan';
@@ -44,6 +45,7 @@ export const CATALOGS = Object.freeze({
   bicarb,
   caffeine,
   carbs,
+  concentration,
   electrolytes,
   fluid,
   plan,
@@ -70,14 +72,21 @@ export function hasMessage(key) {
   return typeof key === 'string' && Object.hasOwn(MESSAGES, key);
 }
 
+/** The minus sign every signed number in the app uses (U+2212), not a hyphen. */
+const MINUS = '\u2212';
+
 /**
  * Formats one placeholder value: numbers with `toLocaleString('en-US')`
- * (thousands separators, up to 3 decimals), everything else with `String`.
+ * (thousands separators, up to 3 decimals) and a real minus sign ("−1.14")
+ * for negative values, everything else with `String`. A value that reads as
+ * zero has no sign.
  * @param {unknown} value
  * @returns {string}
  */
 function formatParam(value) {
-  return typeof value === 'number' ? value.toLocaleString('en-US') : String(value);
+  if (typeof value !== 'number') return String(value);
+  const text = Math.abs(value).toLocaleString('en-US');
+  return value < 0 && /[1-9]/.test(text) ? `${MINUS}${text}` : text;
 }
 
 /**
@@ -98,8 +107,8 @@ function reportMissing(key) {
  * Accepts a message descriptor (`{ key, params }`, as the domain modules
  * return) or a key string. `params` passed as the second argument are merged
  * over the descriptor's own params. `{name}` placeholders are replaced by the
- * matching param; numbers are formatted with `toLocaleString('en-US')`,
- * strings are used as they are. Placeholders without a param (or with a
+ * matching param; numbers are formatted with `toLocaleString('en-US')` and
+ * a real minus sign, strings are used as they are. Placeholders without a param (or with a
  * `null`/`undefined` param) stay as written.
  *
  * A key that is not in the catalog returns the key itself and logs a warning

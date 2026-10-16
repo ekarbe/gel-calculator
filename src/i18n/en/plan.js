@@ -20,15 +20,14 @@
  * @type {Record<string, string>}
  */
 const plan = {
-  // computePlan: the carb sources cannot deliver the chosen ratio
-  'plan.warn.carbSourcesInfeasible':
-    'Your carb sources cannot make a {glucose}:{fructose} glucose to fructose mix. Add a source for the missing sugar or change the ratio.',
-  // computePlan: auto ratio switched to an end of the allowed range the sources can make
-  'plan.warn.ratioSubstituted':
-    'Your carb sources cannot make the recommended {recommended} glucose to fructose mix. The plan uses {used}, which is still in the allowed range at {gPerHour} g/h.',
   // computePlan: a manual sodium target below the evidence range
   'plan.warn.sodiumBelowRange':
     'Your sodium target of {mgPerHour} mg/h is below the {lo}–{hi} mg/h range for this event.',
+  // computePlan: a gel or both plan without gels puts what the gels would hold in the drink
+  'plan.warn.noGelsCarbsInDrink':
+    'No gels are planned, so the recipe puts all the carbs in your drink. Set gels per hour above 0 to make gels.',
+  'plan.warn.noGelsSaltsInDrink':
+    'There are no carbs to put in gels, so the recipe puts the salts in your drink.',
 };
 
 export default plan;

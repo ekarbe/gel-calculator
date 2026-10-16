@@ -31,13 +31,14 @@ export const TEMP_UNITS = Object.freeze(["C", "F"]);
 export const MIXING_MODAL = "mixing";
 export const TEMPLATE_MODAL = "templates";
 export const SHARE_MODAL = "share";
+export const RECIPES_MODAL = "recipes";
 
 /**
  * UI state that is not part of the plan inputs (and is not shared in links).
  *
  * @typedef {Object} UiApi
  * @property {string|null} modal  Name of the open modal ({@link MIXING_MODAL}, {@link TEMPLATE_MODAL},
- *   {@link SHARE_MODAL}) or `null`.
+ *   {@link SHARE_MODAL}, {@link RECIPES_MODAL}) or `null`.
  * @property {(name: string) => void} openModal  Opens a modal; opening the share modal also resets
  *   `shareView` to `'menu'`.
  * @property {() => void} closeModal
@@ -47,21 +48,20 @@ export const SHARE_MODAL = "share";
  * @property {string} toastMessage  Text of the visible toast; `''` when hidden.
  * @property {(message: string, durationMs?: number) => void} showToast  Shows a toast that hides itself after `durationMs`.
  * @property {() => void} hideToast
- * @property {import('react').RefObject<HTMLElement|null>} recipeRef  Attach to the recipe card (the PDF export captures it).
  * @property {'kg'|'lb'} massUnit
  * @property {(unit: 'kg'|'lb') => void} setMassUnit  Other values are ignored.
  * @property {'C'|'F'} tempUnit
  * @property {(unit: 'C'|'F') => void} setTempUnit  Other values are ignored.
  */
 
-/** UI state: modals, share view, toast, recipe ref and display units. */
+/** UI state: modals, share view, toast and display units. */
 export const UiContext = createContext(/** @type {UiApi|null} */ (null));
 
 /**
  * Holds UI state that the plan does not need: which modal is open, the share
- * modal's view, the toast (with its timer), a ref to the recipe card, and the
- * display units for mass and temperature. Unit conversion happens in the UI;
- * the plan inputs always use kg and °C.
+ * modal's view, the toast (with its timer) and the display units for mass and
+ * temperature. Unit conversion happens in the UI; the plan inputs always use
+ * kg and °C.
  *
  * @param {{ children?: import('react').ReactNode }} props
  */
@@ -71,7 +71,6 @@ export function UiProvider({ children }) {
   const [toastMessage, setToastMessage] = useState("");
   const [massUnit, setMassUnitState] = useState(/** @type {'kg'|'lb'} */ ("kg"));
   const [tempUnit, setTempUnitState] = useState(/** @type {'C'|'F'} */ ("C"));
-  const recipeRef = useRef(/** @type {HTMLElement|null} */ (null));
   const toastTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|undefined} */ (undefined));
 
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
@@ -112,7 +111,6 @@ export function UiProvider({ children }) {
       toastMessage,
       showToast,
       hideToast,
-      recipeRef,
       massUnit,
       setMassUnit,
       tempUnit,

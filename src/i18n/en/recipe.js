@@ -16,12 +16,20 @@
 
 /**
  * English text for message keys returned by `src/domain/recipe.js`
- * (`buildRecipeItems`). Placeholders use `{name}` syntax.
+ * (`buildRecipe`). Placeholders use `{name}` syntax.
  * @type {Record<string, string>}
  */
 const recipe = {
-  // Label of a caffeine recipe item: tablets added to one specific gel
-  'recipe.caffeineTablet': 'Caffeine for gel {gel}: {tablets} × {tabletMg} mg tablet',
+  // Label of a caffeine line: tablets added to one specific gel (the amount shows the tablet count)
+  'recipe.caffeineForGel': 'Caffeine for gel {gel} ({tabletMg} mg tablets)',
+  // Water line of a gel batch: added to the whole batch to dissolve the powders
+  'recipe.water.gel': 'Warm water',
+  // Water line of a drink: each bottle is topped up to its mark
+  'recipe.water.drink': 'Water, to fill each bottle to {ml} ml',
+  // Heading of the per-serving column of a gel section
+  'recipe.serving.gel': 'Per gel',
+  // Heading of the per-serving column of a drink section
+  'recipe.serving.bottle': 'Per bottle',
 };
 
 export default recipe;

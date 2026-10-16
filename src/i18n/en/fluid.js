@@ -15,7 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 /**
- * English text for message keys returned by `src/domain/hydration.js`.
+ * English text for message keys returned by `src/domain/hydration.js`
+ * (`recommendFluid`, `fluidWarnings`, `projectBodyMass`).
  * Placeholders use `{name}` syntax.
  * @type {Record<string, string>}
  */
@@ -31,6 +32,14 @@ const fluid = {
     'You plan to drink {mlPerHour} ml/h. That is more than you sweat ({sweatMlPerHour} ml/h). Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less than you sweat.',
   'fluid.warn.aboveCeiling':
     'You plan to drink {mlPerHour} ml/h. Guidelines suggest up to {maxMlPerHour} ml/h. Larger amounts can upset your stomach.',
+
+  // projectBodyMass
+  'fluid.warn.projectedGain':
+    'With this plan you would drink about {gainL} L more than you sweat. Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less.',
+  'fluid.warn.deficitHigh':
+    'With this plan you would lose about {deficitL} L of water, {deficitPct}% of your body mass. Losses above {limitPct}% hurt performance and heat tolerance. Drink more if your stomach allows it, and plan your refills.',
+  'fluid.warn.deficitMild':
+    'With this plan you would lose about {deficitL} L of water, {deficitPct}% of your body mass. Losses above {limitPct}% can start to hurt performance, mostly in the heat.',
 };
 
 export default fluid;

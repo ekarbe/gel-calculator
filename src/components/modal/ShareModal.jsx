@@ -20,56 +20,35 @@ import { useEffect, useId, useRef } from "react";
 import { X, Link2, ImageIcon, Download, Copy } from "lucide-react";
 import FuelBeakerIcon from "../shared/FuelBeakerIcon";
 import Warnings from "../shared/Warnings";
-import { fmt, formatRatio } from "../shared/format";
-import { carbRecipeWarnings, recipeItemLabel } from "../shared/recipe";
+import { fmt } from "../shared/format";
+import { copyText, shareUrl } from "../shared/share";
+import {
+  SECTION_TITLES,
+  amountsCaption,
+  deliveredRatioText,
+  itemAmount,
+  osmolalityDisplay,
+  recipeItemLabel,
+  recipeWarnings,
+  servingsText,
+} from "../shared/recipe";
 import { usePlan, usePlanInputs } from "../../state/PlanProvider";
 import { useUi, SHARE_MODAL } from "../../state/UiProvider";
-import { encodeShareState } from "../../state/shareCodec";
+import { t } from "../../i18n";
 
-/** Text color of a line on the share image, by item kind. */
-const LINE_CLASSES = { salt: "text-apple-teal", caffeine: "text-apple-amber-ink" };
-
-/**
- * The current page URL with the inputs in the `s` parameter (share link v3).
- * @param {unknown} inputs
- * @returns {string}
- */
-export function buildShareUrl(inputs) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("s", encodeShareState(inputs));
-  return url.toString();
-}
+/** @typedef {import('../../domain/recipe').RecipeSection} RecipeSection */
 
 /**
- * Copies text to the clipboard. Uses the Clipboard API when the browser has
- * it, otherwise a hidden textarea with `execCommand('copy')`.
- * @param {string} text
- * @returns {Promise<boolean>} Whether the text was copied.
+ * Text color of a line on the share image, by item kind. Teal and blue are
+ * only an accent: the label names every line. Each color reads at 4:1 or
+ * more on the white card in light mode and on the dark card (the bright
+ * teal is only about 1.9:1 on white, so light mode uses teal-700).
  */
-async function copyText(text) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Permission denied or not focused: try the fallback below.
-    }
-  }
-  const area = document.createElement("textarea");
-  area.value = text;
-  area.setAttribute("readonly", "");
-  area.style.position = "absolute";
-  area.style.left = "-999999px";
-  document.body.append(area);
-  area.select();
-  try {
-    return typeof document.execCommand === "function" && document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    area.remove();
-  }
-}
+const LINE_CLASSES = Object.freeze({
+  salt: "text-teal-700 dark:text-apple-teal",
+  water: "text-sky-600 dark:text-sky-400",
+  caffeine: "text-apple-amber-ink",
+});
 
 /**
  * One headline number on the share image.
@@ -85,15 +64,54 @@ function Stat({ label, value, align = "text-left", accent = false }) {
 }
 
 /**
+ * One recipe section on the share image: its title and servings, the lines
+ * in the chosen view and the osmolality with its tonicity band.
+ * @param {{ section: RecipeSection, view: 'total'|'perServing', bottleMl: number }} props
+ */
+function ImageSection({ section, view, bottleMl }) {
+  const headingId = useId();
+  const title = SECTION_TITLES[section.kind] ?? section.kind;
+  const osmo = osmolalityDisplay(section.osmolality, section.kind);
+  return (
+    <section aria-labelledby={headingId} data-testid={`share-section-${section.kind}`} className="space-y-2">
+      <div className="flex justify-between items-baseline gap-2">
+        <h2 id={headingId} className="text-sm font-bold">
+          {title}
+        </h2>
+        <span className="text-[11px] font-semibold text-text-secondary">{servingsText(section, bottleMl)}</span>
+      </div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+        {amountsCaption(section, view)}
+      </div>
+      <ul aria-label={`${title} recipe`} className="space-y-2">
+        {section.items.map((item) => (
+          <li key={item.key} className={`flex justify-between gap-3 ${LINE_CLASSES[item.kind] ?? ""}`}>
+            <span>{recipeItemLabel(item)}</span>
+            <span className="font-semibold whitespace-nowrap">{itemAmount(item, view)}</span>
+          </li>
+        ))}
+      </ul>
+      {osmo && (
+        <p data-testid="share-osmolality" className="text-[11px] text-text-secondary">
+          {osmo.text}
+          {osmo.likelyHigher ? ", likely higher" : ""} · {t(`concentration.tonicity.${osmo.tonicity}`)}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
  * Share modal: copy a share link or make a recipe image.
  *
- * "Copy Link" encodes the current inputs with share codec v3
+ * "Copy Link" encodes the current inputs with share codec v4
  * (`encodeShareState`) into the `?s=` parameter and copies the URL. The image
- * shows the plan's headline numbers (total carbs as the recipe delivers them),
- * the same recipe lines as the recipe card (`plan.recipe.items`) and, when the
- * recipe has no carbs, the plan's warning that says why. "Download" renders it
- * to PNG with the lazily loaded `html-to-image`. Open with
- * `useUi().openModal(SHARE_MODAL)`, which also starts on the menu view.
+ * shows the plan's headline numbers (total carbs as the recipe delivers them,
+ * the ratio the recipe delivers), one block per recipe section
+ * (`plan.recipe.sections`: gels and/or drink, in the recipe card's view, with
+ * the osmolality and tonicity band) and the recipe warnings that explain its
+ * carbs. "Download" renders it to PNG with the lazily loaded `html-to-image`.
+ * Open with `useUi().openModal(SHARE_MODAL)`, which also starts on the menu view.
  */
 export default function ShareModal() {
   const plan = usePlan();
@@ -118,7 +136,7 @@ export default function ShareModal() {
   const handleCopyLink = async () => {
     let copied = false;
     try {
-      copied = await copyText(buildShareUrl(inputs));
+      copied = await copyText(shareUrl(inputs));
     } catch {
       copied = false;
     }
@@ -157,13 +175,9 @@ export default function ShareModal() {
   };
 
   const view = inputs.format.view;
-  const carbWarnings = carbRecipeWarnings(plan);
-  const gelCount = plan.gels.count;
-  const gelText = `${fmt(gelCount)} ${gelCount === 1 ? "gel" : "gels"}`;
-  const viewCaption =
-    view === "perGel" && gelCount > 0
-      ? `Per gel · ${gelText} in total`
-      : `Total batch · ${fmt(plan.durationH, 1)} h · ${gelText}`;
+  const warnings = recipeWarnings(plan);
+  const sections = plan.recipe.sections.filter((section) => section.items.length > 0);
+  const viewCaption = view === "perServing" ? "Per serving" : `Total · ${fmt(plan.durationH, 1)} h`;
   const perHour = [
     `Sodium ${fmt(plan.sodium.mgPerHour)} mg/h`,
     `Fluid ${fmt(plan.fluid.mlPerHour)} ml/h`,
@@ -244,19 +258,24 @@ export default function ShareModal() {
                 <div className="flex justify-between items-end gap-2 mb-2">
                   <Stat label="TOTAL CARBS" value={`${fmt(plan.carbs.deliveredG)}g`} />
                   <Stat label="CARBS/HR" value={`${fmt(plan.carbs.gPerHour)}g`} align="text-center" />
-                  <Stat label="RATIO" value={formatRatio(plan.carbs.ratio.value)} align="text-right" accent />
+                  <Stat label="RATIO" value={deliveredRatioText(plan)} align="text-right" accent />
                 </div>
                 <p className="text-xs text-text-secondary mb-8 pb-6 border-b border-card-border/50">{perHour}</p>
-                <Warnings warnings={carbWarnings} showCitations={false} className="mb-4" />
-                <div className="text-xs font-semibold text-text-secondary mb-3">{viewCaption}</div>
-                <ul aria-label="Recipe" className="space-y-4 flex-1">
-                  {plan.recipe.items.map((item) => (
-                    <li key={item.key} className={`flex justify-between gap-3 ${LINE_CLASSES[item.kind] ?? ""}`}>
-                      <span>{recipeItemLabel(item)}</span>
-                      <span className="font-semibold whitespace-nowrap">{item.display}</span>
-                    </li>
+                <Warnings warnings={warnings} showCitations={false} className="mb-4" />
+                <div data-testid="share-view-caption" className="text-xs font-semibold text-text-secondary mb-3">
+                  {viewCaption}
+                </div>
+                <div className="space-y-6 flex-1">
+                  {sections.map((section) => (
+                    <ImageSection
+                      key={section.kind}
+                      section={section}
+                      view={view}
+                      bottleMl={inputs.format.bottleMl}
+                    />
                   ))}
-                </ul>
+                  {sections.length === 0 && <p className="text-xs text-text-secondary">Nothing to mix for this plan.</p>}
+                </div>
                 <div className="mt-8 pt-4 text-[10px] text-text-secondary text-center border-t border-card-border">
                   eikekarbe.com/gel-calculator
                 </div>

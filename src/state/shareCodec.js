@@ -15,19 +15,52 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 /**
- * Share links, version 3. A link stores only the inputs that differ from
- * `DEFAULT_INPUTS`, as JSON `{ v: 3, ...diff }` encoded with base64url
+ * Share links, version 4. A link stores only the inputs that differ from
+ * `DEFAULT_INPUTS`, as JSON `{ v: 4, ...diff }` encoded with base64url
  * (UTF-8, no padding). Decoding runs the payload through `normalizeInputs`,
- * so a link can never put invalid values into the app. Links from other
- * versions (the v2 format used before the inputs schema changed) decode to
- * `null`.
+ * so a link can never put invalid values into the app.
+ *
+ * Version 3 links (inputs schema v3, Phase 1) still decode: a v3 payload
+ * stores its differences from the v3 defaults, so it is merged onto those
+ * first and then migrated by `normalizeInputs` (source lists → ingredients,
+ * `perGel` → `perServing`, `sex` dropped, manual salt `id` → `ref`). Other
+ * versions (the v2 format used before Phase 1) decode to `null`.
  */
 
 import { DEFAULT_INPUTS, normalizeInputs } from '../domain/plan';
-import { isPlainObject } from '../domain/objects';
+import { deepFreeze, isPlainObject, mergeDeep } from '../domain/objects';
 
 /** Version written into every payload; bump it when the inputs schema changes shape. */
-export const SHARE_VERSION = 3;
+export const SHARE_VERSION = 4;
+
+/** Older versions that still decode. */
+const LEGACY_VERSIONS = Object.freeze([3]);
+
+/**
+ * The v3 default inputs: what a v3 link left out. Kept here, frozen, so v3
+ * links keep their meaning however the v4 defaults change.
+ */
+const V3_DEFAULT_INPUTS = deepFreeze({
+  event: { durationMin: 180, intensity: 'moderate', highCarb: false },
+  athlete: { massKg: 70, sex: 'unspecified' },
+  environment: { tempC: 20, humidity: 50 },
+  sweat: { source: 'preset', rateIndex: 2, saltinessIndex: 2 },
+  carbs: {
+    mode: 'auto',
+    manualGPerHour: 60,
+    ratioMode: 'auto',
+    manualRatio: { glucose: 1, fructose: 0.8 },
+    glucoseSources: [{ id: 3, percentage: 100 }],
+    fructoseSources: [{ id: 11, percentage: 100 }],
+  },
+  sodium: { mode: 'auto', manualMgPerHour: 500 },
+  extras: { potassium: false, magnesium: false, calcium: false },
+  salts: { mode: 'auto', sodiumSalt: 'table', manual: [] },
+  fluid: { mode: 'auto', manualMlPerHour: 500 },
+  format: { gelsPerHour: 3, view: 'total' },
+  caffeine: { enabled: false, mgPerKg: 3, asIngredient: false, tabletMg: 100 },
+  bicarb: { enabled: false, gPerKg: 0.3 },
+});
 
 /**
  * Deep equality for JSON-like values (plain objects, arrays, primitives).
@@ -99,7 +132,7 @@ function fromBase64Url(encoded) {
 /**
  * Encodes inputs into a URL-safe string for the `?s=` parameter. Only the
  * fields that differ from the defaults are stored, so the default inputs
- * encode to the minimal payload `{"v":3}`.
+ * encode to the minimal payload `{"v":4}`.
  *
  * @param {unknown} inputs  Usually the provider's inputs; normalized first.
  * @returns {string}
@@ -109,10 +142,11 @@ export function encodeShareState(inputs) {
 }
 
 /**
- * Decodes a string made by {@link encodeShareState} into complete, normalized
- * inputs. Returns `null` when the string is not a valid v3 share payload
- * (not a string, not base64url, not UTF-8 JSON, not an object, or another
- * version such as an old v2 link).
+ * Decodes a string made by {@link encodeShareState} (v4) or by the v3 codec
+ * into complete, normalized v4 inputs. A v3 payload is merged onto the v3
+ * defaults and migrated by `normalizeInputs`. Returns `null` when the string
+ * is not a valid v4 or v3 share payload (not a string, not base64url, not
+ * UTF-8 JSON, not an object, or another version such as an old v2 link).
  *
  * @param {unknown} encoded
  * @returns {import('../domain/plan').PlanInputs | null}
@@ -125,7 +159,9 @@ export function decodeShareState(encoded) {
   } catch {
     return null;
   }
-  if (!isPlainObject(payload) || payload.v !== SHARE_VERSION) return null;
+  if (!isPlainObject(payload)) return null;
   const { v, ...partial } = payload;
-  return normalizeInputs(partial);
+  if (v === SHARE_VERSION) return normalizeInputs(partial);
+  if (LEGACY_VERSIONS.includes(v)) return normalizeInputs(mergeDeep(V3_DEFAULT_INPUTS, partial));
+  return null;
 }

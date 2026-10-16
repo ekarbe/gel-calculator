@@ -15,14 +15,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 /**
- * Race-day schedule: when each gel is taken, how much to drink with it, and
- * when pre-race bicarbonate and caffeine doses fall.
+ * Race-day schedule: when each gel is taken, how much to drink with it (or,
+ * for a drink-only plan, how much to drink from which bottle every 20 min),
+ * and when pre-race bicarbonate and caffeine doses fall.
  *
  * Pure module: no React, no DOM, no clocks, no randomness. `buildSchedule`
  * never returns English text; it returns message descriptors whose keys live
  * in `src/i18n/en/schedule.js`. (`formatElapsed` is a plain time formatter
  * kept from the former `src/lib/schedule.js`, extended to format pre-start times.)
  */
+
+import { DEFAULT_BOTTLE_ML } from './concentration';
 
 /** @typedef {{ key: string, params?: Record<string, string|number> }} Message */
 
@@ -60,11 +63,54 @@
  *
  * @typedef {Object} ScheduleEvent
  * @property {number} timeMin  Minutes from the start (negative = before the start).
- * @property {'bicarb'|'caffeine'|'start'|'fuel'|'hydration'|'finish'} type
+ * @property {'bicarb'|'caffeine'|'start'|'fuel'|'drink'|'hydration'|'finish'} type
  * @property {Message} message  What to do at this time (key in `src/i18n/en/schedule.js`).
  * @property {number} [caffeineMg]  Caffeine taken at this event in mg (caffeine events, and gels that carry caffeine).
- * @property {number} [fluidMl]  Fluid to drink with this gel in ml (the start gel and fuel events, a multiple of 10 ml; omitted when 0).
+ * @property {number} [fluidMl]  Fluid in ml, a multiple of 10 ml, omitted when 0: to drink with this gel (the
+ *   start gel and fuel events), or the sip of a `drink` event.
+ * @property {number} [bottle]  `drink` events only: the 1-based number of the bottle that holds the first ml
+ *   of this sip (the bottle being finished).
+ * @property {number} [lastBottle]  `drink` events whose sip runs on into a later bottle only: the bottle that
+ *   holds the last ml of the sip. The sip finishes every bottle from `bottle` to the one before `lastBottle`.
  */
+
+/**
+ * The parts of a `drinkBottles` result (`src/domain/concentration.js`) the
+ * schedule reads.
+ *
+ * @typedef {Object} DrinkLike
+ * @property {number} [bottles]  Number of bottles mixed for the event.
+ * @property {number} [bottleMl]  Size of one bottle in ml.
+ * @property {{ fillMl?: number }} [perBottle]  `fillMl`: how far each bottle is filled in ml (at most
+ *   `bottleMl`). `drinkBottles` fills every bottle to `plan's fluid / bottles`, so the plan's fluid
+ *   finishes every bottle.
+ */
+
+/** Recipe formats `buildSchedule` understands (`inputs.format.type`). */
+const FORMAT_TYPES = new Set(['gel', 'drink', 'both']);
+
+/**
+ * Minutes between drink events when the drink carries the fluid (format
+ * `'drink'`, or `'both'` when no gel carries it).
+ */
+export const DRINK_INTERVAL_MIN = 20;
+
+/** Bottle size used when `drink.bottleMl` is missing or invalid: `DEFAULT_BOTTLE_ML` from `concentration.js`. */
+
+/**
+ * Highest fluid rate `buildSchedule` uses, in ml/h (100 l/h). Higher finite
+ * rates are clamped to it so the running totals stay finite. `normalizeInputs`
+ * caps the fluid at 3000 ml/h.
+ */
+const MAX_FLUID_ML_PER_HOUR = 100000;
+
+/**
+ * Smallest bottle size `buildSchedule` accepts, in ml: one rounding step of
+ * the listed fluid. Smaller sizes count as missing (750 ml), like non-finite
+ * ones, so a tiny size never makes the bottle count overflow.
+ * `normalizeInputs` keeps sizes in [250, 1500] ml.
+ */
+const MIN_BOTTLE_ML = 10;
 
 /** Default bicarbonate timing in minutes when a plan has no usable `timingMin.recommended`. */
 const BICARB_DEFAULT_TIME_MIN = -90;
@@ -81,6 +127,14 @@ const MAX_DURATION_MIN = 7 * 24 * 60;
  * rates are clamped to it. `normalizeInputs` caps the rate at 12 gels/h.
  */
 const MAX_GELS_PER_HOUR = 60;
+
+/**
+ * Most bottles `buildSchedule` numbers (1 680 000): the most fluid it lists
+ * (100 l/h for 7 days) in bottles of the smallest size. A count derived from
+ * the plan never reaches it. Larger given counts are clamped to it, so bottle
+ * numbers stay finite.
+ */
+const MAX_BOTTLES = Math.ceil((MAX_FLUID_ML_PER_HOUR * MAX_DURATION_MIN) / 60 / MIN_BOTTLE_ML);
 
 /** Message keys for an event that includes a gel, by what the gel carries. */
 const START_KEYS = {
@@ -102,30 +156,133 @@ const round10 = (x) => Math.round(x / 10) * 10;
 const floor10 = (x) => Math.floor(x / 10 + 1e-9) * 10;
 
 /**
- * Fluid to drink with each gel, in ml. Each gel covers the time until the
- * next gel, or until the finish for the last one, so the amounts add up to the
- * plan's fluid. They are rounded on the running total (down to 10 ml), so
- * every amount is a multiple of 10 ml within 10 ml of its exact share, and
- * the sum is the plan total rounded down to 10 ml: it never exceeds the plan.
+ * Fluid for each intake point (a gel, or a drink sip), in ml. Each point
+ * covers the time until the next one, or until the finish for the last one,
+ * so the amounts add up to the plan's fluid. They are rounded on the running
+ * total (down to 10 ml), so every amount is a multiple of 10 ml within 10 ml
+ * of its exact share, and the sum is the plan total rounded down to 10 ml: it
+ * never exceeds the plan.
  *
- * When a full gel interval (or the whole event, for a single gel) would carry
- * less than 5 ml, no gel carries fluid (all zeros) and the schedule shows a
+ * When a full interval (or the whole event, for a single point) would carry
+ * less than 5 ml, no point carries fluid (all zeros) and the schedule shows a
  * hydration event instead.
  *
- * @param {number[]} gelTimes  From {@link getGelTimes}.
+ * @param {number[]} times  Intake times in minutes, ascending, from {@link getGelTimes}.
  * @param {number} duration  Event duration in minutes.
  * @param {number} fluidRate  Fluid in ml/h (≥ 0).
- * @param {number} intervalMin  Minutes between gels.
- * @returns {number[]} One amount per gel.
+ * @param {number} intervalMin  Minutes between intake points.
+ * @returns {number[]} One amount per intake point.
  */
-function fluidPerGel(gelTimes, duration, fluidRate, intervalMin) {
-  if (gelTimes.length === 0) return [];
-  if (round10((fluidRate * Math.min(intervalMin, duration)) / 60) === 0) return gelTimes.map(() => 0);
+function fluidPerIntake(times, duration, fluidRate, intervalMin) {
+  if (times.length === 0) return [];
+  if (round10((fluidRate * Math.min(intervalMin, duration)) / 60) === 0) return times.map(() => 0);
   const listedUpTo = (timeMin) => floor10((fluidRate * Math.min(timeMin, duration)) / 60);
-  return gelTimes.map((timeMin, i) => {
-    const end = i + 1 < gelTimes.length ? gelTimes[i + 1] : duration;
+  return times.map((timeMin, i) => {
+    const end = i + 1 < times.length ? times[i + 1] : duration;
     return Math.max(0, listedUpTo(end) - listedUpTo(timeMin));
   });
+}
+
+/**
+ * Bottle size, count and fill for the drink sips. For a size of at least
+ * {@link MIN_BOTTLE_ML} they are what `drinkBottles` computes:
+ * - size: `drink.bottleMl` when it is finite and at least
+ *   {@link MIN_BOTTLE_ML}, else 750 ml;
+ * - count: `drink.bottles` (whole bottles) when it is finite and at least 1,
+ *   else `max(1, ceil(planned fluid / size))`; at most {@link MAX_BOTTLES};
+ * - fill: `drink.perBottle.fillMl` when it is above 0 and at most the size
+ *   (the fill the recipe shows), else `min(size, planned fluid / count)`.
+ *   Equal bottles of `planned fluid / count` hold the plan's fluid, so the
+ *   listed sips finish every bottle. The `min` applies when a given count is
+ *   too small for the fluid: the athlete refills the last bottle.
+ *
+ * @param {DrinkLike|undefined} drink
+ * @param {number} plannedMl  The plan's fluid for the whole event in ml.
+ * @returns {{ bottleMl: number, bottles: number, fillMl: number }}
+ */
+function bottleSetup(drink, plannedMl) {
+  const size = drink?.bottleMl;
+  const bottleMl = Number.isFinite(size) && size >= MIN_BOTTLE_ML ? size : DEFAULT_BOTTLE_ML;
+  const given = drink?.bottles;
+  const count =
+    Number.isFinite(given) && given >= 1
+      ? Math.floor(given)
+      : Math.max(1, Math.ceil(plannedMl / bottleMl - 1e-9));
+  const bottles = Math.min(count, MAX_BOTTLES);
+  const fill = drink?.perBottle?.fillMl;
+  let fillMl = bottleMl;
+  if (Number.isFinite(fill) && fill > 0 && fill <= bottleMl) fillMl = fill;
+  else if (plannedMl > 0) fillMl = Math.min(bottleMl, plannedMl / bottles);
+  return { bottleMl, bottles, fillMl };
+}
+
+/**
+ * Event for a drink sip of `ml` that starts in bottle `bottle` and ends in
+ * bottle `lastBottle`. The message says which bottles the sip comes from:
+ * `schedule.drinkSip` `{ ml, bottle }` within one bottle,
+ * `schedule.drinkSipSwitch` `{ ml, bottle, next }` when it finishes `bottle`
+ * and goes on with the next one, and `schedule.drinkSipSpan`
+ * `{ ml, bottle, finished, next }` when it finishes several bottles.
+ *
+ * @param {number} timeMin
+ * @param {number} ml
+ * @param {number} bottle  Bottle holding the first ml of the sip.
+ * @param {number} lastBottle  Bottle holding the last ml of the sip (≥ `bottle`).
+ * @returns {ScheduleEvent}
+ */
+function drinkSipEvent(timeMin, ml, bottle, lastBottle) {
+  /** @type {Message} */
+  let message = { key: 'schedule.drinkSip', params: { ml, bottle } };
+  if (lastBottle === bottle + 1) {
+    message = { key: 'schedule.drinkSipSwitch', params: { ml, bottle, next: lastBottle } };
+  } else if (lastBottle > bottle + 1) {
+    message = { key: 'schedule.drinkSipSpan', params: { ml, bottle, finished: lastBottle - 1, next: lastBottle } };
+  }
+  /** @type {ScheduleEvent} */
+  const event = { timeMin, type: 'drink', message, fluidMl: ml, bottle };
+  if (lastBottle !== bottle) event.lastBottle = lastBottle;
+  return event;
+}
+
+/**
+ * Drink events, one every {@link DRINK_INTERVAL_MIN} min from the start, each
+ * with the plan's fluid until the next sip (or the finish), rounded like the
+ * gel fluid ({@link fluidPerIntake}). Sips that round to 0 ml are left out.
+ *
+ * The bottles are drunk one after the other, each holding `fill` ml
+ * ({@link bottleSetup}), so `bottle` is the bottle that holds the first ml of
+ * the sip (the one being finished): `floor(fluid listed before this sip /
+ * fill) + 1`, and the sip ends in bottle `ceil(fluid listed after it / fill)`
+ * (`lastBottle` when it differs), both at most `bottles`. With the fill of
+ * `drinkBottles` the listed fluid (the plan's fluid rounded down to 10 ml)
+ * empties every bottle, so all the drink's carbohydrate and sodium is taken.
+ * All bottles hold the same mix, so the carbohydrate and sodium per ml stay
+ * the same from one bottle to the next.
+ *
+ * @param {number} duration  Event duration in minutes.
+ * @param {number} fluidRate  Fluid in ml/h (≥ 0).
+ * @param {DrinkLike|undefined} drink
+ * @returns {ScheduleEvent[]}
+ */
+function drinkSipEvents(duration, fluidRate, drink) {
+  const times = getGelTimes(duration, 60 / DRINK_INTERVAL_MIN);
+  const sips = fluidPerIntake(times, duration, fluidRate, DRINK_INTERVAL_MIN);
+  const { bottles, fillMl } = bottleSetup(drink, (fluidRate * duration) / 60);
+  /** @type {ScheduleEvent[]} */
+  const events = [];
+  let listedMl = 0;
+  times.forEach((timeMin, i) => {
+    const ml = sips[i];
+    if (ml > 0) {
+      // The epsilons keep float drift (999.9999… ml of three 333.3 ml bottles) from
+      // staying on an emptied bottle or reaching into the next one.
+      const bottle = Math.min(bottles, Math.floor(listedMl / fillMl + 1e-9) + 1);
+      const lastBottle = Math.min(bottles, Math.max(bottle, Math.ceil((listedMl + ml) / fillMl - 1e-9)));
+      events.push(drinkSipEvent(timeMin, ml, bottle, lastBottle));
+    }
+    listedMl += ml;
+  });
+  return events;
 }
 
 /**
@@ -231,11 +388,35 @@ function gelEvent(timeMin, type, keys, baseParams, fluidMl, caffeineMg) {
 }
 
 /**
- * Builds the race-day schedule from the gel plan, fluid target, caffeine plan
- * and bicarbonate plan. Events are sorted by time; events at the same time
- * keep this order: bicarb, pre-race caffeine, start, hydration, fuel, caffeine
- * taken on its own, finish.
+ * Builds the race-day schedule from the recipe format, gel plan, fluid target,
+ * drink bottles, caffeine plan and bicarbonate plan. Events are sorted by
+ * time; events at the same time keep this order: bicarb, pre-race caffeine,
+ * start, hydration, drink, fuel, caffeine taken on its own, finish.
  *
+ * The format (`type`, as `inputs.format.type`) decides who carries the fluid:
+ * - `'gel'` (also when `type` is missing or unknown, so the Phase 1 call
+ *   works unchanged): gels, each with the fluid until the next gel, as below.
+ *   `drink` is ignored.
+ * - `'drink'`: no gels (`gelsPerHour` is ignored). A `drink` event every
+ *   {@link DRINK_INTERVAL_MIN} min from the start (`schedule.drinkSip`, params
+ *   `{ ml, bottle }`, also as `fluidMl` and `bottle`): `ml` is the plan's fluid
+ *   until the next sip (or the finish), rounded like the gel fluid, and
+ *   `bottle` the bottle being finished. The bottles (`drink.bottles`, each
+ *   filled to `drink.perBottle.fillMl`, else to `min(drink.bottleMl, planned
+ *   fluid / drink.bottles)` as `drinkBottles` fills them) are drunk one after
+ *   the other, so the bottle is `floor(fluid listed before this sip / fill) +
+ *   1`, at most `drink.bottles`, and the listed sips empty every bottle. A sip
+ *   that runs on into later bottles also has `lastBottle` (the bottle holding
+ *   its last ml) and says so: `schedule.drinkSipSwitch` `{ ml, bottle, next }`
+ *   when it finishes one bottle, `schedule.drinkSipSpan`
+ *   `{ ml, bottle, finished, next }` when it finishes several. Sips that round
+ *   to 0 ml are left out.
+ * - `'both'`: gels exactly as in `'gel'` mode, with the fluid to drink with
+ *   each gel (the drink holds the electrolytes and part of the carbs). When no
+ *   gel carries fluid (no gels, or a gel interval too short for 5 ml), the
+ *   fluid is listed as drink sips as in `'drink'` mode instead.
+ *
+ * Events:
  * - `bicarb` (when `bicarb.enabled` and the dose is > 0) at
  *   `bicarb.timingMin.recommended` (−90 min when missing), params
  *   `{ doseG, sodiumG }` rounded to 0.1 g.
@@ -255,38 +436,51 @@ function gelEvent(timeMin, type, keys, baseParams, fluidMl, caffeineMg) {
  *   finish gets only a little. That is `fluidMlPerHour × interval / 60` for a
  *   full interval. Amounts are rounded on the running total, so each is a
  *   multiple of 10 ml within 10 ml of its exact share, and together they are
- *   the plan's fluid rounded down to 10 ml. The listed fluid never exceeds
- *   `fluidMlPerHour × durationMin / 60`.
- * - Intra caffeine doses without a gel (`gelIndex === null`, or an index that
- *   is not one of this schedule's gels) become `caffeine` events at their time.
- * - `fluidMlPerHour > 0` but no gel carries fluid (no gels, or a full gel
+ *   the plan's fluid rounded down to 10 ml. The listed fluid (gels and drink
+ *   sips alike) never exceeds `fluidMlPerHour × durationMin / 60`.
+ * - `drink` sips as described above.
+ * - Intra caffeine doses without a gel (`gelIndex === null`, an index that is
+ *   not one of this schedule's gels, or any dose in `'drink'` mode) become
+ *   `caffeine` events at their time.
+ * - `fluidMlPerHour > 0` but no gel or sip carries fluid (no gels, or a full
  *   interval would carry less than 5 ml) → one `hydration` event at 0
  *   (`schedule.hydrationOnly`, params `{ mlPerHour }`). So a fluid target
  *   always appears in the schedule.
  * - `finish` at `durationMin`.
  *
  * Non-finite or negative `durationMin`, `gelsPerHour` and `fluidMlPerHour`
- * count as 0. Finite `durationMin` above 10080 (7 days) and `gelsPerHour`
- * above 60 are clamped to those values, so huge inputs never build huge
- * arrays. A missing or disabled caffeine or bicarbonate plan adds no events.
- * Caffeine doses with a non-finite time or a dose ≤ 0 are skipped. Arguments
- * are not mutated.
+ * count as 0. Finite `durationMin` above 10080 (7 days), `gelsPerHour` above
+ * 60 and `fluidMlPerHour` above 100000 are clamped to those values, so huge
+ * inputs never build huge arrays or overflow. A missing `drink`, or a bottle
+ * size that is not finite or below 10 ml, uses 750 ml bottles; a missing or
+ * invalid count is `max(1, ceil(planned fluid / size))`; counts are clamped
+ * to 1 680 000 so bottle numbers stay finite. A
+ * missing or disabled caffeine or bicarbonate plan adds no events. Caffeine
+ * doses with a non-finite time or a dose ≤ 0 are skipped. Arguments are not
+ * mutated.
  *
  * @param {Object} [input]
  * @param {number} [input.durationMin]  Activity duration in minutes.
- * @param {number} [input.gelsPerHour]  Gels per hour (as passed to {@link getGelTimes}).
+ * @param {'gel'|'drink'|'both'} [input.type]  Recipe format; missing or unknown → `'gel'`.
+ * @param {number} [input.gelsPerHour]  Gels per hour (as passed to {@link getGelTimes}); ignored for `'drink'`.
  * @param {number} [input.fluidMlPerHour]  Planned fluid intake in ml/h.
+ * @param {DrinkLike} [input.drink]  The drink bottles (`drinkBottles` result) for `'drink'` and `'both'`.
  * @param {CaffeinePlanLike} [input.caffeine]  Result of `planCaffeine`, computed with the same gel times.
  * @param {BicarbPlanLike} [input.bicarb]  Result of `planBicarbonate`.
  * @returns {ScheduleEvent[]}
  */
-export function buildSchedule({ durationMin, gelsPerHour, fluidMlPerHour, caffeine, bicarb } = {}) {
+export function buildSchedule({ durationMin, type, gelsPerHour, fluidMlPerHour, drink, caffeine, bicarb } = {}) {
+  const format = FORMAT_TYPES.has(type) ? type : 'gel';
   const duration = Math.min(positiveOrZero(durationMin), MAX_DURATION_MIN);
-  const rate = Math.min(positiveOrZero(gelsPerHour), MAX_GELS_PER_HOUR);
-  const fluidRate = positiveOrZero(fluidMlPerHour);
+  const rate = format === 'drink' ? 0 : Math.min(positiveOrZero(gelsPerHour), MAX_GELS_PER_HOUR);
+  const fluidRate = Math.min(positiveOrZero(fluidMlPerHour), MAX_FLUID_ML_PER_HOUR);
   const gelTimes = getGelTimes(duration, rate);
   const intervalMin = gelTimes.length > 0 ? 60 / rate : 0;
-  const gelFluidMl = fluidPerGel(gelTimes, duration, fluidRate, intervalMin);
+  const gelFluidMl = fluidPerIntake(gelTimes, duration, fluidRate, intervalMin);
+  const gelsCarryFluid = gelFluidMl.some((ml) => ml > 0);
+  // The drink carries the fluid in drink mode, and in 'both' mode when no gel does.
+  const sipEvents =
+    format === 'drink' || (format === 'both' && !gelsCarryFluid) ? drinkSipEvents(duration, fluidRate, drink) : [];
 
   const doses =
     caffeine && caffeine.enabled && Array.isArray(caffeine.doses)
@@ -344,13 +538,15 @@ export function buildSchedule({ durationMin, gelsPerHour, fluidMlPerHour, caffei
     events.push(gelEvent(0, 'start', START_KEYS, {}, gelFluidMl[0], gelCaffeineMg.get(0)));
   }
 
-  if (fluidRate > 0 && !gelFluidMl.some((ml) => ml > 0)) {
+  if (fluidRate > 0 && !gelsCarryFluid && sipEvents.length === 0) {
     events.push({
       timeMin: 0,
       type: 'hydration',
       message: { key: 'schedule.hydrationOnly', params: { mlPerHour: fluidRate } },
     });
   }
+
+  events.push(...sipEvents);
 
   gelTimes.forEach((timeMin, i) => {
     if (i === 0) return; // Covered by the start event.

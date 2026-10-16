@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { 
   glucoseSourceOptions, 
   fructoseSourceOptions,
+  allCarbSourceOptions,
+  carbSourceOptions,
   electrolyteSourceOptions,
   SWEAT_RATES, 
   sourceDataByIdMap,
@@ -88,5 +90,82 @@ describe('constants', () => {
       expect(mmol).toBeGreaterThanOrEqual(10);
       expect(mmol).toBeLessThanOrEqual(90);
     }
+  });
+
+  describe('osmolality and water data (phase 2 research table)', () => {
+    it('gives every carb source a finite osmPerG >= 0, a waterFraction in [0, 1) and a group', () => {
+      for (const opt of allCarbSourceOptions) {
+        expect(Number.isFinite(opt.osmPerG), opt.label).toBe(true);
+        expect(opt.osmPerG, opt.label).toBeGreaterThanOrEqual(0);
+        expect(Number.isFinite(opt.waterFraction), opt.label).toBe(true);
+        expect(opt.waterFraction, opt.label).toBeGreaterThanOrEqual(0);
+        expect(opt.waterFraction, opt.label).toBeLessThan(1);
+        expect(['powder', 'syrup'], opt.label).toContain(opt.group);
+        expect(opt.glucoseContent + opt.fructoseContent, opt.label).toBeCloseTo(1, 6);
+      }
+    });
+
+    it('never has carbs plus water above the mass as purchased', () => {
+      // Dextrose monohydrate rounds to 0.91 carbs + 0.091 water = 1.001.
+      for (const opt of allCarbSourceOptions) {
+        expect(opt.carbsPerGram + opt.waterFraction, opt.label).toBeLessThanOrEqual(1.005);
+      }
+    });
+
+    // Research notes section C: sugars 1000 / molar mass; maltodextrin DE 18 at 0.95 dry
+    // matter; glucose syrup DE 42 at 80% dry solids. Vist & Maughan 1995 (vist1995).
+    it('uses the research table values', () => {
+      const expected = {
+        1: [5.55, 0], 8: [5.05, 0.091], 11: [5.55, 0], 18: [2.92, 0], 4: [2.78, 0.05],
+        3: [0.95, 0.05], 5: [0.02, 0.05], 2: [1.86, 0.2], 6: [2.0, 0.21], 7: [2.0, 0.2],
+        12: [4.21, 0.23], 13: [3.8, 0.23], 14: [4.5, 0.17], 17: [1.95, 0.32], 19: [3.0, 0.03],
+        15: [3.9, 0.25], 16: [3.9, 0.32], 20: [3.9, 0.3],
+      };
+      expect(allCarbSourceOptions.map((o) => o.id).sort((a, b) => a - b)).toEqual(
+        Object.keys(expected).map(Number).sort((a, b) => a - b),
+      );
+      for (const [id, [osmPerG, waterFraction]] of Object.entries(expected)) {
+        const opt = sourceDataByIdMap.get(Number(id));
+        expect(opt.osmPerG, opt.label).toBe(osmPerG);
+        expect(opt.waterFraction, opt.label).toBe(waterFraction);
+      }
+    });
+
+    it('groups dextrose, maltodextrin, maltose, HBCD, fructose, sucrose and coconut sugar as powders', () => {
+      const powders = allCarbSourceOptions.filter((o) => o.group === 'powder').map((o) => o.id);
+      expect(powders.sort((a, b) => a - b)).toEqual([1, 3, 4, 5, 8, 11, 18, 19]);
+    });
+
+    it('gives every salt a finite osmPerG >= 0 and keeps its components', () => {
+      const expected = { 31: 31.8, 32: 24.7, 33: 10.9, 39: 9.9, 34: 5.5, 35: 0, 36: 13.0, 37: 23.5, 38: 22.1, 40: 5.3 };
+      for (const opt of electrolyteSourceOptions) {
+        expect(Number.isFinite(opt.osmPerG), opt.label).toBe(true);
+        expect(opt.osmPerG, opt.label).toBeGreaterThanOrEqual(0);
+        expect(opt.osmPerG, opt.label).toBe(expected[opt.id]);
+        expect(opt.components.length, opt.label).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('carbSourceOptions', () => {
+    it('lists every carb source once, powders first, then syrups', () => {
+      expect(carbSourceOptions).toHaveLength(allCarbSourceOptions.length);
+      expect(new Set(carbSourceOptions.map((o) => o.id))).toEqual(new Set(allCarbSourceOptions.map((o) => o.id)));
+      const groups = carbSourceOptions.map((o) => o.group);
+      const firstSyrup = groups.indexOf('syrup');
+      expect(firstSyrup).toBeGreaterThan(0);
+      expect(groups.slice(0, firstSyrup).every((g) => g === 'powder')).toBe(true);
+      expect(groups.slice(firstSyrup).every((g) => g === 'syrup')).toBe(true);
+    });
+
+    it('keeps the list order inside each group and shares the source objects', () => {
+      expect(carbSourceOptions.map((o) => o.id)).toEqual([1, 8, 3, 4, 5, 11, 18, 19, 2, 6, 7, 12, 13, 14, 15, 16, 20, 17]);
+      for (const opt of carbSourceOptions) expect(sourceDataByIdMap.get(opt.id)).toBe(opt);
+    });
+
+    it('keeps the glucose and fructose lists for older imports', () => {
+      expect(glucoseSourceOptions.map((o) => o.id)).toEqual([1, 8, 2, 3, 4, 5, 6, 7]);
+      expect(fructoseSourceOptions.map((o) => o.id)).toEqual([11, 12, 13, 14, 15, 16, 20, 17, 18, 19]);
+    });
   });
 });

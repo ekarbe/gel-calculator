@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderHook, act, render, screen } from '@testing-library/react';
-import { UiProvider, useUi, TOAST_DURATION_MS, MIXING_MODAL, TEMPLATE_MODAL, SHARE_MODAL } from './UiProvider';
+import { renderHook, act } from '@testing-library/react';
+import { UiProvider, useUi, TOAST_DURATION_MS, MIXING_MODAL, TEMPLATE_MODAL, SHARE_MODAL, RECIPES_MODAL } from './UiProvider';
 
 const wrapper = ({ children }) => <UiProvider>{children}</UiProvider>;
 
@@ -17,7 +17,6 @@ describe('UiProvider', () => {
     expect(result.current.toastMessage).toBe('');
     expect(result.current.massUnit).toBe('kg');
     expect(result.current.tempUnit).toBe('C');
-    expect(result.current.recipeRef).toEqual({ current: null });
   });
 
   it('opens and closes one modal at a time', () => {
@@ -89,30 +88,14 @@ describe('UiProvider', () => {
     expect(result.current.tempUnit).toBe('F');
   });
 
-  it('attaches recipeRef to the recipe element', () => {
-    function Recipe() {
-      const { recipeRef } = useUi();
-      return <div ref={recipeRef}>Recipe</div>;
-    }
-    let ref;
-    function Probe() {
-      ref = useUi().recipeRef;
-      return null;
-    }
-    render(
-      <>
-        <Recipe />
-        <Probe />
-      </>,
-      { wrapper },
-    );
-    expect(ref.current).toBe(screen.getByText('Recipe'));
-  });
-
-  it('exposes the modal names and no scroll helper', () => {
-    expect([MIXING_MODAL, TEMPLATE_MODAL, SHARE_MODAL]).toEqual(['mixing', 'templates', 'share']);
+  it('exposes the modal names and no scroll helper or recipe ref', () => {
+    expect([MIXING_MODAL, TEMPLATE_MODAL, SHARE_MODAL, RECIPES_MODAL]).toEqual(['mixing', 'templates', 'share', 'recipes']);
     const { result } = renderHook(useUi, { wrapper });
     expect(result.current).not.toHaveProperty('scrollToRecipe');
+    // The PDF export that captured the recipe card is gone (print view instead).
+    expect(result.current).not.toHaveProperty('recipeRef');
+    act(() => result.current.openModal(RECIPES_MODAL));
+    expect(result.current.isModalOpen(RECIPES_MODAL)).toBe(true);
   });
 
   it('useUi throws outside the provider', () => {

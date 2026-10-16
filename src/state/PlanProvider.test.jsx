@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act, render, screen } from '@testing-library/react';
 import {
   PlanProvider,
@@ -7,15 +8,27 @@ import {
   planInputsReducer,
   PlanInputsContext,
   PlanContext,
+  AUTOSAVE_DELAY_MS,
 } from './PlanProvider';
 import { DEFAULT_INPUTS, normalizeInputs, computePlan } from '../domain/plan';
-import { encodeShareState } from './shareCodec';
+import { encodeShareState, decodeShareState } from './shareCodec';
+import { STORAGE_KEYS, saveAutosave } from './storage';
 
 const wrapper = ({ children }) => <PlanProvider>{children}</PlanProvider>;
 const useBoth = () => ({ api: usePlanInputs(), plan: usePlan() });
+const storedAutosave = () => {
+  const raw = window.localStorage.getItem(STORAGE_KEYS.autosave);
+  return raw === null ? null : decodeShareState(raw);
+};
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 afterEach(() => {
   window.history.replaceState({}, '', '/');
+  window.localStorage.clear();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -31,29 +44,29 @@ describe('planInputsReducer', () => {
   });
 
   it('set indexes into arrays with numeric segments', () => {
-    const next = planInputsReducer(state, { type: 'set', path: 'carbs.glucoseSources.0.percentage', value: 40 });
-    expect(next.carbs.glucoseSources).toEqual([{ id: 3, percentage: 40 }]);
-    expect(state.carbs.glucoseSources).toEqual([{ id: 3, percentage: 100 }]);
+    const next = planInputsReducer(state, { type: 'set', path: 'carbs.ingredients.0.weight', value: 40 });
+    expect(next.carbs.ingredients).toEqual([{ ref: 3, weight: 40 }, { ref: 11, weight: 33 }]);
+    expect(state.carbs.ingredients).toEqual([{ ref: 3, weight: 67 }, { ref: 11, weight: 33 }]);
   });
 
   it('set accepts an updater function', () => {
     const next = planInputsReducer(state, {
       type: 'set',
-      path: 'carbs.glucoseSources',
-      value: (list) => [...list, { id: 1, percentage: 50 }],
+      path: 'carbs.ingredients',
+      value: (list) => [...list, { ref: 1, weight: 50 }],
     });
-    expect(next.carbs.glucoseSources).toEqual([{ id: 3, percentage: 100 }, { id: 1, percentage: 50 }]);
+    expect(next.carbs.ingredients).toEqual([{ ref: 3, weight: 67 }, { ref: 11, weight: 33 }, { ref: 1, weight: 50 }]);
   });
 
   it('apply deep-merges a partial; arrays replace', () => {
     const next = planInputsReducer(state, {
       type: 'apply',
-      partial: { carbs: { manualRatio: { fructose: 0.5 }, fructoseSources: [] }, format: { view: 'perGel' } },
+      partial: { carbs: { manualRatio: { fructose: 0.5 }, ingredients: [] }, format: { view: 'perServing' } },
     });
     expect(next.carbs.manualRatio).toEqual({ glucose: 1, fructose: 0.5 });
-    expect(next.carbs.fructoseSources).toEqual([]);
-    expect(next.carbs.glucoseSources).toEqual(state.carbs.glucoseSources);
-    expect(next.format.view).toBe('perGel');
+    expect(next.carbs.ingredients).toEqual([]);
+    expect(next.carbs.custom).toEqual(state.carbs.custom);
+    expect(next.format.view).toBe('perServing');
   });
 
   it('apply ignores an own __proto__ key', () => {
@@ -142,6 +155,15 @@ describe('PlanProvider', () => {
     expect(result.current.plan.caffeine.enabled).toBe(true);
   });
 
+  it('restores a v3 share link, migrated to v4', () => {
+    const v3 = btoa(JSON.stringify({ v: 3, event: { durationMin: 240 } })).replace(/=+$/, '');
+    window.history.replaceState({}, '', `/?s=${v3}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.inputs.event.durationMin).toBe(240);
+    expect(result.current.api.inputs.sweat.source).toBe('preset');
+    expect(result.current.api.shareLinkFailed).toBe(false);
+  });
+
   it('ignores an unreadable or old share link with a warning', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const v2 = btoa(JSON.stringify({ v: 2, d: 195 })).replace(/=+$/, '');
@@ -170,6 +192,17 @@ describe('PlanProvider', () => {
     expect(restored.result.current.api.shareLinkFailed).toBe(false);
   });
 
+  it('loadInputs replaces the inputs and drops a share link from the address bar', () => {
+    window.history.replaceState({}, '', `/?x=1&s=${encodeShareState({ event: { durationMin: 240 } })}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.inputs.event.durationMin).toBe(240);
+    act(() => result.current.api.loadInputs({ event: { durationMin: 90 }, format: { type: 'drink' } }));
+    expect(result.current.api.inputs.event.durationMin).toBe(90);
+    expect(result.current.api.inputs.format.type).toBe('drink');
+    expect(result.current.api.inputs.carbs.mode).toBe('auto');
+    expect(window.location.search).toBe('?x=1');
+  });
+
   it('exposes the contexts for components and tests', () => {
     render(
       <PlanProvider>
@@ -185,5 +218,147 @@ describe('PlanProvider', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => renderHook(() => usePlanInputs())).toThrow(/PlanProvider/);
     expect(() => renderHook(() => usePlan())).toThrow(/PlanProvider/);
+  });
+});
+
+describe('PlanProvider: autosave', () => {
+  const stored = normalizeInputs({ event: { durationMin: 300 }, format: { type: 'both' } });
+
+  it('restores the autosave on mount when there is no share link', () => {
+    saveAutosave(stored);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.inputs).toEqual(stored);
+    expect(result.current.api.restored).toBe(true);
+    expect(result.current.plan.durationMin).toBe(300);
+  });
+
+  it('prefers a readable share link over the autosave', () => {
+    saveAutosave(stored);
+    window.history.replaceState({}, '', `/?s=${encodeShareState({ event: { durationMin: 75 } })}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.inputs.event.durationMin).toBe(75);
+    expect(result.current.api.inputs.format.type).toBe('gel');
+  });
+
+  it('falls back to the autosave when the share link cannot be read', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    saveAutosave(stored);
+    window.history.replaceState({}, '', `/?s=${btoa(JSON.stringify({ v: 2 }))}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.shareLinkFailed).toBe(true);
+    expect(result.current.api.inputs).toEqual(stored);
+  });
+
+  it('saves changes 400 ms after the last change', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(AUTOSAVE_DELAY_MS).toBe(400);
+    act(() => result.current.api.set('event.durationMin', 200));
+    act(() => vi.advanceTimersByTime(300));
+    act(() => result.current.api.set('event.durationMin', 210));
+    act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY_MS - 1));
+    expect(storedAutosave()).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(storedAutosave().event.durationMin).toBe(210);
+  });
+
+  it('never saves before or because of the restore', () => {
+    vi.useFakeTimers();
+    saveAutosave(stored);
+    const before = window.localStorage.getItem(STORAGE_KEYS.autosave);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    renderHook(useBoth, { wrapper });
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(setItem).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(STORAGE_KEYS.autosave)).toBe(before);
+  });
+
+  it('does not overwrite the autosave with the defaults on a fresh mount', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useBoth, { wrapper });
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(storedAutosave()).toBeNull();
+    // A no-op change keeps the same state, so nothing is saved either.
+    act(() => result.current.api.set('event.durationMin', 180));
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(storedAutosave()).toBeNull();
+  });
+
+  it('writes a pending save when the page is hidden, and drops it on unmount', () => {
+    vi.useFakeTimers();
+    const first = renderHook(useBoth, { wrapper });
+    act(() => first.result.current.api.set('event.durationMin', 220));
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(storedAutosave().event.durationMin).toBe(220);
+    act(() => first.result.current.api.set('event.durationMin', 230));
+    first.unmount();
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(storedAutosave().event.durationMin).toBe(220);
+  });
+
+  it('does not restore the autosave when initial inputs are given', () => {
+    saveAutosave(stored);
+    const { result } = renderHook(useBoth, {
+      wrapper: ({ children }) => <PlanProvider initialInputs={{ event: { durationMin: 60 } }}>{children}</PlanProvider>,
+    });
+    expect(result.current.api.inputs.event.durationMin).toBe(60);
+  });
+
+  it('neither restores nor saves with persist={false}', () => {
+    vi.useFakeTimers();
+    saveAutosave(stored);
+    const before = window.localStorage.getItem(STORAGE_KEYS.autosave);
+    const { result } = renderHook(useBoth, {
+      wrapper: ({ children }) => <PlanProvider persist={false}>{children}</PlanProvider>,
+    });
+    expect(result.current.api.inputs).toEqual(DEFAULT_INPUTS);
+    expect(result.current.api.restored).toBe(true);
+    act(() => result.current.api.set('event.durationMin', 100));
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(window.localStorage.getItem(STORAGE_KEYS.autosave)).toBe(before);
+  });
+
+  it('keeps working when storage throws', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.inputs).toEqual(DEFAULT_INPUTS);
+    act(() => result.current.api.set('event.durationMin', 100));
+    act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(result.current.plan.durationMin).toBe(100);
+  });
+
+  it('restores once and saves only real changes under StrictMode', () => {
+    vi.useFakeTimers();
+    saveAutosave(stored);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const { result } = renderHook(useBoth, {
+      wrapper: ({ children }) => (
+        <StrictMode>
+          <PlanProvider>{children}</PlanProvider>
+        </StrictMode>
+      ),
+    });
+    expect(result.current.api.inputs).toEqual(stored);
+    act(() => vi.advanceTimersByTime(10 * AUTOSAVE_DELAY_MS));
+    expect(setItem).not.toHaveBeenCalled();
+    act(() => result.current.api.set('event.durationMin', 310));
+    act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(storedAutosave().event.durationMin).toBe(310);
+  });
+
+  it('saves a loaded recipe', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useBoth, { wrapper });
+    act(() => result.current.api.loadInputs(stored));
+    act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(storedAutosave()).toEqual(stored);
   });
 });

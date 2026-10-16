@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { CITATIONS, citationLabel, citationUrl, _labelFor, _urlFor } from './evidence';
 
-// Required ids, years and DOIs from the Phase 1 spec (section 1).
+// Required ids, years and DOIs from the Phase 1 spec (section 1) and the Phase 2 spec (section 0).
 const REQUIRED = {
   jeukendrup2014: [2014, '10.1007/s40279-014-0148-z'],
   thomas2016: [2016, '10.1249/MSS.0000000000000852'],
@@ -36,6 +36,14 @@ const REQUIRED = {
   talanian2016: [2016, '10.1139/apnm-2016-0053'],
   grgic2021: [2021, '10.1186/s12970-021-00458-w'],
   deoliveira2022: [2022, '10.1007/s40279-021-01575-x'],
+  // Phase 2 spec (section 0)
+  jay2024: [2024, '10.1152/japplphysiol.00831.2023'],
+  gagnon2013: [2013, '10.1113/jphysiol.2012.248823'],
+  cramer2019: [2019, '10.1152/japplphysiol.00191.2018'],
+  cheuvront2017: [2017, '10.1113/EP086284'],
+  vist1995: [1995, '10.1113/jphysiol.1995.sp020831'],
+  pfeiffer2010: [2010, '10.1249/MSS.0b013e3181e0efe6'],
+  shi1995: [1995, '10.1249/00005768-199512000-00005'],
 };
 
 const ids = Object.keys(CITATIONS);
@@ -43,7 +51,31 @@ const ids = Object.keys(CITATIONS);
 describe('evidence: CITATIONS registry', () => {
   it('contains exactly the required ids', () => {
     expect([...ids].sort()).toEqual(Object.keys(REQUIRED).sort());
-    expect(ids).toHaveLength(32);
+    expect(ids).toHaveLength(39);
+  });
+
+  it('has the Phase 2 entries with the spec authors and journals', () => {
+    // [jay2024] [gagnon2013] [cramer2019] heat-balance sweat estimate
+    expect(CITATIONS.jay2024).toEqual({
+      authors: 'Jay O et al.',
+      year: 2024,
+      title: 'Whole body sweat rate prediction: outdoor running and cycling exercise',
+      journal: 'J Appl Physiol 136:1478–1487',
+      doi: '10.1152/japplphysiol.00831.2023',
+    });
+    expect(CITATIONS.gagnon2013.authors).toBe('Gagnon D, Jay O, Kenny GP');
+    expect(CITATIONS.gagnon2013.journal).toBe('J Physiol 591:2925–2935');
+    expect(CITATIONS.cramer2019).toMatchObject({ authors: 'Cramer MN, Jay O', title: 'Partitional calorimetry' });
+    // [cheuvront2017] 0.2 g/kcal non-sweat mass loss in a sweat test
+    expect(CITATIONS.cheuvront2017).toMatchObject({
+      authors: 'Cheuvront SN, Montain SJ',
+      title: 'Myths and methodologies: making sense of exercise mass and water balance',
+      journal: 'Exp Physiol 102:1047–1053',
+    });
+    // [vist1995] [shi1995] [pfeiffer2010] drink osmolality and water with gels
+    expect(CITATIONS.vist1995.journal).toBe('J Physiol 486:523–531');
+    expect(CITATIONS.shi1995.journal).toBe('Med Sci Sports Exerc 27:1607–1615');
+    expect(CITATIONS.pfeiffer2010.title).toBe('Oxidation of solid versus liquid CHO sources during exercise');
   });
 
   it.each(ids)('%s has authors, year, title and journal', (id) => {
@@ -192,6 +224,16 @@ describe('evidence: citationLabel', () => {
     expect(citationLabel('montain2007')).toBe('Montain et al. 2007');
     expect(citationLabel('hoffman2015')).toBe('Hoffman et al. 2015');
     expect(citationLabel('talanian2016')).toBe('Talanian et al. 2016');
+    expect(citationLabel('gagnon2013')).toBe('Gagnon et al. 2013');
+    expect(citationLabel('cramer2019')).toBe('Cramer et al. 2019');
+    expect(citationLabel('cheuvront2017')).toBe('Cheuvront et al. 2017');
+    expect(citationLabel('vist1995')).toBe('Vist et al. 1995');
+  });
+
+  it('formats the Phase 2 "et al." entries', () => {
+    expect(citationLabel('jay2024')).toBe('Jay et al. 2024');
+    expect(citationLabel('pfeiffer2010')).toBe('Pfeiffer et al. 2010');
+    expect(citationLabel('shi1995')).toBe('Shi et al. 1995');
   });
 
   it('keeps group authors whole', () => {

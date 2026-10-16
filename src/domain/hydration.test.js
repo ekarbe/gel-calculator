@@ -3,10 +3,13 @@ import fc from 'fast-check';
 import {
   FLUID_MAX_ML_PER_HOUR,
   FLUID_SHARE_OF_SWEAT,
+  DEFICIT_MILD_PCT,
+  DEFICIT_HIGH_PCT,
   recommendFluid,
   fluidWarnings,
+  projectBodyMass,
 } from './hydration';
-import { estimateSweatRateLegacy } from './sweat';
+import { estimateSweatRate } from './heatBalance';
 import { CITATIONS } from './evidence';
 import fluidCatalog from '../i18n/en/fluid';
 
@@ -125,11 +128,24 @@ describe('recommendFluid', () => {
     expect(recommendFluid({ durationMin: 600, sweatRateLph: 0.25, tempC: 5 }).warnings).toEqual([]);
   });
 
-  it('keeps the round50 rule for tiny sweat rates and flags the result', () => {
-    // 0.04 L/h × 0.8 = 32 → 50 ml/h, above the 40 ml/h sweat loss
+  it('never rounds a tiny sweat rate up above the sweat loss', () => {
+    // [hewbutler2015] 0.04 L/h × 0.8 = 32 → round50 gives 50 ml/h, above the 40 ml/h sweat loss:
+    // the plan takes the sweat loss rounded down to 50 ml/h instead.
     const r = recommendFluid({ durationMin: 180, sweatRateLph: 0.04, tempC: 20 });
-    expect(r.mlPerHour).toBe(50);
-    expect(r.warnings.map((w) => w.id)).toEqual(['fluid.aboveSweat']);
+    expect(r.mlPerHour).toBe(0);
+    expect(r.warnings).toEqual([]);
+    // 0.096 L/h × 0.8 = 77 → 100 ml/h by round50, above the 96 ml/h loss → 50 ml/h.
+    expect(recommendFluid({ durationMin: 180, sweatRateLph: 0.096, tempC: 20 }).mlPerHour).toBe(50);
+    // Exactly the sweat loss is not above it.
+    expect(recommendFluid({ durationMin: 180, sweatRateLph: 0.05, tempC: 20 })).toMatchObject({ mlPerHour: 50, warnings: [] });
+  });
+
+  it('never warns about its own recommendation from 0 to 0.125 L/h', () => {
+    for (let ml = 0; ml <= 125; ml += 0.5) {
+      const r = recommendFluid({ durationMin: 180, sweatRateLph: ml / 1000, tempC: 20 });
+      expect(r.warnings).toEqual([]);
+      expect(r.mlPerHour).toBeLessThanOrEqual(Math.round(ml));
+    }
   });
 
   it('does not mutate its arguments and is deterministic', () => {
@@ -160,9 +176,10 @@ describe('recommendFluid', () => {
           expect(r.mlPerHour % 50).toBe(0);
           // round50 can lift the value by at most 25 ml above 80% of sweat loss
           expect(r.mlPerHour).toBeLessThanOrEqual(sweatRateLph * 1000 * FLUID_SHARE_OF_SWEAT + 25);
+          // and never above the sweat loss (whole ml/h), so the plan never warns about itself
+          expect(r.mlPerHour).toBeLessThanOrEqual(Math.round(sweatRateLph * 1000));
           expect(r.warnings).toEqual(fluidWarnings(r.mlPerHour, { sweatRateLph }));
-          // from 0.125 L/h up, 80% + 25 ml stays at or below the sweat loss, so the plan never warns
-          if (sweatRateLph >= 0.125) expect(r.warnings).toEqual([]);
+          expect(r.warnings).toEqual([]);
           expect(r.drinkToThirst).toBe(durationMin < 90 || tempC < 15);
         },
       ),
@@ -211,10 +228,12 @@ describe('fluidWarnings', () => {
     // [almond2005] [hewbutler2015] strict ">": intake equal to sweat loss is not a danger
     expect(fluidWarnings(550, { sweatRateLph: 0.5499999999999999 })).toEqual([]);
     expect(fluidWarnings(450, { sweatRateLph: 0.44999999999999996 })).toEqual([]);
-    const male = estimateSweatRateLegacy({ sex: 'male', intensity: 'moderate', tempC: 3, humidity: 40 });
+    // sums of rounded terms land just below the value they stand for
+    const male = 0.96 - 0.36 - 0.05;
     expect(male * 1000).toBeLessThan(550);
     expect(fluidWarnings(550, { sweatRateLph: male })).toEqual([]);
-    const easy = estimateSweatRateLegacy({ sex: 'unspecified', intensity: 'easy', tempC: 18, humidity: 18 });
+    const easy = 0.52 + 0.09 - 0.16;
+    expect(easy * 1000).toBeLessThan(450);
     expect(fluidWarnings(450, { sweatRateLph: easy })).toEqual([]);
     // one ml/h above the sweat loss still warns, with the shown sweat loss
     expect(fluidWarnings(551, { sweatRateLph: male })).toEqual([
@@ -227,17 +246,17 @@ describe('fluidWarnings', () => {
     ]);
   });
 
-  it('never flags intake equal to any legacy estimate on the 50 ml grid as above sweat loss', () => {
-    for (const sex of ['unspecified', 'female', 'male']) {
-      for (const intensity of ['easy', 'moderate', 'hard', 'race']) {
-        for (let tempC = -20; tempC <= 50; tempC += 1) {
-          for (let humidity = 0; humidity <= 100; humidity += 1) {
-            const sweatRateLph = estimateSweatRateLegacy({ sex, intensity, tempC, humidity });
-            const ml = Math.round(sweatRateLph * 1000);
-            if (ml % 50 !== 0) continue;
-            const ids = fluidWarnings(ml, { sweatRateLph }).map((w) => w.id);
-            expect(ids, `${sex}/${intensity}/${tempC} °C/${humidity} %`).not.toContain('fluid.aboveSweat');
-          }
+  it('never flags intake equal to a heat-balance estimate (in whole ml/h) as above sweat loss', () => {
+    for (const sport of ['running', 'cycling', 'other']) {
+      for (let tempC = -20; tempC <= 50; tempC += 2) {
+        for (let humidity = 0; humidity <= 100; humidity += 5) {
+          const sweatRateLph = estimateSweatRate({ sport, tempC, humidity }).rateLph;
+          const ml = Math.round(sweatRateLph * 1000);
+          if (ml <= 0) continue;
+          const ids = fluidWarnings(ml, { sweatRateLph }).map((w) => w.id);
+          expect(ids, `${sport}/${tempC} °C/${humidity} %`).not.toContain('fluid.aboveSweat');
+          // and the projection agrees: no gain
+          expect(projectBodyMass({ sweatRateLph, fluidMlPerHour: ml, durationMin: 240, massKg: 70 }).level).not.toBe('gain');
         }
       }
     }
@@ -283,6 +302,215 @@ describe('fluidWarnings', () => {
   });
 });
 
+describe('projectBodyMass', () => {
+  it('projects a mild deficit above 2 % of body mass', () => {
+    // [sawka2007] 1.0 L/h sweat, 500 ml/h drunk, 3 h: 1.5 L = 2.14 % of 70 kg
+    // [cheuvront2017] the scale also drops 0.0002 kg × 900 kcal/h × 3 h = 0.54 kg
+    const p = projectBodyMass({ sweatRateLph: 1.0, fluidMlPerHour: 500, durationMin: 180, massKg: 70, energyKcalPerHour: 900 });
+    expect(p.waterDeficitL).toBeCloseTo(1.5, 12);
+    expect(p.deficitPct).toBeCloseTo(2.142857, 5);
+    expect(p.scaleChangeKg).toBeCloseTo(-2.04, 12);
+    expect(p.level).toBe('mild');
+    expect(p.warnings).toEqual([
+      {
+        id: 'fluid.deficitMild',
+        level: 'info',
+        message: { key: 'fluid.warn.deficitMild', params: { deficitL: 1.5, deficitPct: 2.1, limitPct: 2 } },
+        citations: ['sawka2007'],
+      },
+    ]);
+  });
+
+  it('warns about a deficit above 3 % of body mass', () => {
+    // [sawka2007] 1.5 L/h sweat, 400 ml/h drunk, 4 h: 4.4 L = 7.3 % of 60 kg
+    const p = projectBodyMass({ sweatRateLph: 1.5, fluidMlPerHour: 400, durationMin: 240, massKg: 60, energyKcalPerHour: 800 });
+    expect(p.waterDeficitL).toBeCloseTo(4.4, 12);
+    expect(p.deficitPct).toBeCloseTo(7.3333, 4);
+    expect(p.scaleChangeKg).toBeCloseTo(-4.4 - 0.64, 12);
+    expect(p.level).toBe('high');
+    expect(p.warnings).toEqual([
+      {
+        id: 'fluid.deficitHigh',
+        level: 'warning',
+        message: { key: 'fluid.warn.deficitHigh', params: { deficitL: 4.4, deficitPct: 7.3, limitPct: 3 } },
+        citations: ['sawka2007'],
+      },
+    ]);
+  });
+
+  it('flags a projected water gain as a danger', () => {
+    // [hewbutler2015] 0.5 L/h sweat, 800 ml/h drunk, 4 h: 1.2 L more water than sweat
+    const p = projectBodyMass({ sweatRateLph: 0.5, fluidMlPerHour: 800, durationMin: 240, massKg: 70, energyKcalPerHour: 600 });
+    expect(p.waterDeficitL).toBeCloseTo(-1.2, 12);
+    expect(p.deficitPct).toBeCloseTo(-1.7143, 4);
+    // the scale shows less than the water gain: 1.2 − 0.0002 × 600 × 4 = 0.72 kg
+    expect(p.scaleChangeKg).toBeCloseTo(0.72, 12);
+    expect(p.level).toBe('gain');
+    expect(p.warnings).toEqual([
+      {
+        id: 'fluid.projectedGain',
+        level: 'danger',
+        message: { key: 'fluid.warn.projectedGain', params: { gainL: 1.2 } },
+        citations: ['hewbutler2015'],
+      },
+    ]);
+  });
+
+  it('is ok up to 2 % and mild up to 3 % of the shown (0.1 %) value', () => {
+    expect(DEFICIT_MILD_PCT).toBe(2);
+    expect(DEFICIT_HIGH_PCT).toBe(3);
+    // 50 kg, 2 h: 500 ml/h net → 1.0 L = 2 %; 750 ml/h net → 1.5 L = 3 %
+    const at = (sweatRateLph) => projectBodyMass({ sweatRateLph, fluidMlPerHour: 0, durationMin: 120, massKg: 50 });
+    expect(at(0.5).deficitPct).toBe(2);
+    expect(at(0.5).level).toBe('ok');
+    expect(at(0.5).warnings).toEqual([]);
+    // 2.004 % shows as 2 %: still ok, so no message reads "2% … above 2%"
+    expect(at(0.501).deficitPct).toBeCloseTo(2.004, 12);
+    expect(at(0.501).level).toBe('ok');
+    expect(at(0.53).level).toBe('mild');
+    expect(at(0.53).warnings[0].message.params).toEqual({ deficitL: 1.1, deficitPct: 2.1, limitPct: 2 });
+    expect(at(0.75).deficitPct).toBe(3);
+    expect(at(0.75).level).toBe('mild');
+    expect(at(0.76).deficitPct).toBeCloseTo(3.04, 12);
+    expect(at(0.76).level).toBe('mild');
+    expect(at(0.76).warnings[0].message.params.deficitPct).toBe(3);
+    expect(at(0.77).level).toBe('high');
+    expect(at(0.77).warnings[0].message.params).toEqual({ deficitL: 1.5, deficitPct: 3.1, limitPct: 3 });
+  });
+
+  it('never shows a deficit at or below the limit it says was passed', () => {
+    // 1.0 L/h sweat, 500 ml/h drunk, 2 h, 49 kg → 1.0 L = 2.04 %, shown as 2 %
+    expect(projectBodyMass({ sweatRateLph: 1.0, fluidMlPerHour: 500, durationMin: 120, massKg: 49 }).level).toBe('ok');
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 4, noNaN: true }),
+        fc.integer({ min: 0, max: 1500 }),
+        fc.integer({ min: 1, max: 1440 }),
+        fc.double({ min: 30, max: 200, noNaN: true }),
+        (sweatRateLph, fluidMlPerHour, durationMin, massKg) => {
+          for (const w of projectBodyMass({ sweatRateLph, fluidMlPerHour, durationMin, massKg }).warnings) {
+            const { deficitPct, limitPct } = w.message.params;
+            if (limitPct !== undefined) expect(deficitPct).toBeGreaterThan(limitPct);
+          }
+        },
+      ),
+    );
+  });
+
+  it('uses the spec formula without rounding the sweat rate', () => {
+    // waterDeficitL = (SR − F/1000) × h: 1.5858 L/h for 10 h → 15.858 L (not 15.86)
+    const p = projectBodyMass({ sweatRateLph: 1.5858, fluidMlPerHour: 0, durationMin: 600, massKg: 70, energyKcalPerHour: 900 });
+    expect(p.waterDeficitL).toBeCloseTo(15.858, 12);
+    expect(p.deficitPct).toBeCloseTo((100 * 15.858) / 70, 12);
+    expect(p.scaleChangeKg).toBeCloseTo(-15.858 - 0.0002 * 900 * 10, 12);
+    const q = projectBodyMass({ sweatRateLph: 0.9506, fluidMlPerHour: 600, durationMin: 150, massKg: 70 });
+    expect(q.waterDeficitL).toBeCloseTo((0.9506 - 0.6) * 2.5, 12);
+  });
+
+  it('gives no projection for an unknown sweat rate, like fluidWarnings', () => {
+    const none = { waterDeficitL: 0, deficitPct: 0, scaleChangeKg: 0, level: 'ok', warnings: [] };
+    for (const sweatRateLph of [undefined, null, NaN, Infinity, -Infinity, '1.2']) {
+      const p = projectBodyMass({ sweatRateLph, fluidMlPerHour: 500, durationMin: 120, massKg: 70, energyKcalPerHour: 800 });
+      expect(p, String(sweatRateLph)).toEqual(none);
+      expect(fluidWarnings(500, { sweatRateLph })).toEqual([]);
+    }
+  });
+
+  it('is ok when intake matches sweat loss, also with float noise in the rate', () => {
+    for (const sweatRateLph of [0.55, 0.96 - 0.36 - 0.05]) {
+      const p = projectBodyMass({ sweatRateLph, fluidMlPerHour: 550, durationMin: 300, massKg: 70 });
+      expect(p).toEqual({ waterDeficitL: 0, deficitPct: 0, scaleChangeKg: 0, level: 'ok', warnings: [] });
+      expect(Object.is(p.waterDeficitL, -0)).toBe(false);
+    }
+    // one ml/h above the sweat loss is a gain, shown as at least 0.01 L
+    const over = projectBodyMass({ sweatRateLph: 0.55, fluidMlPerHour: 551, durationMin: 60, massKg: 70 });
+    expect(over.level).toBe('gain');
+    expect(over.warnings[0].message.params.gainL).toBe(0.01);
+  });
+
+  it('agrees with fluidWarnings about drinking more than you sweat (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(fc.double({ min: -1, max: 4, noNaN: true }), fc.constantFrom(NaN, Infinity, undefined)),
+        fc.oneof(fc.integer({ min: 1, max: 3000 }), fc.double({ min: 0, max: 3000, noNaN: true })),
+        fc.integer({ min: 1, max: 2880 }),
+        (sweatRateLph, fluidMlPerHour, durationMin) => {
+          const p = projectBodyMass({ sweatRateLph, fluidMlPerHour, durationMin, massKg: 70 });
+          const above = fluidWarnings(fluidMlPerHour, { sweatRateLph }).some((w) => w.id === 'fluid.aboveSweat');
+          expect(p.level === 'gain').toBe(above);
+        },
+      ),
+    );
+  });
+
+  it('keeps level, warnings and numbers consistent (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 4, noNaN: true }),
+        fc.double({ min: 0, max: 3000, noNaN: true }),
+        fc.double({ min: 0, max: 2880, noNaN: true }),
+        fc.double({ min: 30, max: 200, noNaN: true }),
+        fc.double({ min: 0, max: 2000, noNaN: true }),
+        (sweatRateLph, fluidMlPerHour, durationMin, massKg, energyKcalPerHour) => {
+          const p = projectBodyMass({ sweatRateLph, fluidMlPerHour, durationMin, massKg, energyKcalPerHour });
+          for (const x of [p.waterDeficitL, p.deficitPct, p.scaleChangeKg]) expect(Number.isFinite(x)).toBe(true);
+          expect(p.scaleChangeKg).toBeLessThanOrEqual(-p.waterDeficitL + 1e-12);
+          expect(Math.sign(p.deficitPct)).toBe(Math.sign(p.waterDeficitL));
+          // the spec formula; only sub-0.5 ml/h rounding of the sweat rate is set to 0
+          const hours = durationMin / 60;
+          const spec = (sweatRateLph - fluidMlPerHour / 1000) * hours;
+          const gain = hours > 0 && fluidMlPerHour > Math.round(sweatRateLph * 1000);
+          expect(p.waterDeficitL).toBeCloseTo(gain ? Math.min(spec, 0) : Math.max(spec, 0), 9);
+          expect(Math.abs(p.waterDeficitL - spec)).toBeLessThanOrEqual(0.0005 * hours + 1e-9);
+          expect(p.scaleChangeKg).toBeCloseTo(-p.waterDeficitL - 0.0002 * energyKcalPerHour * hours, 9);
+          if (gain) expect(p.waterDeficitL).toBeLessThanOrEqual(0);
+          else expect(p.waterDeficitL).toBeGreaterThanOrEqual(0);
+          const shown = Math.round(p.deficitPct * 10) / 10;
+          const expected = gain ? 'gain' : shown > 3 ? 'high' : shown > 2 ? 'mild' : 'ok';
+          expect(p.level).toBe(expected);
+          expect(p.warnings).toHaveLength(p.level === 'ok' ? 0 : 1);
+        },
+      ),
+    );
+  });
+
+  it('counts missing, negative or non-finite numbers as 0', () => {
+    const zero = { waterDeficitL: 0, deficitPct: 0, scaleChangeKg: 0, level: 'ok', warnings: [] };
+    expect(projectBodyMass()).toEqual(zero);
+    expect(projectBodyMass(null)).toEqual(zero);
+    expect(projectBodyMass({ sweatRateLph: 1, fluidMlPerHour: 500, durationMin: 0, massKg: 70 })).toEqual(zero);
+    expect(projectBodyMass({ sweatRateLph: 1, fluidMlPerHour: 500, durationMin: -60, massKg: 70 })).toEqual(zero);
+    expect(projectBodyMass({ sweatRateLph: NaN, fluidMlPerHour: -5, durationMin: 60, massKg: 70, energyKcalPerHour: Infinity })).toEqual(zero);
+    // without a body mass the percentage is 0, but a gain is still a gain
+    const noMass = projectBodyMass({ sweatRateLph: 0.4, fluidMlPerHour: 600, durationMin: 120, massKg: undefined });
+    expect(noMass.deficitPct).toBe(0);
+    expect(noMass.waterDeficitL).toBeCloseTo(-0.4, 12);
+    expect(noMass.level).toBe('gain');
+    expect(projectBodyMass({ sweatRateLph: 2, fluidMlPerHour: 0, durationMin: 600, massKg: 0 }).level).toBe('ok');
+  });
+
+  it('does not mutate its input and is deterministic', () => {
+    const input = Object.freeze({ sweatRateLph: 1.2, fluidMlPerHour: 500, durationMin: 240, massKg: 70, energyKcalPerHour: 800 });
+    const a = projectBodyMass(input);
+    expect(a).toEqual(projectBodyMass({ ...input }));
+    a.warnings.push('x');
+    expect(projectBodyMass(input).warnings).toHaveLength(1);
+    const none = projectBodyMass(Object.freeze({}));
+    none.warnings.push('x');
+    expect(projectBodyMass({}).warnings).toEqual([]);
+  });
+
+  it('only cites ids from the evidence registry', () => {
+    const all = [
+      projectBodyMass({ sweatRateLph: 0.5, fluidMlPerHour: 800, durationMin: 240, massKg: 70 }),
+      projectBodyMass({ sweatRateLph: 1.5, fluidMlPerHour: 400, durationMin: 240, massKg: 60 }),
+      projectBodyMass({ sweatRateLph: 1.0, fluidMlPerHour: 500, durationMin: 180, massKg: 70 }),
+    ].flatMap((p) => p.warnings);
+    expect(all).toHaveLength(3);
+    for (const w of all) for (const id of w.citations) expect(CITATIONS[id]).toBeDefined();
+  });
+});
+
 describe('i18n catalog (src/i18n/en/fluid.js)', () => {
   const samples = [
     recommendFluid({ durationMin: 180, sweatRateLph: 1.25, tempC: 20 }),
@@ -290,6 +518,9 @@ describe('i18n catalog (src/i18n/en/fluid.js)', () => {
     recommendFluid(),
     fluidWarnings(900, { sweatRateLph: 0.5 }),
     fluidWarnings(900, { sweatRateLph: 2.0 }),
+    projectBodyMass({ sweatRateLph: 0.5, fluidMlPerHour: 800, durationMin: 240, massKg: 70 }).warnings,
+    projectBodyMass({ sweatRateLph: 1.5, fluidMlPerHour: 400, durationMin: 240, massKg: 60 }).warnings,
+    projectBodyMass({ sweatRateLph: 1.0, fluidMlPerHour: 500, durationMin: 180, massKg: 70 }).warnings,
   ];
 
   it('has text for every message key the module returns', () => {
@@ -297,6 +528,9 @@ describe('i18n catalog (src/i18n/en/fluid.js)', () => {
     expect([...keys].sort()).toEqual([
       'fluid.warn.aboveCeiling',
       'fluid.warn.aboveSweat',
+      'fluid.warn.deficitHigh',
+      'fluid.warn.deficitMild',
+      'fluid.warn.projectedGain',
       'fluid.why.plan',
       'fluid.why.thirst',
     ]);

@@ -21,7 +21,8 @@ import { BookTemplate, X, Info, BadgeCheck, CircleAlert } from "lucide-react";
 import { TEMPLATES } from "../../constants/templates";
 import { sourceDataByIdMap } from "../../constants/constants";
 import { templateToInputs } from "../../domain/plan";
-import { fmt, formatRatio } from "../shared/format";
+import { fmt } from "../shared/format";
+import { formatRatio } from "../../domain/carbs";
 import { usePlan, usePlanInputs } from "../../state/PlanProvider";
 import { useUi, TEMPLATE_MODAL } from "../../state/UiProvider";
 

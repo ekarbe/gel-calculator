@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import Header from './Header';
-import { UiProvider, useUi } from '../../state/UiProvider';
+import { PlanProvider } from '../../state/PlanProvider';
+import { UiProvider, useUi, RECIPES_MODAL, SHARE_MODAL, TEMPLATE_MODAL } from '../../state/UiProvider';
 
 /** Shows the UI state the header changes, plus a control to move the share modal off its first view. */
 function UiProbe() {
@@ -17,38 +18,57 @@ function UiProbe() {
   );
 }
 
+/** The header with the real providers (autosave off, so no test sees another's inputs). */
 function renderHeader() {
   return render(
-    <UiProvider>
-      <Header />
-      <UiProbe />
-    </UiProvider>,
+    <PlanProvider persist={false}>
+      <UiProvider>
+        <Header />
+        <UiProbe />
+      </UiProvider>
+    </PlanProvider>,
   );
 }
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe('Header', () => {
-  it('renders the brand, the theme toggle and the two buttons', () => {
+  it('renders the brand, the theme toggle and the three buttons', () => {
     renderHeader();
     expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Gel-Calculator' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle theme' })).toBeInTheDocument();
-    const templates = screen.getByRole('button', { name: 'Templates' });
-    const share = screen.getByRole('button', { name: 'Share Link' });
-    expect(templates).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(share).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(templates).toHaveAttribute('type', 'button');
-    expect(share).toHaveAttribute('type', 'button');
+    const buttons = [
+      ['My recipes', 'header-recipes'],
+      ['Templates', 'header-templates'],
+      ['Share Link', 'header-share'],
+    ];
+    for (const [name, id] of buttons) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('id', id);
+      expect(button).toHaveAttribute('type', 'button');
+      expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+      // The text is hidden on phones; the aria-label keeps the name.
+      expect(button).toHaveAttribute('aria-label', name);
+      expect(button).toHaveTextContent(name);
+    }
+  });
+
+  it('opens the saved recipes modal', () => {
+    renderHeader();
+    expect(screen.getByTestId('modal')).toHaveTextContent('none');
+    fireEvent.click(screen.getByRole('button', { name: 'My recipes' }));
+    expect(screen.getByTestId('modal')).toHaveTextContent(RECIPES_MODAL);
   });
 
   it('opens the templates modal', () => {
     renderHeader();
-    expect(screen.getByTestId('modal')).toHaveTextContent('none');
     fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
-    expect(screen.getByTestId('modal')).toHaveTextContent('templates');
+    expect(screen.getByTestId('modal')).toHaveTextContent(TEMPLATE_MODAL);
   });
 
   it('opens the share modal on its menu view', () => {
@@ -57,15 +77,17 @@ describe('Header', () => {
     expect(screen.getByTestId('share-view')).toHaveTextContent('image');
 
     fireEvent.click(screen.getByRole('button', { name: 'Share Link' }));
-    expect(screen.getByTestId('modal')).toHaveTextContent('share');
+    expect(screen.getByTestId('modal')).toHaveTextContent(SHARE_MODAL);
     expect(screen.getByTestId('share-view')).toHaveTextContent('menu');
   });
 
-  it('switches from one modal to the other (only one is open at a time)', () => {
+  it('switches from one modal to another (only one is open at a time)', () => {
     renderHeader();
     fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    fireEvent.click(screen.getByRole('button', { name: 'My recipes' }));
+    expect(screen.getByTestId('modal')).toHaveTextContent(RECIPES_MODAL);
     fireEvent.click(screen.getByRole('button', { name: 'Share Link' }));
-    expect(screen.getByTestId('modal')).toHaveTextContent('share');
+    expect(screen.getByTestId('modal')).toHaveTextContent(SHARE_MODAL);
   });
 
   it('needs a UiProvider', () => {

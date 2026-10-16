@@ -15,7 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 /**
- * English text for message keys returned by `src/domain/carbs.js`.
+ * English text for message keys returned by `src/domain/carbs.js` and
+ * `src/domain/solver.js`.
  * Placeholders use `{name}` syntax.
  * @type {Record<string, string>}
  */
@@ -69,6 +70,12 @@ const carbs = {
     'At {gPerHour} g/h, use at least {minRatio} glucose to fructose. Glucose alone cannot be absorbed fast enough.',
   'carbs.warn.tooMuchFructose':
     'Use no more fructose than glucose. Extra fructose often causes gut problems.',
+
+  // solveIngredients (src/domain/solver.js)
+  'carbs.warn.ratioNotReachable':
+    'Your ingredients cannot make {target} glucose to fructose. The recipe uses {achievable}, the closest they can make. Add an ingredient with more glucose or more fructose to get closer.',
+  'carbs.warn.noIngredients':
+    'Add at least one carb ingredient. Without one, the recipe has no carbs.',
 };
 
 export default carbs;

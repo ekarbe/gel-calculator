@@ -16,14 +16,12 @@
 
 /**
  * Carbohydrate domain logic: evidence-based g/h targets, glucose:fructose ratio
- * guidance, intake warnings and the carb-source solver.
+ * guidance and intake warnings. (The ingredient solver is `src/domain/solver.js`.)
  *
  * Pure module: no React, no DOM, no clocks, no randomness. Functions never
  * return English text; they return message descriptors whose keys live in
  * `src/i18n/en/carbs.js`.
  */
-
-import { sourceDataByIdMap } from '../constants/constants';
 
 /** @typedef {{ key: string, params?: Record<string, string|number> }} Message */
 /** @typedef {{ summary: Message, details?: Message[], citations: string[] }} Explanation */
@@ -55,27 +53,6 @@ import { sourceDataByIdMap } from '../constants/constants';
  * @property {Explanation} why
  */
 
-/** @typedef {{ id: number, percentage: number }} CarbSourceInput */
-
-/**
- * @typedef {Object} CarbSourceItem
- * @property {number} id  Source id from `src/constants/constants.js`.
- * @property {number} grams  Powder/syrup mass as purchased (g).
- * @property {number} carbsG  Available carbohydrate in that mass (g).
- * @property {number} glucoseG  Carbs absorbed via the glucose pathway (g).
- * @property {number} fructoseG  Carbs absorbed via the fructose pathway (g).
- * @property {'glucose'|'fructose'} pathway  The source list this item came from.
- */
-
-/**
- * @typedef {Object} CarbSourceSolution
- * @property {CarbSourceItem[]} items
- * @property {number} totalPowderG
- * @property {number} deliveredGlucoseG
- * @property {number} deliveredFructoseG
- * @property {boolean} canAchieveRatio
- */
-
 /** Exercise intensities understood by {@link recommendCarbs}. */
 export const INTENSITIES = ['easy', 'moderate', 'hard', 'race'];
 
@@ -88,7 +65,8 @@ const BAND_DEFS = {
   veryHigh: { range: [90, 120], citations: ['podlogar2022', 'hearris2022', 'jeukendrup2017'] },
 };
 
-const RATIO_CITATIONS = ['jeukendrup2014', 'rowlands2015', 'obrien2013', 'podlogar2022', 'wallis2005'];
+/** Studies behind the glucose:fructose ratio rules (also cited by the ingredient solver). */
+export const RATIO_CITATIONS = Object.freeze(['jeukendrup2014', 'rowlands2015', 'obrien2013', 'podlogar2022', 'wallis2005']);
 
 /** Fructose share of 2:1 (1:0.5) glucose:fructose. */
 const SHARE_2_TO_1 = 1 / 3;
@@ -269,6 +247,26 @@ export function ratioShare({ glucose, fructose } = {}) {
 }
 
 /**
+ * A glucose:fructose ratio as text, normalised to glucose 1 with the fructose
+ * part rounded to 2 decimals and trailing zeros trimmed: `{ glucose: 2,
+ * fructose: 1 }` → `"1:0.5"`, `{ glucose: 0.95, fructose: 0.85 }` → `"1:0.89"`.
+ * Without glucose it is `"0:1"`; without either part `"0:0"`. Negative or
+ * non-finite parts count as 0. Every view and message that shows a ratio uses
+ * this one form.
+ *
+ * @param {Ratio|null|undefined} ratio  Ratio in parts.
+ * @returns {string}
+ */
+export function formatRatio(ratio) {
+  const g = nonNegative(ratio?.glucose);
+  const f = nonNegative(ratio?.fructose);
+  const parts = g > 0 ? round2(f / g) : Infinity;
+  // A glucose part so small that the quotient overflows reads as no glucose.
+  if (Number.isFinite(parts)) return `1:${parts}`;
+  return f > 0 ? '0:1' : '0:0';
+}
+
+/**
  * Checks a user-chosen glucose:fructose ratio against {@link recommendRatio}.
  * Allows 0.02 of slack on the fructose share at both ends.
  *
@@ -342,152 +340,6 @@ export function carbIntakeWarnings(gPerHour, context = {}) {
   }
   if (gPerHour > GUT_TRAINING_ABOVE_G_PER_HOUR) warnings.push(gutTrainingWarning());
   return warnings;
-}
-
-/**
- * Looks up carbohydrate data for a source id. Electrolyte ids and unknown ids
- * return null.
- * @param {number} id
- */
-function carbData(id) {
-  const data = sourceDataByIdMap.get(id);
-  if (!data || !Number.isFinite(data.carbsPerGram) || data.carbsPerGram <= 0) return null;
-  if (!Number.isFinite(data.glucoseContent) || !Number.isFinite(data.fructoseContent)) return null;
-  return data;
-}
-
-/**
- * Splits a carbohydrate total across the user's glucose and fructose sources.
- *
- * Port of the former `useCarbCalculation` hook (`calculatedSourceGrams`),
- * keyed by source id:
- * 1. Targets: glucose and fructose pathway carbs from the ratio parts.
- * 2. Mixed sources (glucose and fructose content both > 0) go first. Each
- *    covers `percentage`% of the target of the list it is in.
- * 3. Pure sources split what is still needed in their list in proportion to
- *    their percentages.
- * 4. Feasibility: delivered glucose, fructose and total must each be within
- *    `max(0.5, totalCarbsG × 1%)` of the target.
- *
- * Unknown ids, non-carb ids and sources that cannot supply their list's
- * pathway (content 0) are ignored. Negative or non-finite percentages and
- * ratio parts count as 0. Repeated ids are merged into one item.
- *
- * @param {Object} input
- * @param {number} input.totalCarbsG  Carbohydrate to deliver (g). <= 0, NaN or a
- *   non-number → empty, feasible. +Infinity → empty, infeasible.
- * @param {Ratio} input.ratio  Glucose:fructose ratio in parts.
- * @param {CarbSourceInput[]} [input.glucoseSources]
- * @param {CarbSourceInput[]} [input.fructoseSources]
- * @returns {CarbSourceSolution} When infeasible, `items` is empty, `totalPowderG` is 0
- *   and `canAchieveRatio` is false; the delivered amounts still describe what
- *   the sources would supply.
- */
-export function solveCarbSources({ totalCarbsG, ratio, glucoseSources = [], fructoseSources = [] } = {}) {
-  const total = intake(totalCarbsG);
-  if (total <= 0 || !Number.isFinite(total)) {
-    // An infinite total cannot be delivered, so it must not read as feasible.
-    const canAchieveRatio = total <= 0;
-    return { items: [], totalPowderG: 0, deliveredGlucoseG: 0, deliveredFructoseG: 0, canAchieveRatio };
-  }
-
-  const glucoseParts = nonNegative(ratio?.glucose);
-  const fructoseParts = nonNegative(ratio?.fructose);
-  const totalParts = glucoseParts + fructoseParts;
-  const validTotalParts = totalParts > 0 ? totalParts : 1;
-  const targetGlucose = (glucoseParts / validTotalParts) * total;
-  const targetFructose = (fructoseParts / validTotalParts) * total;
-
-  const contentFor = (data, pathway) => (pathway === 'glucose' ? data.glucoseContent : data.fructoseContent);
-
-  // Resolve sources once, in user order (glucose list first).
-  const sources = [];
-  const addList = (list, pathway, target) => {
-    if (!Array.isArray(list)) return;
-    for (const s of list) {
-      const data = carbData(s?.id);
-      if (!data || contentFor(data, pathway) <= 0) continue;
-      sources.push({ id: s.id, pathway, target, percentage: nonNegative(s.percentage), data, order: sources.length });
-    }
-  };
-  addList(glucoseSources, 'glucose', targetGlucose);
-  addList(fructoseSources, 'fructose', targetFructose);
-
-  // Accumulates grams per id; `order` keeps the user's list order for output.
-  const itemsById = new Map();
-  const addGrams = (source, grams) => {
-    const { data } = source;
-    const carbsG = grams * data.carbsPerGram;
-    let entry = itemsById.get(source.id);
-    if (!entry) {
-      entry = { order: source.order, item: { id: source.id, grams: 0, carbsG: 0, glucoseG: 0, fructoseG: 0, pathway: source.pathway } };
-      itemsById.set(source.id, entry);
-    }
-    entry.order = Math.min(entry.order, source.order);
-    entry.item.grams += grams;
-    entry.item.carbsG += carbsG;
-    entry.item.glucoseG += carbsG * data.glucoseContent;
-    entry.item.fructoseG += carbsG * data.fructoseContent;
-  };
-
-  const isMixed = (s) => s.data.glucoseContent > 0 && s.data.fructoseContent > 0;
-
-  // Step 2: mixed sources cover their percentage of their list's target.
-  let deliveredGlucose = 0;
-  let deliveredFructose = 0;
-  for (const s of sources.filter(isMixed)) {
-    const targetForSource = s.target * (s.percentage / 100);
-    const grams = targetForSource / (contentFor(s.data, s.pathway) * s.data.carbsPerGram);
-    addGrams(s, grams);
-    deliveredGlucose += grams * s.data.carbsPerGram * s.data.glucoseContent;
-    deliveredFructose += grams * s.data.carbsPerGram * s.data.fructoseContent;
-  }
-
-  // Step 3: pure sources split the remaining need of their list.
-  const remaining = {
-    glucose: Math.max(0, targetGlucose - deliveredGlucose),
-    fructose: Math.max(0, targetFructose - deliveredFructose),
-  };
-  const pure = sources.filter((s) => !isMixed(s));
-  for (const pathway of ['glucose', 'fructose']) {
-    const pool = pure.filter((s) => s.pathway === pathway);
-    const percentageSum = pool.reduce((acc, s) => acc + s.percentage, 0);
-    if (remaining[pathway] <= 0 || percentageSum <= 0) continue;
-    for (const s of pool) {
-      const share = s.percentage / percentageSum;
-      const grams = (remaining[pathway] * share) / (contentFor(s.data, pathway) * s.data.carbsPerGram);
-      addGrams(s, grams);
-      deliveredGlucose += grams * s.data.carbsPerGram * s.data.glucoseContent;
-      deliveredFructose += grams * s.data.carbsPerGram * s.data.fructoseContent;
-    }
-  }
-
-  // Step 4: feasibility.
-  const tolerance = Math.max(0.5, total * 0.01);
-  const canAchieveRatio =
-    Math.abs(deliveredGlucose + deliveredFructose - total) <= tolerance &&
-    Math.abs(deliveredGlucose - targetGlucose) <= tolerance &&
-    Math.abs(deliveredFructose - targetFructose) <= tolerance;
-
-  if (!canAchieveRatio) {
-    return {
-      items: [],
-      totalPowderG: 0,
-      deliveredGlucoseG: deliveredGlucose,
-      deliveredFructoseG: deliveredFructose,
-      canAchieveRatio: false,
-    };
-  }
-
-  /** @type {CarbSourceItem[]} */
-  const items = [...itemsById.values()].sort((a, b) => a.order - b.order).map((entry) => entry.item);
-  return {
-    items,
-    totalPowderG: items.reduce((acc, item) => acc + item.grams, 0),
-    deliveredGlucoseG: deliveredGlucose,
-    deliveredFructoseG: deliveredFructose,
-    canAchieveRatio: true,
-  };
 }
 
 /**

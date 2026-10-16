@@ -16,10 +16,11 @@
 
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_INPUTS, normalizeInputs, computePlan } from "../domain/plan";
-import { isPlainObject } from "../domain/objects";
+import { isPlainObject, mergeDeep } from "../domain/objects";
 import { decodeShareState } from "./shareCodec";
+import { loadAutosave, saveAutosave } from "./storage";
 
 /** @typedef {import('../domain/plan').PlanInputs} PlanInputs */
 /** @typedef {import('../domain/plan').Plan} Plan */
@@ -33,9 +34,17 @@ import { decodeShareState } from "./shareCodec";
  * @property {(partial: unknown) => void} apply  Deep-merges a partial into the current inputs.
  * @property {(inputs: unknown) => void} replace  Replaces all inputs (merged onto the defaults).
  * @property {() => void} reset  Restores the defaults.
+ * @property {(inputs: unknown) => void} loadInputs  Replaces all inputs with a loaded plan (a saved
+ *   recipe) and removes a `?s=` link from the address bar, so a reload shows the loaded plan (from the
+ *   autosave) instead of the link.
  * @property {boolean} shareLinkFailed  True when the page was opened with a `?s=` share link that could
- *   not be read (damaged, or from an older version), so the defaults are shown instead.
+ *   not be read (damaged, or from an older version), so the autosave or the defaults are shown instead.
+ * @property {boolean} restored  True once the mount restore (link, else autosave) has run. Autosave
+ *   only starts after it.
  */
+
+/** Autosave waits this long after the last change, in ms. */
+export const AUTOSAVE_DELAY_MS = 400;
 
 /** Current inputs and the actions that change them. */
 export const PlanInputsContext = createContext(/** @type {PlanInputsApi|null} */ (null));
@@ -86,24 +95,6 @@ function setIn(obj, keys, value) {
   }
   const base = isPlainObject(obj) ? obj : {};
   return { ...base, [key]: setIn(base[key], rest, value) };
-}
-
-/**
- * Deep-merges `partial` into `base`: plain objects merge key by key, anything
- * else (arrays included) replaces. A `partial` that is not a plain object
- * leaves `base` unchanged.
- * @param {unknown} base
- * @param {unknown} partial
- * @returns {unknown}
- */
-function mergeDeep(base, partial) {
-  if (!isPlainObject(partial)) return base;
-  const out = isPlainObject(base) ? { ...base } : {};
-  for (const [key, value] of Object.entries(partial)) {
-    if (key === "__proto__") continue; // an own "__proto__" key (from JSON) must not set the prototype
-    out[key] =isPlainObject(value) && isPlainObject(out[key]) ? mergeDeep(out[key], value) : value;
-  }
-  return out;
 }
 
 /**
@@ -159,44 +150,96 @@ function dropShareParam() {
 }
 
 /**
- * Holds the calculator inputs and the plan computed from them.
+ * Holds the calculator inputs and the plan computed from them, and keeps an
+ * autosave of the inputs in localStorage (`src/state/storage.js`).
  *
- * On mount it restores inputs from a `?s=` share link once (the page is a
- * static export, so the URL can only be read after hydration). An unreadable
- * link (damaged, or from an older version) logs a console warning, is removed
- * from the address bar, and sets `shareLinkFailed` so the app can tell the
- * visitor the shared plan was not loaded.
+ * On mount (the page is a static export, so the URL and storage can only be
+ * read after hydration) it restores the inputs once, in this order:
+ * 1. a `?s=` share link. An unreadable link (damaged, or from an unknown
+ *    version) logs a console warning, is removed from the address bar and
+ *    sets `shareLinkFailed`, so the app can tell the visitor the shared plan
+ *    was not loaded; the autosave is used instead.
+ * 2. else the autosave, when there is one (`loadAutosave`).
  *
- * @param {{ children?: import('react').ReactNode, initialInputs?: unknown }} props
- *   `initialInputs` (normalized) replaces the defaults as the starting state.
+ * Autosave: after that restore has run, every change to the inputs is saved
+ * (`saveAutosave`) {@link AUTOSAVE_DELAY_MS} ms after the last change. The
+ * restored inputs themselves are not written back, and nothing is saved
+ * before the restore, so the defaults never overwrite a stored plan. A
+ * pending save is written at once when the page is hidden (`pagehide`), and
+ * dropped when the provider unmounts.
+ *
+ * @param {{ children?: import('react').ReactNode, initialInputs?: unknown, persist?: boolean }} props
+ *   `initialInputs` (normalized) replaces the defaults as the starting state; when it is given the
+ *   autosave is not restored (a `?s=` link still is). `persist` (default true) turns the autosave
+ *   off entirely when false (no restore, no saving).
  */
-export function PlanProvider({ children, initialInputs }) {
+export function PlanProvider({ children, initialInputs, persist = true }) {
   const [inputs, dispatch] = useReducer(planInputsReducer, initialInputs, normalizeInputs);
-  // A one-way flag: once a link failed it stays failed. (A reducer, because its
-  // dispatch is the stable way to record an external event from the effect.)
+  // One-way flags. (Reducers, because their dispatch is the stable way to
+  // record an external event from an effect.)
   const [shareLinkFailed, markShareLinkFailed] = useReducer(() => true, false);
+  const [restored, markRestored] = useReducer(() => true, false);
+  // Read once, by the mount restore.
+  const restoreAutosave = useRef(persist && initialInputs === undefined);
+  // The inputs the restore produced: already stored, so not saved again.
+  const baseline = useRef(/** @type {PlanInputs|null} */ (null));
+  // Inputs waiting for the debounce timer, flushed on pagehide.
+  const pending = useRef(/** @type {PlanInputs|null} */ (null));
 
   useEffect(() => {
     const encoded = new URLSearchParams(window.location.search).get("s");
-    if (!encoded) return;
-    const restored = decodeShareState(encoded);
-    if (restored) {
-      dispatch({ type: "replace", inputs: restored });
-    } else {
-      console.warn("Ignoring unreadable share link");
-      dropShareParam();
-      markShareLinkFailed();
+    let next = null;
+    if (encoded) {
+      next = decodeShareState(encoded);
+      if (!next) {
+        console.warn("Ignoring unreadable share link");
+        dropShareParam();
+        markShareLinkFailed();
+      }
     }
+    if (!next && restoreAutosave.current) next = loadAutosave();
+    if (next) dispatch({ type: "replace", inputs: next });
+    markRestored();
   }, []);
+
+  useEffect(() => {
+    if (!restored || !persist) return undefined;
+    if (baseline.current === null) {
+      baseline.current = inputs;
+      return undefined;
+    }
+    if (inputs === baseline.current) return undefined;
+    pending.current = inputs;
+    const timer = setTimeout(() => {
+      pending.current = null;
+      saveAutosave(inputs);
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [inputs, restored, persist]);
+
+  useEffect(() => {
+    if (!persist) return undefined;
+    const flush = () => {
+      if (pending.current === null) return;
+      saveAutosave(pending.current);
+      pending.current = null;
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, [persist]);
 
   const set = useCallback((path, value) => dispatch({ type: "set", path, value }), []);
   const apply = useCallback((partial) => dispatch({ type: "apply", partial }), []);
   const replace = useCallback((next) => dispatch({ type: "replace", inputs: next }), []);
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
+  const loadInputs = useCallback((next) => {
+    if (new URLSearchParams(window.location.search).has("s")) dropShareParam();
+    dispatch({ type: "replace", inputs: next });
+  }, []);
 
   const inputsApi = useMemo(
-    () => ({ inputs, set, apply, replace, reset, shareLinkFailed }),
-    [inputs, set, apply, replace, reset, shareLinkFailed],
+    () => ({ inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored }),
+    [inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored],
   );
   const plan = useMemo(() => computePlan(inputs), [inputs]);
 

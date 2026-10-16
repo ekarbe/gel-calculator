@@ -42,8 +42,14 @@
  *
  * Source ids point at `glucoseSourceOptions` (1–8) and `fructoseSourceOptions`
  * (11–20) in `constants.js`. Each list's percentages sum to 100 or the list is
- * empty, matching how the carb solver splits the per-pathway targets.
+ * empty: the share of that pathway's carbs each source covers. Applying a
+ * template (`templateToInputs` in `src/domain/plan.js`) turns the two lists
+ * into one ingredient list with `weight = percentage × the list's share of
+ * the ratio` (the inputs v3 → v4 migration rule); the ingredient solver then
+ * makes the template's ratio from them.
  */
+
+import { deepFreeze } from '../domain/objects';
 
 /**
  * Share of one pathway target covered by a carbohydrate source.
@@ -290,21 +296,6 @@ const RAW_TEMPLATES = [
       'There is no added salt, so the sodium salt setting is only a default. Salted flavors have 60–100 mg sodium from sea salt. The Coffee flavor adds 27 mg caffeine.',
   },
 ];
-
-/**
- * Recursively freezes plain objects and arrays.
- *
- * @template T
- * @param {T} value
- * @returns {T} The same value, frozen.
- */
-function deepFreeze(value) {
-  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.values(value).forEach(deepFreeze);
-    Object.freeze(value);
-  }
-  return value;
-}
 
 /**
  * Commercial gel templates, in display order. Deeply frozen; copy before

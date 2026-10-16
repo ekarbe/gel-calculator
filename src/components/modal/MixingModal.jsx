@@ -21,40 +21,61 @@ import { FlaskConical, Info, X } from "lucide-react";
 import Warnings from "../shared/Warnings";
 import { CitationLinks } from "../shared/Why";
 import { fmt } from "../shared/format";
-import { carbRecipeWarnings, recipeItemLabel } from "../shared/recipe";
+import { mixingSteps } from "../shared/mixing";
+import { SECTION_TITLES, recipeWarnings, servingsText } from "../shared/recipe";
 import { usePlan, usePlanInputs } from "../../state/PlanProvider";
 import { useUi, MIXING_MODAL } from "../../state/UiProvider";
 import { t } from "../../i18n";
 
+/** @typedef {import('../../domain/plan').Plan} Plan */
+/** @typedef {import('../../domain/recipe').RecipeSection} RecipeSection */
+/** @typedef {import('../shared/mixing').MixStep} MixStep */
+
 /**
- * One numbered step of the instructions.
- * @param {{ number: number, title: string, children: import('react').ReactNode }} props
+ * One numbered step of the instructions: its text, the recipe lines it
+ * lists, and for the caffeine step the "tablets, never powder" warning.
+ * @param {{ number: number, step: MixStep, plan: Plan }} props
  */
-function Step({ number, title, children }) {
+function Step({ number, step, plan }) {
+  const noPowder =
+    step.key === "caffeine" ? plan.caffeine.warnings.filter((warning) => warning.id === "caffeine.noPowder") : [];
   return (
     <li>
-      <h4 className="font-bold text-text-primary mb-2">
-        {number}. {title}
-      </h4>
-      {children}
+      <h5 className="font-bold text-text-primary mb-2">
+        {number}. {step.title}
+      </h5>
+      <div className="space-y-2">
+        <p className="text-text-secondary">{step.text}</p>
+        {step.lines.length > 0 && (
+          <ul aria-label={step.listLabel ?? step.title} className="list-disc pl-5 space-y-1 text-text-secondary font-medium">
+            {step.lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+        <Warnings warnings={noPowder} />
+      </div>
     </li>
   );
 }
 
 /**
  * What to drink during the activity, from the plan: the hourly fluid target
- * and the fluid the schedule lists with the first gel (`plan.schedule`), so
- * the steps never disagree with the timeline.
+ * and the fluid the schedule lists with the first gel or the first drink sip
+ * (`plan.schedule`), so the steps never disagree with the timeline.
  *
- * @param {import('../../domain/plan').Plan} plan
+ * @param {Plan} plan
  * @returns {string}
  */
-function fluidInstruction(plan) {
+export function fluidInstruction(plan) {
   const mlPerHour = plan.fluid.mlPerHour;
   const hasGels = plan.gels.count > 0;
+  const fromBottles = plan.format.type !== "gel" && plan.concentration.drink?.bottles > 0;
+  const source = fromBottles ? " from your bottles" : "";
   const firstGelFluid = plan.schedule.find(
     (event) => (event.type === "start" || event.type === "fuel") && event.fluidMl > 0,
   )?.fluidMl;
+  const firstSip = plan.schedule.find((event) => event.type === "drink" && event.fluidMl > 0)?.fluidMl;
   const thirst = plan.fluid.recommended.drinkToThirst ? " Drinking to thirst also works for this event." : "";
   if (!(mlPerHour > 0)) {
     return hasGels
@@ -62,24 +83,33 @@ function fluidInstruction(plan) {
       : "This plan has no fluid target.";
   }
   if (firstGelFluid) {
-    return `Drink about ${fmt(mlPerHour)} ml/h: about ${fmt(firstGelFluid)} ml with each gel. The schedule lists the amount for every gel.${thirst}`;
+    return `Drink about ${fmt(mlPerHour)} ml/h${source}: about ${fmt(firstGelFluid)} ml with each gel. The schedule lists the amount for every gel.${thirst}`;
   }
-  return `Drink about ${fmt(mlPerHour)} ml/h.${hasGels ? " Take each gel at the time the schedule lists." : ""}${thirst}`;
+  if (firstSip) {
+    return `Drink about ${fmt(mlPerHour)} ml/h${source}: about ${fmt(firstSip)} ml every 20 min. The schedule lists every sip.${thirst}`;
+  }
+  return `Drink about ${fmt(mlPerHour)} ml/h${source}.${hasGels ? " Take each gel at the time the schedule lists." : ""}${thirst}`;
 }
 
 /**
- * Mixing instructions for the current recipe.
+ * Mixing instructions for the current recipe, one block of steps per recipe
+ * section (`plan.recipe.sections`), from the shared step builder
+ * (`mixingSteps` in `src/components/shared/mixing.js`, also used by the
+ * print view):
  *
- * Ingredients come from the same recipe items as the recipe card
- * (`plan.recipe.items`, in the view the card shows). With gels the steps make
- * a gel base; without gels (no carbs, or 0 gels per hour) the ingredients go
- * into the drink. Caffeine tablets get their own step (crush, dissolve, never
- * pure powder). The carb total is what the recipe delivers, with the plan's
- * warning when the sources cannot make the ratio. A mouth rinse note
- * (`plan.carbs.mouthRinseHowTo`) appears for 45–75 min events, and the last
- * step gives the fluid from the plan and the schedule. Open with
- * `useUi().openModal(MIXING_MODAL)`; Escape, the close button and "Got It"
- * close it.
+ * - Gels: weigh the whole batch, dissolve the powders in the warm added water
+ *   (`section.water`), divide into N flasks of about X ml, then add any
+ *   caffeine tablets to their gels (crushed, never pure powder).
+ * - Drink: per bottle add the powders, fill to the mark, shake. Without
+ *   bottles (no fluid) the section's warning says why. A gel or both plan
+ *   without gels mixes everything into the drink (`plan.format.type`).
+ *
+ * Each block ends with the section's warnings. The summary shows the carbs
+ * the recipe delivers and the recipe warnings ({@link recipeWarnings}); a
+ * mouth rinse note (`plan.carbs.mouthRinseHowTo`) appears for 45–75 min
+ * events, and the last step gives the fluid from the plan and the schedule.
+ * Open with `useUi().openModal(MIXING_MODAL)`; Escape, the close button and
+ * "Got It" close it.
  */
 export default function MixingModal() {
   const plan = usePlan();
@@ -100,89 +130,15 @@ export default function MixingModal() {
 
   if (!isOpen) return null;
 
-  const view = inputs.format.view;
-  const gelCount = plan.gels.count;
-  const hasGels = gelCount > 0;
-  const items = plan.recipe.items;
-  const ingredients = items.filter((item) => item.kind !== "caffeine");
-  const caffeineItems = items.filter((item) => item.kind === "caffeine");
-  const caffeineWarnings = plan.caffeine.warnings.filter((warning) => warning.id === "caffeine.noPowder");
-  const carbWarnings = carbRecipeWarnings(plan);
+  const bottleMl = inputs.format.bottleMl;
   const carbTarget = plan.carbs.totalG;
-  const carbShort = carbTarget > 0 && !plan.carbs.sources.canAchieveRatio;
+  const delivered = plan.carbs.deliveredG;
+  const carbShort = carbTarget > 0 && Math.round(delivered) < Math.round(carbTarget);
   const rinse = plan.carbs.mouthRinseHowTo;
-
-  let amountsFor;
-  if (hasGels && view === "perGel") amountsFor = `Amounts for one gel (${fmt(gelCount)} gels in total).`;
-  else if (hasGels) amountsFor = `Amounts for the whole batch (${fmt(gelCount)} ${gelCount === 1 ? "gel" : "gels"}).`;
-  else if (carbTarget <= 0) amountsFor = "This plan has no carbs, so there are no gels. Amounts are for the whole activity.";
-  else amountsFor = "No gels are planned, so the amounts are for the whole activity.";
-
-  /** @type {Array<{ title: string, body: import('react').ReactNode }|false>} */
-  const steps = [
-    {
-      title: "Gather Ingredients",
-      body:
-        ingredients.length > 0 ? (
-          <ul aria-label="Ingredients" className="list-disc pl-5 space-y-1 text-text-secondary font-medium">
-            {ingredients.map((item) => (
-              <li key={item.key}>
-                {item.display} {recipeItemLabel(item)}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-text-secondary">Nothing to mix for this plan.</p>
-        ),
-    },
-    hasGels && {
-      title: "Initial Mixing (Gel Base)",
-      body: <p className="text-text-secondary">Add warm water to powders. Shake until smooth gel-like paste forms.</p>,
-    },
-    hasGels && {
-      title: "Final Consistency",
-      body: (
-        <p className="text-text-secondary">
-          Add cold water gradually while shaking until desired consistency is reached.
-        </p>
-      ),
-    },
-    !hasGels &&
-      ingredients.length > 0 && {
-        title: "Mix Into Your Drink",
-        body: (
-          <p className="text-text-secondary">
-            Dissolve the ingredients in the fluid you drink during the activity
-            {plan.fluid.totalMl > 0 ? ` (about ${fmt(plan.fluid.totalMl)} ml in total)` : ""}. Shake until nothing is
-            left at the bottom.
-          </p>
-        ),
-      },
-    caffeineItems.length > 0 && {
-      title: "Add Caffeine Tablets",
-      body: (
-        <div className="space-y-3">
-          <p className="text-text-secondary">
-            {view === "total" && hasGels ? `Split the batch into ${fmt(gelCount)} equal gels. ` : ""}
-            Crush each tablet into a fine powder and stir it into the gel listed below until it dissolves. Mark these
-            gels so you take them at the right time.
-          </p>
-          <ul aria-label="Caffeine tablets" className="list-disc pl-5 space-y-1 text-text-secondary font-medium">
-            {caffeineItems.map((item) => (
-              <li key={item.key}>
-                {recipeItemLabel(item)} ({item.display})
-              </li>
-            ))}
-          </ul>
-          <Warnings warnings={caffeineWarnings} />
-        </div>
-      ),
-    },
-    {
-      title: "During the Activity",
-      body: <p className="text-text-secondary">{fluidInstruction(plan)}</p>,
-    },
-  ];
+  const warnings = recipeWarnings(plan).filter((warning) => warning.id !== "caffeine.noPowder");
+  const blocks = plan.recipe.sections
+    .map((section) => ({ section, steps: mixingSteps(section, bottleMl) }))
+    .filter(({ section, steps }) => steps.length > 0 || section.warnings.length > 0);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex justify-center items-end sm:items-center p-0 sm:p-4 transition-all">
@@ -209,12 +165,14 @@ export default function MixingModal() {
         <div className="p-6 overflow-y-auto">
           <div className="text-sm text-text-primary leading-relaxed space-y-6">
             <div className="bg-card-border/30 p-4 rounded-xl border border-card-border space-y-1">
-              <div className="font-semibold text-text-primary">
-                Total Carbs: <span className="font-bold text-apple-blue">{fmt(plan.carbs.deliveredG)} g</span>
+              <div data-testid="mix-total-carbs" className="font-semibold text-text-primary">
+                Total Carbs: <span className="font-bold text-apple-blue">{fmt(delivered)} g</span>
                 {carbShort && <span className="font-normal text-text-secondary"> of {fmt(carbTarget)} g target</span>}
               </div>
-              <p className="text-text-secondary">{amountsFor}</p>
-              <Warnings warnings={carbWarnings} showCitations={false} className="pt-2" />
+              {carbTarget <= 0 && (
+                <p className="text-text-secondary">This plan has no carbs, so there are no gels to make.</p>
+              )}
+              <Warnings warnings={warnings} showCitations={false} className="pt-2" />
             </div>
 
             {rinse && (
@@ -232,13 +190,18 @@ export default function MixingModal() {
               </div>
             )}
 
-            <ol className="space-y-6">
-              {steps.filter(Boolean).map((step, index) => (
-                <Step key={step.title} number={index + 1} title={step.title}>
-                  {step.body}
-                </Step>
-              ))}
-            </ol>
+            {blocks.length === 0 && <p className="text-text-secondary">Nothing to mix for this plan.</p>}
+
+            {blocks.map(({ section, steps }) => (
+              <MixBlock key={section.kind} section={section} steps={steps} bottleMl={bottleMl} plan={plan} />
+            ))}
+
+            <div>
+              <h4 className="text-base font-bold text-text-primary mb-2">During the Activity</h4>
+              <p data-testid="mix-during" className="text-text-secondary">
+                {fluidInstruction(plan)}
+              </p>
+            </div>
           </div>
         </div>
         <div className="p-4 border-t border-card-border bg-card">
@@ -253,5 +216,29 @@ export default function MixingModal() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The steps of one recipe section under its heading, then its warnings.
+ * @param {{ section: RecipeSection, steps: MixStep[], bottleMl: number, plan: Plan }} props
+ */
+function MixBlock({ section, steps, bottleMl, plan }) {
+  const headingId = useId();
+  const title = SECTION_TITLES[section.kind] ?? section.kind;
+  return (
+    <section aria-labelledby={headingId} data-testid={`mix-section-${section.kind}`} className="space-y-4">
+      <h4 id={headingId} className="text-base font-bold text-text-primary border-b border-card-border pb-1">
+        {title} <span className="text-xs font-semibold text-text-secondary">· {servingsText(section, bottleMl)}</span>
+      </h4>
+      {steps.length > 0 && (
+        <ol className="space-y-5">
+          {steps.map((step, index) => (
+            <Step key={step.key} number={index + 1} step={step} plan={plan} />
+          ))}
+        </ol>
+      )}
+      <Warnings warnings={section.warnings} showCitations={false} />
+    </section>
   );
 }

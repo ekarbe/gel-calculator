@@ -183,10 +183,101 @@ const finite = (x) => Math.min(x, Number.MAX_VALUE);
  * @returns {number}
  */
 function ionRatio(id, ion) {
-  const components = sourceDataByIdMap.get(id)?.components;
+  return componentRatio(sourceDataByIdMap.get(id)?.components, ion);
+}
+
+/**
+ * Mass fraction of `ion` in a component list; 0 when it is not listed.
+ * @param {unknown} components
+ * @param {string} ion
+ * @returns {number}
+ */
+function componentRatio(components, ion) {
   if (!Array.isArray(components)) return 0;
-  const component = components.find((c) => c.name === ion);
+  const component = components.find((c) => c && c.name === ion);
   return component && Number.isFinite(component.ratio) && component.ratio > 0 ? component.ratio : 0;
+}
+
+/**
+ * A salt the user typed in from a label (inputs schema v4, `salts.custom`).
+ * @typedef {Object} CustomSalt
+ * @property {string} key  's1'..'s10'.
+ * @property {string} name
+ * @property {number} sodiumPct  % of the salt's mass that is sodium (elemental), 0–100.
+ * @property {number} potassiumPct
+ * @property {number} magnesiumPct
+ * @property {number} calciumPct
+ * @property {number} chloridePct
+ */
+
+/**
+ * @typedef {Object} SaltProfile
+ * @property {number|string} ref  Salt id or custom key.
+ * @property {string} label  Constants label, or the custom salt's name (its key when the name is empty).
+ * @property {{ name: string, ratio: number }[]} components  Ion mass fractions as sold.
+ * @property {number} osmPerG  Effective mOsm per gram as sold.
+ * @property {boolean} custom
+ */
+
+/** Label field of a custom salt for each tracked ion, in {@link IONS} order. */
+const CUSTOM_SALT_FIELDS = Object.freeze({
+  Sodium: 'sodiumPct',
+  Chloride: 'chloridePct',
+  Potassium: 'potassiumPct',
+  Magnesium: 'magnesiumPct',
+  Calcium: 'calciumPct',
+});
+
+/** Charge of each tracked ion. */
+const ION_CHARGE = Object.freeze({ Sodium: 1, Chloride: -1, Potassium: 1, Magnesium: 2, Calcium: 2 });
+
+/**
+ * Ion data for one salt: a built-in salt (numeric id from
+ * `electrolyteSourceOptions`) or a custom salt (string key looked up in
+ * `custom`).
+ *
+ * Custom salts: each label percentage (clamped to 0–100; missing or
+ * non-finite → 0) becomes a component `ratio = pct / 100`; ions at 0 % are
+ * left out. Their osmolality is estimated, as their anion is unknown: every
+ * listed ion counts as one dissolved particle (`ratio × 1000 / mg per mmol`),
+ * plus one monovalent anion per unit of positive charge that chloride does not
+ * balance. That is exact for chlorides and errs high for citrates (a
+ * trivalent anion counts three times), so drink and gel osmolality err on the
+ * cautious side, like custom carbs (counted as simple sugars).
+ *
+ * @param {number|string} ref
+ * @param {CustomSalt[]} [custom=[]]
+ * @returns {SaltProfile|null}  null for unknown refs and carb ids.
+ */
+export function saltProfile(ref, custom = []) {
+  if (typeof ref === 'number') {
+    const data = sourceDataByIdMap.get(ref);
+    if (!data || !Array.isArray(data.components)) return null;
+    return {
+      ref,
+      label: data.label,
+      components: data.components.map((c) => ({ name: c.name, ratio: c.ratio })),
+      osmPerG: nonNegative(data.osmPerG),
+      custom: false,
+    };
+  }
+  if (typeof ref !== 'string' || !Array.isArray(custom)) return null;
+  const entry = custom.find((c) => c !== null && typeof c === 'object' && c.key === ref);
+  if (!entry) return null;
+  const components = [];
+  let particles = 0;
+  let charge = 0;
+  for (const ion of IONS) {
+    const pct = clamp(nonNegative(entry[CUSTOM_SALT_FIELDS[ion]]), 0, 100);
+    if (pct <= 0) continue;
+    const ratio = pct / 100;
+    components.push({ name: ion, ratio });
+    const mmolPerG = (ratio * 1000) / MG_PER_MMOL[ion];
+    particles += mmolPerG;
+    charge += mmolPerG * ION_CHARGE[ion];
+  }
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+  return { ref, label: name || ref, components, osmPerG: particles + Math.max(0, charge), custom: true };
 }
 
 /**
@@ -391,16 +482,20 @@ export function recommendExtras(input) {
  * Ion amounts delivered by a list of salts.
  *
  * Uses each salt's component mass fractions as sold (`electrolyteSourceOptions`
- * via `sourceDataByIdMap`); no absorption factors. Unknown ids, carb sources
- * and NaN, negative or non-number amounts contribute nothing; an amount of
- * +Infinity counts as the largest finite number. Anions other than chloride
- * (citrate, bicarbonate, sulfate) are not tracked. Results are unrounded and
- * capped at `Number.MAX_VALUE`, so a huge overdose stays huge and finite.
+ * via `sourceDataByIdMap`, or a custom salt's label values via
+ * {@link saltProfile}); no absorption factors. A salt is named by `ref` (inputs
+ * schema v4: a salt id or a custom key) or by `id` (the Phase 1 shape).
+ * Unknown refs, carb sources and NaN, negative or non-number amounts
+ * contribute nothing; an amount of +Infinity counts as the largest finite
+ * number. Anions other than chloride (citrate, bicarbonate, sulfate) are not
+ * tracked. Results are unrounded and capped at `Number.MAX_VALUE`, so a huge
+ * overdose stays huge and finite.
  *
- * @param {SaltAmount[]} salts
+ * @param {(SaltAmount | { ref: number|string, amountMg: number })[]} salts
+ * @param {CustomSalt[]} [custom=[]]  Custom salts the refs may name.
  * @returns {IonAmounts}
  */
-export function deliveredIons(salts) {
+export function deliveredIons(salts, custom = []) {
   /** @type {IonAmounts} */
   const totals = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0 };
   if (!Array.isArray(salts)) return totals;
@@ -408,8 +503,11 @@ export function deliveredIons(salts) {
   for (const salt of salts) {
     const mg = amount(salt?.amountMg);
     if (mg === 0) continue;
+    const ref = salt.ref ?? salt.id;
+    const components = typeof ref === 'string' ? saltProfile(ref, custom)?.components : null;
     for (const ion of IONS) {
-      totals[ion] = finite(totals[ion] + mg * ionRatio(salt.id, ion));
+      const ratio = components ? componentRatio(components, ion) : ionRatio(ref, ion);
+      totals[ion] = finite(totals[ion] + mg * ratio);
     }
   }
   return totals;

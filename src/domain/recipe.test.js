@@ -1,27 +1,108 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { buildRecipeItems, formatAmount } from './recipe';
+import { buildRecipe, formatAmount } from './recipe';
 import catalog from '../i18n/en/recipe';
 
 // ---------------------------------------------------------------------------
-// Literal inputs. Shapes follow the spec for solveCarbSources(...).items and
-// planCaffeine(...), so these tests do not depend on those implementations.
+// Literal inputs. Shapes follow the Phase 2 spec for solveIngredients(...).items,
+// gelBatch(...), drinkBottles(...) and planCaffeine(...), so these tests do not
+// depend on those implementations.
 // ---------------------------------------------------------------------------
 
-// solveCarbSources(...).items for 150 g carbs at 1:0.8 with maltodextrin (3)
-// and fructose (11) plus honey (14) as a mixed fructose-list source. The
-// fructose-list items come first on purpose to test ordering.
-const CARB_ITEMS = [
-  { id: 11, grams: 54, carbsG: 54, glucoseG: 0, fructoseG: 54, pathway: 'fructose' },
-  { id: 3, grams: 72, carbsG: 68.4, glucoseG: 68.4, fructoseG: 0, pathway: 'glucose' },
-  { id: 14, grams: 33, carbsG: 27.06, glucoseG: 13.53, fructoseG: 13.53, pathway: 'fructose' },
+// solveIngredients({ totalCarbsG: 225 (180 min at 75 g/h), targetShare: 1/3, ... }).items
+// with their profiles: maltodextrin (3, 0.95 g carbs/g, 5 % water) and fructose (11).
+const CARBS = [
+  {
+    ref: 3,
+    label: 'Maltodextrin',
+    carbsG: 150,
+    grams: 150 / 0.95,
+    glucoseG: 150,
+    fructoseG: 0,
+    carbsPerGram: 0.95,
+    osmPerG: 0.95,
+    waterFraction: 0.05,
+  },
+  {
+    ref: 11,
+    label: 'Crystalline Fructose',
+    carbsG: 75,
+    grams: 75,
+    glucoseG: 0,
+    fructoseG: 75,
+    carbsPerGram: 1,
+    osmPerG: 5.55,
+    waterFraction: 0,
+  },
 ];
 
-// saltsForTargets(...) output: whole-activity totals.
+// Whole-activity salts: table salt for 1,710 mg sodium, plus a custom salt.
 const SALTS = [
-  { id: 31, amountMg: 3750 },
-  { id: 39, amountMg: 870 },
+  { ref: 31, label: 'Sodium Chloride (Table Salt)', amountMg: 4351 },
+  { ref: 's1', label: 'My electrolyte mix', amountMg: 420 },
 ];
+
+// gelBatch(...) for the 225 g at 60 % (standard) plus the 9 gels it fills.
+const GEL = {
+  servings: 9,
+  addedWaterMl: 142.1,
+  totalMassG: 375,
+  solidsFraction: 0.62,
+  densityGPerMl: 1.29,
+  volumeMl: 290.7,
+  perServing: { massG: 41.67, volumeMl: 32.3, carbsG: 25 },
+  osmolality: { mOsmPerKg: 3400, waterG: 150, tonicity: 'hypertonic' },
+  waterToDrinkMlPerServing: 210,
+  warnings: [{ id: 'concentration.gelTakeWithWater', level: 'info', message: { key: 'concentration.gelTakeWithWater' } }],
+};
+
+// drinkBottles(...) for the same carbs and salts in three 750 ml bottles, plus the bottle size.
+const DRINK = {
+  bottles: 3,
+  bottleMl: 750,
+  perBottle: {
+    carbsG: 75,
+    sodiumMg: 570,
+    carbPctWv: 10,
+    sodiumMgPerL: 760,
+    osmolality: { mOsmPerKg: 420, waterG: 700, tonicity: 'hypertonic' },
+  },
+  warnings: [{ id: 'concentration.drinkStrong', level: 'info', message: { key: 'concentration.drinkStrong' } }],
+};
+
+// drinkBottles(...) with no fluid planned (totalFluidMl 0): no bottle, placeholder zeros and a warning.
+const NO_FLUID_DRINK = {
+  bottles: 0,
+  bottleMl: 750,
+  perBottle: {
+    carbsG: 0,
+    sodiumMg: 0,
+    carbPctWv: 0,
+    sodiumMgPerL: 0,
+    osmolality: { mOsmPerKg: 0, waterG: 0, tonicity: 'hypotonic' },
+    addedWaterMl: 0,
+    fillMl: 0,
+  },
+  warnings: [{ id: 'concentration.noFluidForDrink', level: 'warning', message: { key: 'concentration.warn.noFluidForDrink' } }],
+};
+
+// drinkBottles(...) for CARBS and SALTS (as grams) with 2000 ml of fluid in 750 ml bottles:
+// 3 bottles, each filled to 2000 / 3 = 666.7 ml. Added water per bottle:
+// 666.67 − (0.625 × 229.771 + 7.895) / 3 = 616.17 ml (1 g of water = 1 ml).
+const DRINK_2000 = {
+  bottles: 3,
+  bottleMl: 750,
+  perBottle: {
+    carbsG: 75,
+    sodiumMg: 570,
+    carbPctWv: 11.25,
+    sodiumMgPerL: 855,
+    osmolality: { mOsmPerKg: 381.8, waterG: 618.8, tonicity: 'hypertonic' },
+    addedWaterMl: 616.166,
+    fillMl: 2000 / 3,
+  },
+  warnings: [{ id: 'concentration.hypertonic', level: 'info', message: { key: 'concentration.warn.hypertonic' } }],
+};
 
 // planCaffeine({ enabled: true, massKg: 70, mgPerKg: 3, durationMin: 180,
 //   gelTimesMin: [0, 20, ..., 160], asIngredient: true, tabletMg: 100 })
@@ -85,231 +166,686 @@ function deepFreeze(value) {
   return value;
 }
 
-const GROUP_RANK = { 'carb:glucose': 0, 'carb:fructose': 1, salt: 2, caffeine: 3 };
-const rank = (item) => GROUP_RANK[item.kind === 'carb' ? `carb:${item.pathway}` : item.kind];
+const keysOf = (section) => section.items.map((item) => item.key);
+const itemOf = (section, key) => section.items.find((item) => item.key === key);
+
+// ---------------------------------------------------------------------------
+// formatAmount
+// ---------------------------------------------------------------------------
 
 describe('formatAmount', () => {
-  it('shows grams as whole grams', () => {
+  it('shows grams from 10 g as whole grams', () => {
     expect(formatAmount(53, 'g')).toBe('53 g');
     expect(formatAmount(53.4, 'g')).toBe('53 g');
     expect(formatAmount(52.5, 'g')).toBe('53 g');
-    expect(formatAmount(2274.2, 'g')).toBe('2274 g');
+    expect(formatAmount(10, 'g')).toBe('10 g');
+    expect(formatAmount(2274.2, 'g')).toBe('2,274 g');
   });
 
-  it('shows milligrams below 1000 mg as whole mg', () => {
-    expect(formatAmount(870, 'mg')).toBe('870 mg');
-    expect(formatAmount(869.6, 'mg')).toBe('870 mg');
-    expect(formatAmount(5, 'mg')).toBe('5 mg');
-    expect(formatAmount(999.4, 'mg')).toBe('999 mg');
+  it('shows grams below 10 g with one decimal', () => {
+    expect(formatAmount(4.5, 'g')).toBe('4.5 g');
+    expect(formatAmount(4.54, 'g')).toBe('4.5 g');
+    expect(formatAmount(8.3333, 'g')).toBe('8.3 g');
+    expect(formatAmount(9.94, 'g')).toBe('9.9 g');
+    expect(formatAmount(1, 'g')).toBe('1.0 g');
+    expect(formatAmount(0.05, 'g')).toBe('0.1 g');
   });
 
-  it('shows 1000 mg and more as grams with one decimal', () => {
+  it('switches to whole grams when the amount rounds to 10 g', () => {
+    expect(formatAmount(9.95, 'g')).toBe('10 g');
+    expect(formatAmount(9.99, 'g')).toBe('10 g');
+  });
+
+  it('shows salts from 1000 mg as grams with one decimal', () => {
     expect(formatAmount(3750, 'mg')).toBe('3.8 g');
     expect(formatAmount(3800, 'mg')).toBe('3.8 g');
+    expect(formatAmount(4351, 'mg')).toBe('4.4 g');
     expect(formatAmount(1000, 'mg')).toBe('1.0 g');
     expect(formatAmount(1050, 'mg')).toBe('1.1 g');
     expect(formatAmount(12340, 'mg')).toBe('12.3 g');
   });
 
-  it('switches to grams when the amount rounds to 1000 mg', () => {
+  it('shows salts from 100 to 999 mg as grams with two decimals', () => {
+    expect(formatAmount(420, 'mg')).toBe('0.42 g');
+    expect(formatAmount(417, 'mg')).toBe('0.42 g');
+    expect(formatAmount(483.4, 'mg')).toBe('0.48 g');
+    expect(formatAmount(100, 'mg')).toBe('0.10 g');
+    expect(formatAmount(994, 'mg')).toBe('0.99 g');
+  });
+
+  it('shows salts below 100 mg as whole milligrams', () => {
+    expect(formatAmount(60, 'mg')).toBe('60 mg');
+    expect(formatAmount(46.67, 'mg')).toBe('47 mg');
+    expect(formatAmount(5, 'mg')).toBe('5 mg');
+    expect(formatAmount(99.4, 'mg')).toBe('99 mg');
+  });
+
+  it('picks the band after rounding, so no "100 mg", "1.00 g" or "10.0 g" appears', () => {
+    expect(formatAmount(99.6, 'mg')).toBe('0.10 g');
+    expect(formatAmount(995, 'mg')).toBe('1.0 g');
     expect(formatAmount(999.6, 'mg')).toBe('1.0 g');
+  });
+
+  it('shows millilitres as whole ml', () => {
+    expect(formatAmount(180, 'ml')).toBe('180 ml');
+    expect(formatAmount(142.1, 'ml')).toBe('142 ml');
+    expect(formatAmount(15.79, 'ml')).toBe('16 ml');
+    expect(formatAmount(2098.7, 'ml')).toBe('2,099 ml');
+    // thousands separators, as every other number in the app ("2 bottles of 1,200 ml")
+    expect(formatAmount(1200, 'ml')).toBe('1,200 ml');
+  });
+
+  it('shows tablets with up to two decimals and a singular for one tablet', () => {
+    expect(formatAmount(1.5, 'tablet')).toBe('1.5 tablets');
+    expect(formatAmount(0.5, 'tablet')).toBe('0.5 tablets');
+    expect(formatAmount(2, 'tablet')).toBe('2 tablets');
+    expect(formatAmount(1, 'tablet')).toBe('1 tablet');
+    expect(formatAmount(0.25, 'tablet')).toBe('0.25 tablets');
+    expect(formatAmount(1 / 3, 'tablet')).toBe('0.33 tablets');
   });
 
   it('shows zero, negative and non-finite amounts as 0', () => {
     expect(formatAmount(0, 'g')).toBe('0 g');
     expect(formatAmount(0, 'mg')).toBe('0 mg');
+    expect(formatAmount(0, 'ml')).toBe('0 ml');
+    expect(formatAmount(0, 'tablet')).toBe('0 tablets');
     expect(formatAmount(-5, 'g')).toBe('0 g');
     expect(formatAmount(-5, 'mg')).toBe('0 mg');
     expect(formatAmount(NaN, 'g')).toBe('0 g');
     expect(formatAmount(Infinity, 'mg')).toBe('0 mg');
-    expect(formatAmount(undefined, 'mg')).toBe('0 mg');
+    expect(formatAmount(undefined, 'ml')).toBe('0 ml');
+    expect(formatAmount('12', 'g')).toBe('0 g');
+  });
+
+  it('shows a positive amount that would round to zero as below the smallest step, never as zero', () => {
+    expect(formatAmount(0.04, 'g')).toBe('<0.1 g');
+    expect(formatAmount(0.0499, 'g')).toBe('<0.1 g');
+    expect(formatAmount(1e-9, 'g')).toBe('<0.1 g');
+    expect(formatAmount(0.05, 'g')).toBe('0.1 g');
+    expect(formatAmount(0.4, 'mg')).toBe('<1 mg');
+    expect(formatAmount(0.5, 'mg')).toBe('1 mg');
+    expect(formatAmount(0.4, 'ml')).toBe('<1 ml');
+    expect(formatAmount(0.5, 'ml')).toBe('1 ml');
+    expect(formatAmount(0.004, 'tablet')).toBe('<0.01 tablets');
+    expect(formatAmount(0.005, 'tablet')).toBe('0.01 tablets');
+    expect(formatAmount(0.4, 'kcal')).toBe('<1 kcal');
+    expect(formatAmount(0.4)).toBe('<1');
+    // Zero itself stays a plain zero.
+    expect(formatAmount(0, 'g')).toBe('0 g');
+    expect(formatAmount(0, 'mg')).toBe('0 mg');
+  });
+
+  it('shows other units as a whole number', () => {
+    expect(formatAmount(12.6, 'kcal')).toBe('13 kcal');
+    expect(formatAmount(12.4)).toBe('12');
+    expect(formatAmount(3, 'toString')).toBe('3 toString');
   });
 
   it('handles huge values', () => {
-    expect(formatAmount(1e6, 'mg')).toBe('1000.0 g');
-    expect(formatAmount(1e6, 'g')).toBe('1000000 g');
+    expect(formatAmount(1e6, 'mg')).toBe('1,000.0 g');
+    expect(formatAmount(1e6, 'g')).toBe('1,000,000 g');
+    expect(formatAmount(1e6, 'ml')).toBe('1,000,000 ml');
   });
 
-  it('formats mg as whole mg or one-decimal g for any amount (property)', () => {
+  it('matches its band and stays within rounding of the amount for grams (property)', () => {
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 1e6, noNaN: true }), (g) => {
+        const text = formatAmount(g, 'g');
+        expect(text).toMatch(/^(\d{1,3}(,\d{3})* g|\d\.\d g|<0\.1 g)$/);
+        expect(text === '0 g').toBe(g === 0);
+        expect(text).not.toBe('0.0 g');
+        if (text === '<0.1 g') {
+          expect(g).toBeGreaterThan(0);
+          expect(g).toBeLessThan(0.05 + 1e-12);
+          return;
+        }
+        const shown = Number.parseFloat(text.replaceAll(',', ''));
+        expect(Math.abs(shown - g)).toBeLessThanOrEqual(text.includes('.') ? 0.05 + 1e-9 : 0.5 + 1e-9);
+      }),
+    );
+  });
+
+  it('matches its band and stays within rounding of the amount for milligrams (property)', () => {
     fc.assert(
       fc.property(fc.double({ min: 0, max: 1e7, noNaN: true }), (mg) => {
         const text = formatAmount(mg, 'mg');
-        expect(text).toMatch(/^(\d{1,3} mg|\d+\.\d g)$/);
+        expect(text).toMatch(/^(\d{1,2} mg|<1 mg|0\.\d\d g|\d{1,3}(,\d{3})*\.\d g)$/);
+        expect(text === '0 mg').toBe(mg === 0);
+        if (text === '<1 mg') {
+          expect(mg).toBeGreaterThan(0);
+          expect(mg).toBeLessThan(0.5 + 1e-12);
+          return;
+        }
+        const number = Number.parseFloat(text.replaceAll(',', ''));
+        const shownMg = text.endsWith(' mg') ? number : number * 1000;
+        const tolerance = text.endsWith(' mg') ? 0.5 : /\.\d\d /.test(text) ? 5 : 50;
+        expect(Math.abs(shownMg - mg)).toBeLessThanOrEqual(tolerance + 1e-6);
       }),
     );
   });
 });
 
-describe('buildRecipeItems: total view', () => {
-  const items = buildRecipeItems({
-    carbSources: CARB_ITEMS,
-    salts: SALTS,
+// ---------------------------------------------------------------------------
+// buildRecipe
+// ---------------------------------------------------------------------------
+
+describe('buildRecipe: gel', () => {
+  const recipe = buildRecipe({
+    type: 'gel',
+    carbItems: CARBS,
+    saltItems: SALTS,
     caffeine: CAFFEINE_TABLETS_180,
-    gelCount: 9,
+    gel: GEL,
+    drink: DRINK,
     view: 'total',
+    drinkCarbShare: 0.4,
+  });
+  const [gel] = recipe.sections;
+
+  it('has one gel section and keeps the view', () => {
+    expect(recipe.sections.map((section) => section.kind)).toEqual(['gel']);
+    expect(recipe.view).toBe('total');
+    expect(gel.servings).toBe(9);
+    expect(gel.servingLabelKey).toBe('recipe.serving.gel');
   });
 
-  it('orders glucose carbs, fructose carbs, salts, then caffeine', () => {
-    expect(items.map((item) => item.key)).toEqual([
-      'carb:glucose:3',
-      'carb:fructose:11',
-      'carb:fructose:14',
-      'salt:31',
-      'salt:39',
-      'caffeine:gel:6',
-    ]);
+  it('lists carbs, salts, water, then caffeine', () => {
+    expect(keysOf(gel)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1', 'water', 'caffeine:gel:6']);
   });
 
-  it('builds carb items with constants labels, grams and the carb breakdown', () => {
-    expect(items[0]).toEqual({
-      key: 'carb:glucose:3',
+  it('builds carb lines with the whole batch, the amount per gel and the carb breakdown', () => {
+    // 150 g carbs from maltodextrin at 0.95 g/g = 157.9 g; per gel 17.5 g.
+    expect(gel.items[0]).toEqual({
+      key: 'carb:3',
       kind: 'carb',
-      id: 3,
+      ref: 3,
       label: 'Maltodextrin',
-      pathway: 'glucose',
-      amount: 72,
+      amount: 150 / 0.95,
       unit: 'g',
-      display: '72 g',
-      detail: { carbsG: 68.4, glucoseG: 68.4, fructoseG: 0 },
+      display: '158 g',
+      perServing: 150 / 0.95 / 9,
+      perServingDisplay: '18 g',
+      detail: {
+        carbsG: 150,
+        glucoseG: 150,
+        fructoseG: 0,
+        perServing: { carbsG: 150 / 9, glucoseG: 150 / 9, fructoseG: 0 },
+      },
     });
-    expect(items[1]).toMatchObject({ label: 'Crystalline Fructose', pathway: 'fructose', amount: 54, display: '54 g' });
-    expect(items[2]).toMatchObject({
-      label: 'Honey',
-      pathway: 'fructose',
-      amount: 33,
-      display: '33 g',
-      detail: { carbsG: 27.06, glucoseG: 13.53, fructoseG: 13.53 },
+    // 75 g fructose; per gel 8.33 g shows one decimal.
+    expect(gel.items[1]).toMatchObject({
+      ref: 11,
+      label: 'Crystalline Fructose',
+      amount: 75,
+      display: '75 g',
+      perServingDisplay: '8.3 g',
     });
+    expect(gel.items[1].perServing).toBeCloseTo(8.3333, 4);
   });
 
-  it('builds salt items in mg with constants labels', () => {
-    expect(items[3]).toEqual({
+  it('builds salt lines in mg, including custom salts', () => {
+    expect(gel.items[2]).toEqual({
       key: 'salt:31',
       kind: 'salt',
-      id: 31,
+      ref: 31,
       label: 'Sodium Chloride (Table Salt)',
-      pathway: null,
-      amount: 3750,
+      amount: 4351,
       unit: 'mg',
-      display: '3.8 g',
+      display: '4.4 g',
+      perServing: 4351 / 9,
+      perServingDisplay: '0.48 g',
       detail: null,
     });
-    expect(items[4]).toMatchObject({ label: 'Potassium Citrate (monohydrate)', amount: 870, display: '870 mg' });
+    expect(gel.items[3]).toMatchObject({
+      ref: 's1',
+      label: 'My electrolyte mix',
+      amount: 420,
+      display: '0.42 g',
+      perServingDisplay: '47 mg',
+    });
   });
 
-  it('adds intra caffeine tablets as one item for their gel and skips the pre-race dose', () => {
-    // 70 kg, 3 mg/kg, 180 min, asIngredient, 100 mg tablets: pre 150 mg (schedule only),
+  it('adds the batch water as a line', () => {
+    expect(itemOf(gel, 'water')).toEqual({
+      key: 'water',
+      kind: 'water',
+      ref: null,
+      label: { key: 'recipe.water.gel' },
+      amount: 142.1,
+      unit: 'ml',
+      display: '142 ml',
+      perServing: 142.1 / 9,
+      perServingDisplay: '16 ml',
+      detail: null,
+    });
+    expect(gel.water).toEqual({ totalMl: 142.1, perServingMl: 142.1 / 9 });
+  });
+
+  it('adds intra caffeine tablets for their gel and skips the pre-race dose', () => {
+    // 70 kg, 3 mg/kg, 180 min, 100 mg tablets: pre 150 mg (schedule only),
     // intra 50 mg (0.5 tablet) in the gel at 120 min, which is gel 7 (index 6).
-    expect(items.filter((item) => item.kind === 'caffeine')).toEqual([
+    expect(gel.items.filter((item) => item.kind === 'caffeine')).toEqual([
       {
         key: 'caffeine:gel:6',
         kind: 'caffeine',
-        id: null,
-        label: { key: 'recipe.caffeineTablet', params: { tablets: 0.5, tabletMg: 100, gel: 7 } },
-        pathway: null,
-        amount: 50,
-        unit: 'mg',
-        display: '50 mg',
-        detail: null,
+        ref: null,
+        label: { key: 'recipe.caffeineForGel', params: { gel: 7, tabletMg: 100 } },
+        amount: 0.5,
+        unit: 'tablet',
+        display: '0.5 tablets',
+        perServing: 0.5,
+        perServingDisplay: '0.5 tablets',
+        detail: { mg: 50, tabletMg: 100 },
       },
     ]);
   });
 
-  it('treats an unknown view as total', () => {
-    expect(
-      buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, caffeine: CAFFEINE_TABLETS_180, gelCount: 9, view: 'batch' }),
-    ).toEqual(items);
-    expect(buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, caffeine: CAFFEINE_TABLETS_180, gelCount: 9 })).toEqual(
-      items,
-    );
+  it('reports per-gel carbs from the lines and mass, volume and water from the batch', () => {
+    expect(gel.perServing.carbsG).toBeCloseTo(25, 10);
+    expect(gel.perServing).toMatchObject({ massG: 41.67, volumeMl: 32.3, waterToDrinkMl: 210 });
+  });
+
+  it('passes the osmolality and warnings through as copies', () => {
+    expect(gel.osmolality).toEqual(GEL.osmolality);
+    expect(gel.osmolality).not.toBe(GEL.osmolality);
+    expect(gel.warnings).toEqual(GEL.warnings);
+    expect(gel.warnings).not.toBe(GEL.warnings);
+  });
+
+  it('treats an unknown or missing type as gel', () => {
+    const args = { carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180, gel: GEL, drink: DRINK };
+    expect(buildRecipe({ ...args, type: 'bar' })).toEqual(buildRecipe({ ...args, type: 'gel' }));
+    expect(buildRecipe({ ...args, type: 'toString' })).toEqual(buildRecipe({ ...args, type: 'gel' }));
+    expect(buildRecipe(args)).toEqual(buildRecipe({ ...args, type: 'gel' }));
+  });
+
+  it('leaves out the water line when syrups already bring enough water', () => {
+    const { sections } = buildRecipe({
+      type: 'gel',
+      carbItems: CARBS,
+      gel: { ...GEL, addedWaterMl: 0, warnings: [{ id: 'concentration.syrupsThinner', level: 'info', message: { key: 'concentration.syrupsThinner' } }] },
+    });
+    expect(keysOf(sections[0])).toEqual(['carb:3', 'carb:11']);
+    expect(sections[0].water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(sections[0].warnings.map((warning) => warning.id)).toEqual(['concentration.syrupsThinner']);
   });
 });
 
-describe('buildRecipeItems: per-gel view', () => {
-  const items = buildRecipeItems({
-    carbSources: CARB_ITEMS,
-    salts: SALTS,
+describe('buildRecipe: drink', () => {
+  const recipe = buildRecipe({
+    type: 'drink',
+    carbItems: CARBS,
+    saltItems: SALTS,
     caffeine: CAFFEINE_TABLETS_180,
-    gelCount: 9,
-    view: 'perGel',
+    gel: GEL,
+    drink: DRINK,
+    view: 'perServing',
+  });
+  const [drink] = recipe.sections;
+
+  it('has one drink section with all carbs and salts and no caffeine', () => {
+    expect(recipe.sections.map((section) => section.kind)).toEqual(['drink']);
+    expect(recipe.view).toBe('perServing');
+    expect(drink.servings).toBe(3);
+    expect(drink.servingLabelKey).toBe('recipe.serving.bottle');
+    expect(keysOf(drink)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1', 'water']);
   });
 
-  it('divides carb amounts and the carb breakdown by the gel count', () => {
-    expect(items[0].amount).toBeCloseTo(8, 10);
-    expect(items[0].display).toBe('8 g');
-    expect(items[0].detail.carbsG).toBeCloseTo(7.6, 10);
-    expect(items[0].detail.glucoseG).toBeCloseTo(7.6, 10);
-    expect(items[0].detail.fructoseG).toBe(0);
-    expect(items[1].amount).toBeCloseTo(6, 10);
-    expect(items[2].detail.fructoseG).toBeCloseTo(1.503333, 5);
+  it('divides by the bottle count', () => {
+    expect(drink.items.map((item) => [item.display, item.perServingDisplay])).toEqual([
+      ['158 g', '53 g'],
+      ['75 g', '25 g'],
+      ['4.4 g', '1.5 g'],
+      ['0.42 g', '0.14 g'],
+      ['2,098 ml', '699 ml'],
+    ]);
+    expect(drink.perServing.carbsG).toBeCloseTo(75, 10);
   });
 
-  it('divides salt amounts by the gel count', () => {
-    expect(items[3].amount).toBeCloseTo(3750 / 9, 10);
-    expect(items[3].display).toBe('417 mg');
-    expect(items[4].display).toBe('97 mg');
+  it('fills each bottle to the mark: bottle − 0.625 × dry solids − ingredient water (no addedWaterMl given)', () => {
+    // Per bottle: dry solids (157.89 × 0.95 + 75 + 4.351 + 0.42) / 3 = 76.59 g;
+    // maltodextrin water 157.89 × 0.05 / 3 = 2.632 g (= ml, as in drinkBottles).
+    // 750 − 0.625 × 76.59 − 2.632 = 699.50 ml.
+    const drySolids = (150 + 75 + 4.351 + 0.42) / 3;
+    const ingredientWaterMl = (150 / 0.95) * 0.05 / 3;
+    const expected = 750 - 0.625 * drySolids - ingredientWaterMl;
+    expect(expected).toBeCloseTo(699.50, 2);
+    expect(drink.water.perServingMl).toBeCloseTo(expected, 10);
+    expect(drink.water.totalMl).toBeCloseTo(3 * expected, 10);
+    expect(itemOf(drink, 'water')).toMatchObject({
+      kind: 'water',
+      ref: null,
+      label: { key: 'recipe.water.drink', params: { ml: 750 } },
+      unit: 'ml',
+      detail: null,
+    });
   });
 
-  it('keeps caffeine amounts because they belong to one specific gel', () => {
-    const caffeine = items.find((item) => item.kind === 'caffeine');
-    expect(caffeine.amount).toBe(50);
-    expect(caffeine.label.params).toEqual({ tablets: 0.5, tabletMg: 100, gel: 7 });
+  it('reports the bottle size and the per-bottle values of the drink', () => {
+    expect(drink.perServing).toMatchObject({ sodiumMg: 570, volumeMl: 750, carbPctWv: 10, sodiumMgPerL: 760 });
+    expect(drink.osmolality).toEqual({ mOsmPerKg: 420, waterG: 700, tonicity: 'hypertonic' });
+    expect(drink.warnings.map((warning) => warning.id)).toEqual(['concentration.drinkStrong']);
   });
 
-  it('keeps the same keys and order as the total view', () => {
-    const total = buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, caffeine: CAFFEINE_TABLETS_180, gelCount: 9 });
-    expect(items.map((item) => item.key)).toEqual(total.map((item) => item.key));
+  it('counts carbs without a water fraction as dry', () => {
+    const [section] = buildRecipe({
+      type: 'drink',
+      carbItems: [{ ref: 18, label: 'Sucrose (Cane Sugar)', carbsG: 60, grams: 60, glucoseG: 30, fructoseG: 30 }],
+      drink: { bottles: 1, bottleMl: 1000 },
+    }).sections;
+    // 60 g sucrose made up to 1 L: 1000 − 0.625 × 60 = 962.5 ml (Vist & Maughan 1995 style solution).
+    expect(section.water.perServingMl).toBeCloseTo(962.5, 10);
+    expect(itemOf(section, 'water').display).toBe('963 ml');
   });
 
-  it('uses at least one gel', () => {
-    const total = buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, view: 'total' });
-    for (const gelCount of [0, -3, 0.5, NaN, Infinity, undefined, null, '9']) {
-      expect(buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, gelCount, view: 'perGel' })).toEqual(total);
+  it('has no bottle, no water and no bottle values when no fluid is planned', () => {
+    const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, saltItems: SALTS, drink: NO_FLUID_DRINK }).sections;
+    expect(section.servings).toBe(0);
+    // The lines still show what the drink would hold, next to the warning.
+    expect(keysOf(section)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1']);
+    for (const item of section.items) expect(item.perServing).toBe(item.amount);
+    expect(section.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    // The placeholder zeros (0 %, 0 mOsm/kg "hypotonic") do not describe 225 g of carbs, so none is shown.
+    expect(section.perServing).toEqual({ carbsG: 225, sodiumMg: null, volumeMl: null, carbPctWv: null, sodiumMgPerL: null });
+    expect(section.osmolality).toBeNull();
+    expect(section.warnings.map((warning) => warning.id)).toEqual(['concentration.noFluidForDrink']);
+  });
+
+  it('ignores per-bottle values that come with 0 bottles', () => {
+    const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, saltItems: SALTS, drink: { ...DRINK, bottles: 0 } }).sections;
+    expect(section.osmolality).toBeNull();
+    expect(section.perServing).toEqual({ carbsG: 225, sodiumMg: null, volumeMl: null, carbPctWv: null, sodiumMgPerL: null });
+    expect(section.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(keysOf(section)).not.toContain('water');
+  });
+
+  it('uses the water and the fill mark of the concentration input, so the lines match its osmolality', () => {
+    const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, saltItems: SALTS, drink: DRINK_2000 }).sections;
+    expect(section.servings).toBe(3);
+    expect(section.water.perServingMl).toBe(616.166);
+    expect(section.water.totalMl).toBeCloseTo(3 * 616.166, 10);
+    expect(itemOf(section, 'water')).toMatchObject({
+      label: { key: 'recipe.water.drink', params: { ml: 667 } },
+      display: '1,848 ml',
+      perServingDisplay: '616 ml',
+    });
+    expect(section.perServing).toEqual({ carbsG: 75, sodiumMg: 570, volumeMl: 2000 / 3, carbPctWv: 11.25, sodiumMgPerL: 855 });
+    expect(section.osmolality).toEqual(DRINK_2000.perBottle.osmolality);
+  });
+
+  it('falls back to the formula when the given water is missing, invalid or larger than the fill', () => {
+    // Fill 2000 / 3 ml: 666.67 − (0.625 × 229.771 + 7.895) / 3 = 616.17 ml.
+    const expected = 2000 / 3 - (0.625 * (150 + 75 + 4.351 + 0.42) + (150 / 0.95) * 0.05) / 3;
+    expect(expected).toBeCloseTo(616.166, 3);
+    for (const addedWaterMl of [undefined, null, NaN, -1, Infinity, 700, '616']) {
+      const drink = { ...DRINK_2000, perBottle: { ...DRINK_2000.perBottle, addedWaterMl } };
+      const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, saltItems: SALTS, drink }).sections;
+      expect(section.water.perServingMl).toBeCloseTo(expected, 10);
     }
+  });
+
+  it('fills to the bottle size when the fill mark is missing, not above 0 or above the bottle size', () => {
+    for (const fillMl of [undefined, 0, -5, NaN, 800]) {
+      const drink = { ...DRINK_2000, perBottle: { ...DRINK_2000.perBottle, addedWaterMl: undefined, fillMl } };
+      const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, saltItems: SALTS, drink }).sections;
+      expect(section.perServing.volumeMl).toBe(750);
+      expect(section.water.perServingMl).toBeCloseTo(750 - (0.625 * 229.771 + (150 / 0.95) * 0.05) / 3, 10);
+      expect(itemOf(section, 'water').label.params.ml).toBe(750);
+    }
+  });
+
+  it('never adds negative water when the solids fill the bottle', () => {
+    const [section] = buildRecipe({
+      type: 'drink',
+      carbItems: [{ ref: 11, label: 'Crystalline Fructose', carbsG: 2000, grams: 2000, glucoseG: 0, fructoseG: 2000 }],
+      drink: { bottles: 1, bottleMl: 500 },
+    }).sections;
+    expect(section.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(keysOf(section)).toEqual(['carb:11']);
+  });
+
+  it('has no water line and no volume without a bottle size', () => {
+    const [section] = buildRecipe({ type: 'drink', carbItems: CARBS, drink: { ...DRINK, bottleMl: undefined } }).sections;
+    expect(keysOf(section)).toEqual(['carb:3', 'carb:11']);
+    expect(section.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(section.perServing.volumeMl).toBeNull();
   });
 });
 
-describe('buildRecipeItems: caffeine', () => {
-  it('adds nothing when caffeine is not added to gels', () => {
-    const items = buildRecipeItems({ carbSources: CARB_ITEMS, caffeine: CAFFEINE_NO_TABLETS_180, gelCount: 9 });
-    expect(items.some((item) => item.kind === 'caffeine')).toBe(false);
+describe('buildRecipe: both', () => {
+  const recipe = buildRecipe({
+    type: 'both',
+    carbItems: CARBS,
+    saltItems: SALTS,
+    caffeine: CAFFEINE_TABLETS_180,
+    gel: { ...GEL, addedWaterMl: 85.3 },
+    drink: DRINK,
+    view: 'perGel',
+    drinkCarbShare: 0.4,
+  });
+  const [gel, drink] = recipe.sections;
+
+  it('has a gel section then a drink section, and reads the v3 perGel view as perServing', () => {
+    expect(recipe.sections.map((section) => section.kind)).toEqual(['gel', 'drink']);
+    expect(recipe.view).toBe('perServing');
   });
 
-  it('adds nothing when caffeine is disabled or missing', () => {
-    for (const caffeine of [CAFFEINE_DISABLED, null, undefined, {}, { enabled: true }]) {
-      const items = buildRecipeItems({ carbSources: CARB_ITEMS, caffeine, gelCount: 9 });
-      expect(items.some((item) => item.kind === 'caffeine')).toBe(false);
+  it('puts (1 − drink share) of each carb in the gels and the caffeine, but no salts', () => {
+    expect(keysOf(gel)).toEqual(['carb:3', 'carb:11', 'water', 'caffeine:gel:6']);
+    expect(itemOf(gel, 'carb:3').amount).toBeCloseTo((150 / 0.95) * 0.6, 10);
+    expect(itemOf(gel, 'carb:3').detail.carbsG).toBeCloseTo(90, 10);
+    expect(itemOf(gel, 'carb:11').amount).toBeCloseTo(45, 10);
+    expect(itemOf(gel, 'carb:11').detail.fructoseG).toBeCloseTo(45, 10);
+    expect(gel.perServing.carbsG).toBeCloseTo(135 / 9, 10);
+    expect(itemOf(gel, 'water').amount).toBe(85.3);
+  });
+
+  it('puts the rest of the carbs and all salts in the drink', () => {
+    expect(keysOf(drink)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1', 'water']);
+    expect(itemOf(drink, 'carb:3').amount).toBeCloseTo((150 / 0.95) * 0.4, 10);
+    expect(itemOf(drink, 'carb:11').amount).toBeCloseTo(30, 10);
+    expect(itemOf(drink, 'salt:31').amount).toBe(4351);
+    expect(drink.perServing.carbsG).toBeCloseTo(90 / 3, 10);
+  });
+
+  it('fills the drink bottles for the drink part of the carbs only (no addedWaterMl given)', () => {
+    // Per bottle: dry solids ((150 + 75) × 0.4 + 4.351 + 0.42) / 3 = 31.59 g; maltodextrin water
+    // 157.89 × 0.05 × 0.4 / 3 = 1.053 g. 750 − 0.625 × 31.59 − 1.053 = 729.20 ml.
+    const expected = 750 - 0.625 * (((150 + 75) * 0.4 + 4.351 + 0.42) / 3) - ((150 / 0.95) * 0.05 * 0.4) / 3;
+    expect(expected).toBeCloseTo(729.2, 1);
+    expect(drink.water.perServingMl).toBeCloseTo(expected, 10);
+    expect(drink.water.totalMl).toBeCloseTo(3 * expected, 10);
+    expect(itemOf(drink, 'water').display).toBe('2,188 ml');
+  });
+
+  it('uses the water the concentration input computed for the drink part', () => {
+    const [, d] = buildRecipe({
+      type: 'both',
+      carbItems: CARBS,
+      saltItems: SALTS,
+      gel: GEL,
+      drink: { ...DRINK, perBottle: { ...DRINK.perBottle, addedWaterMl: 729.2 } },
+      drinkCarbShare: 0.4,
+    }).sections;
+    expect(d.water).toEqual({ totalMl: 3 * 729.2, perServingMl: 729.2 });
+  });
+
+  it('keeps the gels and gives the drink no bottle values when no fluid is planned', () => {
+    const [g, d] = buildRecipe({
+      type: 'both',
+      carbItems: CARBS,
+      saltItems: SALTS,
+      gel: GEL,
+      drink: NO_FLUID_DRINK,
+      drinkCarbShare: 0.4,
+    }).sections;
+    expect(g.servings).toBe(9);
+    expect(g.osmolality).toEqual(GEL.osmolality);
+    expect(d.servings).toBe(0);
+    expect(keysOf(d)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1']);
+    expect(d.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(d.perServing).toEqual({ carbsG: 90, sodiumMg: null, volumeMl: null, carbPctWv: null, sodiumMgPerL: null });
+    expect(d.osmolality).toBeNull();
+    expect(d.warnings.map((warning) => warning.id)).toEqual(['concentration.noFluidForDrink']);
+  });
+
+  it('splits each carb ingredient without losing any', () => {
+    for (const carb of CARBS) {
+      const key = `carb:${carb.ref}`;
+      expect(itemOf(gel, key).amount + itemOf(drink, key).amount).toBeCloseTo(carb.grams, 10);
+      expect(itemOf(gel, key).detail.carbsG + itemOf(drink, key).detail.carbsG).toBeCloseTo(carb.carbsG, 10);
     }
   });
 
-  it('ignores doses listed in a disabled plan', () => {
-    const items = buildRecipeItems({ caffeine: { ...CAFFEINE_TABLETS_180, enabled: false }, gelCount: 9 });
-    expect(items).toEqual([]);
+  it('leaves the gels without carbs when the drink carries all of them', () => {
+    const [gelOnly, drinkAll] = buildRecipe({
+      type: 'both',
+      carbItems: CARBS,
+      saltItems: SALTS,
+      caffeine: CAFFEINE_TABLETS_180,
+      gel: { ...GEL, addedWaterMl: 0 },
+      drink: DRINK,
+      drinkCarbShare: 1,
+    }).sections;
+    expect(keysOf(gelOnly)).toEqual(['caffeine:gel:6']);
+    expect(gelOnly.perServing.carbsG).toBe(0);
+    expect(keysOf(drinkAll)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1', 'water']);
   });
 
-  it('lists one item per gel in gel order and derives the tablet size', () => {
-    const items = buildRecipeItems({ caffeine: CAFFEINE_TABLETS_600, gelCount: 30, view: 'perGel' });
-    expect(items.map((item) => item.key)).toEqual(['caffeine:gel:15', 'caffeine:gel:22']);
-    expect(items.map((item) => item.label.params)).toEqual([
-      { tablets: 0.5, tabletMg: 200, gel: 16 },
-      { tablets: 0.5, tabletMg: 200, gel: 23 },
+  it('leaves the drink with salts and water when the gels carry all carbs', () => {
+    const [gelAll, saltyWater] = buildRecipe({
+      type: 'both',
+      carbItems: CARBS,
+      saltItems: SALTS,
+      gel: GEL,
+      drink: DRINK,
+      drinkCarbShare: 0,
+    }).sections;
+    expect(keysOf(gelAll)).toEqual(['carb:3', 'carb:11', 'water']);
+    expect(itemOf(gelAll, 'carb:11').amount).toBe(75);
+    expect(keysOf(saltyWater)).toEqual(['salt:31', 'salt:s1', 'water']);
+  });
+
+  it('clamps the drink share to 0–1 and uses 0.5 when it is missing', () => {
+    const shareOf = (drinkCarbShare) => {
+      const [, d] = buildRecipe({ type: 'both', carbItems: CARBS, gel: GEL, drink: DRINK, drinkCarbShare }).sections;
+      return (itemOf(d, 'carb:11')?.amount ?? 0) / 75;
+    };
+    expect(shareOf(0.25)).toBeCloseTo(0.25, 12);
+    expect(shareOf(50)).toBe(1);
+    expect(shareOf(-1)).toBe(0);
+    expect(shareOf(undefined)).toBe(0.5);
+    expect(shareOf(NaN)).toBe(0.5);
+    expect(shareOf('0.3')).toBe(0.5);
+  });
+
+  it('ignores the drink share outside both', () => {
+    const gelOnly = buildRecipe({ type: 'gel', carbItems: CARBS, gel: GEL, drinkCarbShare: 0.9 }).sections[0];
+    expect(itemOf(gelOnly, 'carb:11').amount).toBe(75);
+    const drinkOnly = buildRecipe({ type: 'drink', carbItems: CARBS, drink: DRINK, drinkCarbShare: 0.1 }).sections[0];
+    expect(itemOf(drinkOnly, 'carb:11').amount).toBe(75);
+  });
+});
+
+describe('buildRecipe: views', () => {
+  it('reads perServing and perGel as perServing and anything else as total', () => {
+    for (const [view, expected] of [
+      ['perServing', 'perServing'],
+      ['perGel', 'perServing'],
+      ['total', 'total'],
+      ['batch', 'total'],
+      [undefined, 'total'],
+      [null, 'total'],
+    ]) {
+      expect(buildRecipe({ carbItems: CARBS, gel: GEL, view }).view).toBe(expected);
+    }
+  });
+
+  it('gives the same lines in every view (the view only picks the column)', () => {
+    const args = { carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180, gel: GEL };
+    const total = buildRecipe({ ...args, view: 'total' });
+    const perServing = buildRecipe({ ...args, view: 'perServing' });
+    expect(perServing.sections).toEqual(total.sections);
+  });
+});
+
+describe('buildRecipe: servings and caffeine', () => {
+  it('divides by at least one serving and adds no caffeine without gels', () => {
+    for (const servings of [0, -3, NaN, Infinity, undefined, null, '9']) {
+      const [gel] = buildRecipe({ carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180, gel: { ...GEL, servings } }).sections;
+      expect(gel.servings).toBe(0);
+      expect(gel.items.some((item) => item.kind === 'caffeine')).toBe(false);
+      for (const item of gel.items) expect(item.perServing).toBe(item.amount);
+    }
+  });
+
+  it('counts whole servings only', () => {
+    const [gel] = buildRecipe({ carbItems: CARBS, gel: { ...GEL, servings: 2.7 } }).sections;
+    expect(gel.servings).toBe(2);
+    expect(itemOf(gel, 'carb:11').perServing).toBe(37.5);
+  });
+
+  it('works without a gel batch: no water, no batch values, all lines kept', () => {
+    const [gel] = buildRecipe({ type: 'gel', carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180 }).sections;
+    expect(keysOf(gel)).toEqual(['carb:3', 'carb:11', 'salt:31', 'salt:s1']);
+    expect(gel.servings).toBe(0);
+    expect(gel.water).toEqual({ totalMl: 0, perServingMl: 0 });
+    expect(gel.perServing).toEqual({ carbsG: 225, massG: null, volumeMl: null, waterToDrinkMl: null });
+    expect(gel.osmolality).toBeNull();
+    expect(gel.warnings).toEqual([]);
+  });
+
+  it('works without a drink result', () => {
+    const [drink] = buildRecipe({ type: 'drink', carbItems: CARBS, drink: null }).sections;
+    expect(drink.servings).toBe(0);
+    expect(drink.perServing).toEqual({ carbsG: 225, sodiumMg: null, volumeMl: null, carbPctWv: null, sodiumMgPerL: null });
+    expect(drink.osmolality).toBeNull();
+    expect(drink.warnings).toEqual([]);
+  });
+
+  it('drops an osmolality without a finite value and warnings that are not objects', () => {
+    const [gel] = buildRecipe({ carbItems: CARBS, gel: { ...GEL, osmolality: { mOsmPerKg: NaN }, warnings: [null, 'x', GEL.warnings[0]] } }).sections;
+    expect(gel.osmolality).toBeNull();
+    expect(gel.warnings).toEqual(GEL.warnings);
+  });
+
+  it('adds nothing when caffeine is not added to gels, disabled or missing', () => {
+    for (const caffeine of [CAFFEINE_NO_TABLETS_180, CAFFEINE_DISABLED, { ...CAFFEINE_TABLETS_180, enabled: false }, null, undefined, {}, 5, { enabled: true }]) {
+      const [gel] = buildRecipe({ carbItems: CARBS, caffeine, gel: GEL }).sections;
+      expect(gel.items.some((item) => item.kind === 'caffeine')).toBe(false);
+    }
+  });
+
+  it('lists one line per gel in gel order and derives the tablet size', () => {
+    const [gel] = buildRecipe({ caffeine: CAFFEINE_TABLETS_600, gel: { servings: 30 } }).sections;
+    expect(keysOf(gel)).toEqual(['caffeine:gel:15', 'caffeine:gel:22']);
+    expect(gel.items.map((item) => item.label.params)).toEqual([
+      { gel: 16, tabletMg: 200 },
+      { gel: 23, tabletMg: 200 },
     ]);
-    expect(items.map((item) => item.display)).toEqual(['100 mg', '100 mg']);
+    expect(gel.items.map((item) => item.display)).toEqual(['0.5 tablets', '0.5 tablets']);
+    expect(gel.items.map((item) => item.detail)).toEqual([
+      { mg: 100, tabletMg: 200 },
+      { mg: 100, tabletMg: 200 },
+    ]);
   });
 
   it('adds doses that share a gel together', () => {
     const caffeine = {
-      ...CAFFEINE_TABLETS_180,
+      enabled: true,
       doses: [
         { timeMin: 0, mg: 50, kind: 'intra', gelIndex: 0, tablets: 0.5 },
         { timeMin: 0, mg: 100, kind: 'intra', gelIndex: 0, tablets: 1 },
       ],
     };
-    expect(buildRecipeItems({ caffeine })).toEqual([
+    const [gel] = buildRecipe({ caffeine, gel: { servings: 3 } }).sections;
+    expect(gel.items).toEqual([
       expect.objectContaining({
         key: 'caffeine:gel:0',
-        amount: 150,
-        label: { key: 'recipe.caffeineTablet', params: { tablets: 1.5, tabletMg: 100, gel: 1 } },
+        amount: 1.5,
+        display: '1.5 tablets',
+        label: { key: 'recipe.caffeineForGel', params: { gel: 1, tabletMg: 100 } },
+        detail: { mg: 150, tabletMg: 100 },
       }),
     ]);
   });
@@ -327,12 +863,10 @@ describe('buildRecipeItems: caffeine', () => {
         null,
       ],
     };
-    expect(buildRecipeItems({ caffeine })).toEqual([]);
+    expect(buildRecipe({ caffeine, gel: { servings: 9 } }).sections[0].items).toEqual([]);
   });
 
   it('skips doses for a gel that does not exist, like buildSchedule does', () => {
-    // buildSchedule only puts a dose in a gel when gelIndex < gelTimes.length (= gelCount);
-    // otherwise it shows the dose as a separate caffeine event.
     const caffeine = {
       enabled: true,
       doses: [
@@ -341,254 +875,317 @@ describe('buildRecipeItems: caffeine', () => {
         { timeMin: 160, mg: 50, kind: 'intra', gelIndex: 8, tablets: 0.5 },
       ],
     };
-    for (const view of ['total', 'perGel']) {
-      expect(buildRecipeItems({ caffeine, gelCount: 9, view }).map((item) => item.key)).toEqual(['caffeine:gel:8']);
-    }
-    expect(buildRecipeItems({ caffeine, gelCount: 0 })).toEqual([]);
-  });
-
-  it('lists every gel dose when the gel count is unknown', () => {
-    const caffeine = {
-      enabled: true,
-      doses: [
-        { timeMin: 240, mg: 50, kind: 'intra', gelIndex: 12, tablets: 0.5 },
-        { timeMin: 160, mg: 50, kind: 'intra', gelIndex: 8, tablets: 0.5 },
-      ],
-    };
-    for (const gelCount of [undefined, null, NaN, Infinity, -1, '9']) {
-      expect(buildRecipeItems({ caffeine, gelCount }).map((item) => item.key)).toEqual(['caffeine:gel:8', 'caffeine:gel:12']);
-    }
+    expect(keysOf(buildRecipe({ caffeine, gel: { servings: 9 } }).sections[0])).toEqual(['caffeine:gel:8']);
   });
 });
 
-describe('buildRecipeItems: edge cases', () => {
-  it('returns an empty list for empty or missing input', () => {
-    expect(buildRecipeItems()).toEqual([]);
-    expect(buildRecipeItems({})).toEqual([]);
-    expect(buildRecipeItems({ carbSources: [], salts: [], caffeine: CAFFEINE_DISABLED, gelCount: 9, view: 'perGel' })).toEqual(
-      [],
-    );
-    expect(buildRecipeItems({ carbSources: null, salts: 'x', caffeine: 5 })).toEqual([]);
-  });
-
-  it('skips zero, negative and non-finite amounts', () => {
-    const items = buildRecipeItems({
-      carbSources: [
-        { id: 3, grams: 0, carbsG: 0, glucoseG: 0, fructoseG: 0, pathway: 'glucose' },
-        { id: 1, grams: -5, carbsG: -5, glucoseG: -5, fructoseG: 0, pathway: 'glucose' },
-        { id: 2, grams: NaN, carbsG: NaN, glucoseG: NaN, fructoseG: 0, pathway: 'glucose' },
-        { id: 11, grams: Infinity, carbsG: Infinity, glucoseG: 0, fructoseG: Infinity, pathway: 'fructose' },
-        { id: 18, grams: 10, carbsG: 10, glucoseG: 5, fructoseG: 5, pathway: 'fructose' },
-      ],
-      salts: [
-        { id: 31, amountMg: 0 },
-        { id: 33, amountMg: -100 },
-        { id: 39, amountMg: NaN },
-        { id: 34, amountMg: 120 },
-      ],
-    });
-    expect(items.map((item) => item.key)).toEqual(['carb:fructose:18', 'salt:34']);
-  });
-
-  it('treats solver float noise as zero, so it never becomes a "0 g" line', () => {
-    // solveCarbSources({ totalCarbsG: 125, ratio: { glucose: 1, fructose: 1 },
-    //   glucoseSources: [{ id: 3, percentage: 100 }], fructoseSources: [{ id: 14, percentage: 100 }] }).items
-    // Honey already covers the glucose target, so maltodextrin is left with rounding error.
-    const carbSources = [
-      { id: 3, grams: 7.47939721852737e-15, carbsG: 7.105427357601001e-15, glucoseG: 7.105427357601001e-15, fructoseG: 0, pathway: 'glucose' },
-      { id: 14, grams: 152.4390243902439, carbsG: 124.99999999999999, glucoseG: 62.49999999999999, fructoseG: 62.49999999999999, pathway: 'fructose' },
-    ];
-    for (const view of ['total', 'perGel']) {
-      const items = buildRecipeItems({ carbSources, salts: [{ id: 31, amountMg: 3e-12 }], gelCount: 9, view });
-      expect(items.map((item) => item.key)).toEqual(['carb:fructose:14']);
+describe('buildRecipe: ingredient inputs', () => {
+  it('returns an empty gel section for empty or missing input', () => {
+    for (const args of [undefined, {}, { carbItems: [], saltItems: [] }, { carbItems: null, saltItems: 'x', caffeine: 5, gel: 'x', drink: 7 }]) {
+      const recipe = buildRecipe(args);
+      expect(recipe.view).toBe('total');
+      expect(recipe.sections).toEqual([
+        {
+          kind: 'gel',
+          servings: 0,
+          servingLabelKey: 'recipe.serving.gel',
+          items: [],
+          water: { totalMl: 0, perServingMl: 0 },
+          perServing: { carbsG: 0, massG: null, volumeMl: null, waterToDrinkMl: null },
+          osmolality: null,
+          warnings: [],
+        },
+      ]);
     }
   });
 
-  it('skips whole-activity amounts of 1 µg or less and keeps anything above', () => {
-    const items = buildRecipeItems({
-      carbSources: [
-        { id: 3, grams: 1e-6, carbsG: 1e-6, glucoseG: 1e-6, fructoseG: 0, pathway: 'glucose' },
-        { id: 1, grams: 2e-6, carbsG: 2e-6, glucoseG: 2e-6, fructoseG: 0, pathway: 'glucose' },
-        { id: 11, grams: 0.6, carbsG: 0.6, glucoseG: 0, fructoseG: 0.6, pathway: 'fructose' },
+  it('falls back to the constants label for source ids and to the key for custom refs', () => {
+    const [gel] = buildRecipe({
+      carbItems: [
+        { ref: 3, grams: 10, carbsG: 9.5, glucoseG: 9.5, fructoseG: 0 },
+        { ref: 'c1', grams: 20, carbsG: 15, glucoseG: 7.5, fructoseG: 7.5 },
+        { ref: 'c2', label: '  Rice cake mix ', grams: 20, carbsG: 15, glucoseG: 15, fructoseG: 0 },
       ],
-      salts: [
-        { id: 31, amountMg: 1e-3 },
-        { id: 35, amountMg: 2e-3 },
-        { id: 39, amountMg: 0.6 },
+      saltItems: [
+        { ref: 39, amountMg: 870 },
+        { ref: 's2', amountMg: 120 },
       ],
-    });
-    expect(items.map((item) => item.key)).toEqual(['carb:glucose:1', 'carb:fructose:11', 'salt:35', 'salt:39']);
+      gel: { servings: 2 },
+    }).sections;
+    expect(gel.items.map((item) => [item.key, item.label])).toEqual([
+      ['carb:3', 'Maltodextrin'],
+      ['carb:c1', 'c1'],
+      ['carb:c2', 'Rice cake mix'],
+      ['salt:39', 'Potassium Citrate (monohydrate)'],
+      ['salt:s2', 's2'],
+    ]);
   });
 
-  it('decides on the whole-activity amount, so both views keep the same keys', () => {
-    // 3 g over 30 gels is 0.1 g per gel: still a real amount, so it stays in both views.
-    const args = {
-      carbSources: [{ id: 3, grams: 3, carbsG: 2.85, glucoseG: 2.85, fructoseG: 0, pathway: 'glucose' }],
-      salts: [{ id: 31, amountMg: 3e-2 }],
-      gelCount: 30,
-    };
-    const total = buildRecipeItems({ ...args, view: 'total' });
-    const perGel = buildRecipeItems({ ...args, view: 'perGel' });
-    expect(total.map((item) => item.key)).toEqual(['carb:glucose:3', 'salt:31']);
-    expect(perGel.map((item) => item.key)).toEqual(total.map((item) => item.key));
-    expect(perGel[1].amount).toBeCloseTo(1e-3, 12);
+  it('accepts the Phase 1 id field as the ref of salts and carbs', () => {
+    const [gel] = buildRecipe({
+      carbItems: [{ id: 11, grams: 30, carbsG: 30, glucoseG: 0, fructoseG: 30 }],
+      saltItems: [{ id: 31, amountMg: 3750 }],
+    }).sections;
+    expect(gel.items.map((item) => [item.key, item.ref, item.label, item.display])).toEqual([
+      ['carb:11', 11, 'Crystalline Fructose', '30 g'],
+      ['salt:31', 31, 'Sodium Chloride (Table Salt)', '3.8 g'],
+    ]);
+  });
+
+  it('skips items that cannot be named and bad refs', () => {
+    const [gel] = buildRecipe({
+      carbItems: [
+        { ref: 999, grams: 10, carbsG: 10 },
+        { ref: 31, grams: 10, carbsG: 10 },
+        { ref: '  ', grams: 10, carbsG: 10 },
+        { ref: NaN, label: 'X', grams: 10, carbsG: 10 },
+        { grams: 10, carbsG: 10, label: 'No ref' },
+        null,
+        'x',
+      ],
+      saltItems: [{ ref: 999, amountMg: 100 }, { ref: 3, amountMg: 100 }, { amountMg: 100 }, null, []],
+    }).sections;
+    expect(gel.items).toEqual([]);
+  });
+
+  it('keeps an unknown source id when the caller gives a label', () => {
+    const [gel] = buildRecipe({ carbItems: [{ ref: 999, label: 'New source', grams: 10, carbsG: 9, glucoseG: 9, fructoseG: 0 }] }).sections;
+    expect(gel.items.map((item) => [item.key, item.label])).toEqual([['carb:999', 'New source']]);
+  });
+
+  it('skips zero, negative, non-finite and float-noise amounts', () => {
+    const [gel] = buildRecipe({
+      carbItems: [
+        { ref: 3, grams: 0, carbsG: 0 },
+        { ref: 1, grams: -5, carbsG: -5 },
+        { ref: 2, grams: NaN, carbsG: NaN },
+        { ref: 11, grams: Infinity, carbsG: Infinity },
+        { ref: 4, grams: 7.47939721852737e-15, carbsG: 7.105427357601001e-15 },
+        { ref: 5, grams: 1e-6, carbsG: 1e-6 },
+        { ref: 18, grams: 10, carbsG: 10, glucoseG: 5, fructoseG: 5 },
+      ],
+      saltItems: [
+        { ref: 31, amountMg: 0 },
+        { ref: 33, amountMg: -100 },
+        { ref: 39, amountMg: NaN },
+        { ref: 32, amountMg: 1e-3 },
+        { ref: 34, amountMg: 120 },
+      ],
+    }).sections;
+    expect(keysOf(gel)).toEqual(['carb:18', 'salt:34']);
   });
 
   it('treats missing or invalid carb breakdown values as 0', () => {
-    const [item] = buildRecipeItems({ carbSources: [{ id: 3, grams: 10, pathway: 'glucose' }] });
-    expect(item.detail).toEqual({ carbsG: 0, glucoseG: 0, fructoseG: 0 });
+    const [gel] = buildRecipe({ carbItems: [{ ref: 3, grams: 10, carbsG: 'x' }], gel: { servings: 2 } }).sections;
+    expect(gel.items[0].detail).toEqual({
+      carbsG: 0,
+      glucoseG: 0,
+      fructoseG: 0,
+      perServing: { carbsG: 0, glucoseG: 0, fructoseG: 0 },
+    });
   });
 
-  it('skips unknown ids, ids from the wrong list and unknown pathways', () => {
-    const items = buildRecipeItems({
-      carbSources: [
-        { id: 999, grams: 10, carbsG: 10, glucoseG: 10, fructoseG: 0, pathway: 'glucose' },
-        { id: 31, grams: 10, carbsG: 10, glucoseG: 10, fructoseG: 0, pathway: 'glucose' },
-        { id: 3, grams: 10, carbsG: 9.5, glucoseG: 9.5, fructoseG: 0, pathway: 'galactose' },
-        { id: 3, grams: 10, carbsG: 9.5, glucoseG: 9.5, fructoseG: 0 },
-        null,
+  it('keeps keys unique when a ref repeats', () => {
+    const [gel] = buildRecipe({
+      carbItems: [
+        { ref: 3, grams: 10, carbsG: 9.5 },
+        { ref: 3, grams: 20, carbsG: 19 },
       ],
-      salts: [{ id: 999, amountMg: 100 }, { id: 3, amountMg: 100 }, { amountMg: 100 }, null],
-    });
-    expect(items).toEqual([]);
-  });
-
-  it('keeps keys unique when an id repeats', () => {
-    const items = buildRecipeItems({
-      carbSources: [
-        { id: 3, grams: 10, carbsG: 9.5, glucoseG: 9.5, fructoseG: 0, pathway: 'glucose' },
-        { id: 3, grams: 20, carbsG: 19, glucoseG: 19, fructoseG: 0, pathway: 'glucose' },
+      saltItems: [
+        { ref: 31, amountMg: 100 },
+        { ref: 31, amountMg: 200 },
+        { ref: 31, amountMg: 300 },
       ],
-      salts: [
-        { id: 31, amountMg: 100 },
-        { id: 31, amountMg: 200 },
-        { id: 31, amountMg: 300 },
-      ],
-    });
-    expect(items.map((item) => item.key)).toEqual(['carb:glucose:3', 'carb:glucose:3-2', 'salt:31', 'salt:31-2', 'salt:31-3']);
+    }).sections;
+    expect(keysOf(gel)).toEqual(['carb:3', 'carb:3-2', 'salt:31', 'salt:31-2', 'salt:31-3']);
   });
 
   it('handles huge values', () => {
-    const items = buildRecipeItems({
-      carbSources: [{ id: 3, grams: 1e9, carbsG: 9.5e8, glucoseG: 9.5e8, fructoseG: 0, pathway: 'glucose' }],
-      salts: [{ id: 31, amountMg: 1e9 }],
-      gelCount: 1e6,
-      view: 'perGel',
-    });
-    expect(items.map((item) => item.display)).toEqual(['1000 g', '1.0 g']);
+    const [gel] = buildRecipe({
+      carbItems: [{ ref: 3, grams: 1e9, carbsG: 9.5e8, glucoseG: 9.5e8, fructoseG: 0 }],
+      saltItems: [{ ref: 31, amountMg: 1e9 }],
+      gel: { servings: 1e6 },
+    }).sections;
+    expect(gel.items.map((item) => item.perServingDisplay)).toEqual(['1,000 g', '1.0 g']);
   });
 
   it('does not mutate its arguments', () => {
     const input = deepFreeze({
-      carbSources: structuredClone(CARB_ITEMS),
-      salts: structuredClone(SALTS),
+      type: 'both',
+      carbItems: structuredClone(CARBS),
+      saltItems: structuredClone(SALTS),
       caffeine: structuredClone(CAFFEINE_TABLETS_600),
-      gelCount: 9,
-      view: 'perGel',
+      gel: structuredClone({ ...GEL, servings: 30 }),
+      drink: structuredClone(DRINK),
+      view: 'perServing',
+      drinkCarbShare: 0.3,
     });
     const before = structuredClone(input);
-    expect(() => buildRecipeItems(input)).not.toThrow();
+    expect(() => buildRecipe(input)).not.toThrow();
     expect(input).toEqual(before);
   });
 
   it('returns the same output for the same input', () => {
-    const input = { carbSources: CARB_ITEMS, salts: SALTS, caffeine: CAFFEINE_TABLETS_180, gelCount: 9, view: 'perGel' };
-    expect(buildRecipeItems(input)).toEqual(buildRecipeItems(input));
+    const input = { type: 'both', carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180, gel: GEL, drink: DRINK, drinkCarbShare: 0.5 };
+    expect(buildRecipe(input)).toEqual(buildRecipe(input));
   });
 });
 
-describe('buildRecipeItems: properties', () => {
-  const glucoseIds = [1, 2, 3, 4, 5, 6, 7, 8];
-  const fructoseIds = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+describe('buildRecipe: properties', () => {
+  const builtInIds = [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
   const saltIds = [31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
   // Realistic amounts, exact zeros and solver-style float noise (≤ 1e-9), which must be skipped.
   const noise = fc.double({ min: 0, max: 1e-9, noNaN: true });
-  const amount = fc.oneof(fc.double({ min: 1e-6, max: 5000, noNaN: true }), fc.constant(0), noise);
-  const carbItem = (ids, pathway) =>
-    fc.record({
-      id: fc.constantFrom(...ids),
-      grams: amount,
-      carbsG: amount,
-      glucoseG: amount,
-      fructoseG: amount,
-      pathway: fc.constant(pathway),
-    });
-  const input = fc.record({
-    carbSources: fc
-      .tuple(fc.array(carbItem(glucoseIds, 'glucose'), { maxLength: 4 }), fc.array(carbItem(fructoseIds, 'fructose'), { maxLength: 4 }))
-      .chain(([g, f]) => fc.shuffledSubarray([...g, ...f], { minLength: g.length + f.length })),
-    salts: fc.array(
-      fc.record({ id: fc.constantFrom(...saltIds), amountMg: fc.oneof(fc.double({ min: 1e-6, max: 1e5, noNaN: true }), fc.constant(0), noise) }),
-      { maxLength: 5 },
-    ),
-    caffeine: fc.record({
-      enabled: fc.boolean(),
-      doses: fc.array(
-        fc.record({
+  const grams = fc.oneof(fc.double({ min: 1e-5, max: 2000, noNaN: true }), fc.constant(0), noise);
+  const carbItem = fc
+    .record({
+      ref: fc.oneof(fc.constantFrom(...builtInIds), fc.integer({ min: 1, max: 10 }).map((n) => `c${n}`)),
+      grams,
+      carbsPerGram: fc.double({ min: 0.5, max: 1, noNaN: true }),
+      fructoseShare: fc.double({ min: 0, max: 1, noNaN: true }),
+      waterFraction: fc.double({ min: 0, max: 0.95, noNaN: true }),
+    })
+    .map(({ ref, grams: g, carbsPerGram, fructoseShare, waterFraction }) => ({
+      ref,
+      grams: g,
+      carbsG: g * carbsPerGram,
+      glucoseG: g * carbsPerGram * (1 - fructoseShare),
+      fructoseG: g * carbsPerGram * fructoseShare,
+      waterFraction,
+    }));
+  const saltItem = fc.record({
+    ref: fc.oneof(fc.constantFrom(...saltIds), fc.integer({ min: 1, max: 10 }).map((n) => `s${n}`)),
+    amountMg: fc.oneof(fc.double({ min: 1e-2, max: 1e5, noNaN: true }), fc.constant(0), noise),
+  });
+  const caffeine = fc.record({
+    enabled: fc.boolean(),
+    doses: fc.array(
+      fc
+        .record({
           timeMin: fc.integer({ min: -60, max: 1440 }),
           kind: fc.constantFrom('pre', 'intra'),
           gelIndex: fc.option(fc.integer({ min: 0, max: 40 })),
           tablets: fc.option(fc.integer({ min: 1, max: 6 }).map((halves) => halves / 2)),
           tabletMg: fc.constantFrom(100, 200),
-        }).map(({ tabletMg, ...dose }) => ({ ...dose, mg: dose.tablets === null ? 50 : dose.tablets * tabletMg })),
-        { maxLength: 6 },
-      ),
-    }),
-    gelCount: fc.integer({ min: 1, max: 100 }),
+        })
+        .map(({ tabletMg, ...dose }) => ({ ...dose, mg: dose.tablets === null ? 50 : dose.tablets * tabletMg })),
+      { maxLength: 6 },
+    ),
+  });
+  const input = fc.record({
+    type: fc.constantFrom('gel', 'drink', 'both'),
+    carbItems: fc.array(carbItem, { minLength: 1, maxLength: 6 }),
+    saltItems: fc.array(saltItem, { maxLength: 5 }),
+    caffeine,
+    gel: fc.record({ servings: fc.integer({ min: 0, max: 40 }), addedWaterMl: fc.double({ min: 0, max: 1000, noNaN: true }) }),
+    drink: fc.record({ bottles: fc.integer({ min: 0, max: 8 }), bottleMl: fc.integer({ min: 250, max: 1500 }) }),
+    view: fc.constantFrom('total', 'perServing', 'perGel'),
+    drinkCarbShare: fc.integer({ min: 0, max: 100 }).map((pct) => pct / 100),
   });
 
-  it('keeps amounts positive and finite, keys unique, display in sync and groups in order', () => {
-    fc.assert(
-      fc.property(input, fc.constantFrom('total', 'perGel'), (args, view) => {
-        const items = buildRecipeItems({ ...args, view });
-        expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
-        items.forEach((item, index) => {
-          expect(Number.isFinite(item.amount)).toBe(true);
-          expect(item.amount).toBeGreaterThan(0);
-          expect(item.display).toBe(formatAmount(item.amount, item.unit));
-          if (index > 0) expect(rank(item)).toBeGreaterThanOrEqual(rank(items[index - 1]));
-          // Caffeine only goes into gels that exist (gel is 1-based).
-          if (item.kind === 'caffeine') expect(item.label.params.gel).toBeLessThanOrEqual(args.gelCount);
-        });
-      }),
-    );
-  });
-
-  it('never lists float noise: whole-activity amounts are above 1 µg', () => {
+  it('keeps amounts positive and finite, keys unique, displays in sync and per-serving amounts consistent', () => {
     fc.assert(
       fc.property(input, (args) => {
-        for (const item of buildRecipeItems({ ...args, view: 'total' })) {
-          if (item.kind === 'carb') expect(item.amount).toBeGreaterThan(1e-6);
-          if (item.kind === 'salt') expect(item.amount).toBeGreaterThan(1e-3);
+        const recipe = buildRecipe(args);
+        for (const section of recipe.sections) {
+          const divisor = Math.max(1, section.servings);
+          expect(new Set(keysOf(section)).size).toBe(section.items.length);
+          expect(section.water.totalMl).toBeGreaterThanOrEqual(0);
+          expect(section.water.perServingMl).toBeGreaterThanOrEqual(0);
+          for (const item of section.items) {
+            expect(Number.isFinite(item.amount)).toBe(true);
+            expect(item.amount).toBeGreaterThan(0);
+            expect(item.display).toBe(formatAmount(item.amount, item.unit));
+            expect(item.perServingDisplay).toBe(formatAmount(item.perServing, item.unit));
+            const factor = item.kind === 'caffeine' ? 1 : divisor;
+            expect(item.perServing * factor).toBeCloseTo(item.amount, 6);
+          }
         }
       }),
     );
   });
 
-  it('per-gel amounts times the gel count equal the total amounts for carbs and salts', () => {
+  it('keeps the section order, the group order and puts caffeine only into gels that exist', () => {
+    const rank = { carb: 0, salt: 1, water: 2, caffeine: 3 };
     fc.assert(
       fc.property(input, (args) => {
-        const total = buildRecipeItems({ ...args, view: 'total' });
-        const perGel = buildRecipeItems({ ...args, view: 'perGel' });
-        expect(perGel.map((item) => item.key)).toEqual(total.map((item) => item.key));
-        perGel.forEach((item, index) => {
-          const factor = item.kind === 'caffeine' ? 1 : args.gelCount;
-          expect(item.amount * factor).toBeCloseTo(total[index].amount, 6);
-          if (item.detail) {
-            expect(item.detail.carbsG * factor).toBeCloseTo(total[index].detail.carbsG, 6);
-          }
-        });
+        const recipe = buildRecipe(args);
+        const expected = { gel: ['gel'], drink: ['drink'], both: ['gel', 'drink'] }[args.type];
+        expect(recipe.sections.map((section) => section.kind)).toEqual(expected);
+        for (const section of recipe.sections) {
+          section.items.forEach((item, index) => {
+            if (index > 0) expect(rank[item.kind]).toBeGreaterThanOrEqual(rank[section.items[index - 1].kind]);
+            if (item.kind === 'caffeine') {
+              expect(section.kind).toBe('gel');
+              expect(item.label.params.gel).toBeLessThanOrEqual(section.servings);
+            }
+          });
+        }
+      }),
+    );
+  });
+
+  it('fills each drink bottle from the drink part of the carbs and all salts, and has no bottle without bottles', () => {
+    fc.assert(
+      fc.property(input, (args) => {
+        const recipe = buildRecipe(args);
+        const drink = recipe.sections.find((section) => section.kind === 'drink');
+        if (!drink) return;
+        const { bottles, bottleMl } = args.drink;
+        if (bottles === 0) {
+          expect(drink.water).toEqual({ totalMl: 0, perServingMl: 0 });
+          expect(drink.perServing.volumeMl).toBeNull();
+          expect(drink.osmolality).toBeNull();
+          return;
+        }
+        const share = args.type === 'both' ? args.drinkCarbShare : 1;
+        let dry = 0;
+        let water = 0;
+        for (const carb of args.carbItems) {
+          const grams = carb.grams * share;
+          if (!(carb.grams > 1e-6) || !(grams > 1e-6)) continue;
+          dry += grams * (1 - carb.waterFraction);
+          water += grams * carb.waterFraction;
+        }
+        for (const salt of args.saltItems) if (salt.amountMg > 1e-3) dry += salt.amountMg / 1000;
+        const expected = Math.max(0, bottleMl - (0.625 * dry + water) / bottles);
+        expect(drink.water.perServingMl).toBeCloseTo(expected, 6);
+        expect(drink.water.totalMl).toBeCloseTo(expected * bottles, 6);
+        expect(drink.perServing.volumeMl).toBe(bottleMl);
+      }),
+    );
+  });
+
+  it('delivers every carb ingredient once over the sections and every salt in one section', () => {
+    fc.assert(
+      fc.property(input, (args) => {
+        const recipe = buildRecipe(args);
+        const lines = recipe.sections.flatMap((section) => section.items);
+        const carbTotal = lines.filter((item) => item.kind === 'carb').reduce((sum, item) => sum + item.amount, 0);
+        const realCarbs = args.carbItems.filter((item) => item.grams > 1e-6);
+        const expectedCarbs = realCarbs.reduce((sum, item) => sum + item.grams, 0);
+        // A split part at or below 1 µg is left out, so allow 2 µg per ingredient.
+        expect(Math.abs(carbTotal - expectedCarbs)).toBeLessThanOrEqual(2e-6 * realCarbs.length + 1e-9 * expectedCarbs);
+        const saltSections = recipe.sections.filter((section) => section.items.some((item) => item.kind === 'salt'));
+        expect(saltSections.length).toBeLessThanOrEqual(1);
+        const saltTotal = lines.filter((item) => item.kind === 'salt').reduce((sum, item) => sum + item.amount, 0);
+        const expectedSalts = args.saltItems.filter((item) => item.amountMg > 1e-3).reduce((sum, item) => sum + item.amountMg, 0);
+        expect(saltTotal).toBeCloseTo(expectedSalts, 6);
       }),
     );
   });
 });
 
 describe('i18n catalog (en/recipe)', () => {
-  const outputs = [
-    buildRecipeItems({ carbSources: CARB_ITEMS, salts: SALTS, caffeine: CAFFEINE_TABLETS_180, gelCount: 9 }),
-    buildRecipeItems({ caffeine: CAFFEINE_TABLETS_600, gelCount: 30, view: 'perGel' }),
+  const recipes = [
+    buildRecipe({ type: 'gel', carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_180, gel: GEL }),
+    buildRecipe({ type: 'both', carbItems: CARBS, saltItems: SALTS, caffeine: CAFFEINE_TABLETS_600, gel: { ...GEL, servings: 30 }, drink: DRINK }),
   ];
-  const messages = outputs.flat().flatMap((item) => (typeof item.label === 'object' ? [item.label] : []));
+  const sections = recipes.flatMap((recipe) => recipe.sections);
+  const messages = [
+    ...sections.flatMap((section) => section.items).flatMap((item) => (typeof item.label === 'object' ? [item.label] : [])),
+    ...sections.map((section) => ({ key: section.servingLabelKey })),
+  ];
 
   it('has text for every message key the module returns, with matching placeholders', () => {
     expect(messages.length).toBeGreaterThan(0);
@@ -606,15 +1203,20 @@ describe('i18n catalog (en/recipe)', () => {
     expect(Object.keys(catalog).filter((key) => !returned.has(key))).toEqual([]);
   });
 
+  it('keeps every key under the recipe namespace', () => {
+    for (const key of Object.keys(catalog)) expect(key.startsWith('recipe.')).toBe(true);
+  });
+
   it('uses plain copy without em dashes', () => {
     for (const text of Object.values(catalog)) {
       expect(text).not.toMatch(/—/);
     }
   });
 
-  it('uses source labels from constants as plain strings for carbs and salts', () => {
-    for (const item of outputs.flat()) {
-      if (item.kind !== 'caffeine') expect(typeof item.label).toBe('string');
+  it('uses plain strings for carb and salt labels', () => {
+    for (const item of sections.flatMap((section) => section.items)) {
+      if (item.kind === 'carb' || item.kind === 'salt') expect(typeof item.label).toBe('string');
+      else expect(typeof item.label).toBe('object');
     }
   });
 });

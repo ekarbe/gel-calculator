@@ -16,15 +16,21 @@
 
 "use client";
 
-import { BookTemplate, Share2 } from "lucide-react";
+import { BookTemplate, FolderOpen, Share2 } from "lucide-react";
 import FuelBeakerIcon from "../shared/FuelBeakerIcon";
 import { ThemeToggle } from "../shared/ThemeToggle";
-import { useUi, SHARE_MODAL, TEMPLATE_MODAL } from "../../state/UiProvider";
+import { useUi, RECIPES_MODAL, SHARE_MODAL, TEMPLATE_MODAL } from "../../state/UiProvider";
+
+/** Classes of the plain header buttons (recipes, templates). */
+const PLAIN_BUTTON =
+  "flex items-center gap-2 text-sm font-medium text-text-secondary bg-card-border/50 hover:bg-card-border px-3 py-2 rounded-lg transition-colors";
 
 /**
- * App header: brand, theme toggle, and buttons that open the templates and
- * share modals through `useUi().openModal`. On phones the button text is
- * hidden, so each button also carries an `aria-label`.
+ * App header: brand, theme toggle, and buttons that open the saved recipes,
+ * templates and share modals through `useUi().openModal`. On phones the
+ * button text is hidden, so each button also carries an `aria-label`. Every
+ * button has a fixed id (`header-recipes`, `header-templates`,
+ * `header-share`); the header is rendered once.
  */
 const Header = () => {
   const { openModal } = useUi();
@@ -41,16 +47,29 @@ const Header = () => {
       <div className="flex items-center gap-2 sm:gap-4">
         <ThemeToggle />
         <button
+          id="header-recipes"
+          type="button"
+          aria-label="My recipes"
+          aria-haspopup="dialog"
+          onClick={() => openModal(RECIPES_MODAL)}
+          className={PLAIN_BUTTON}
+        >
+          <FolderOpen size={16} aria-hidden="true" />{" "}
+          <span className="hidden sm:inline">My recipes</span>
+        </button>
+        <button
+          id="header-templates"
           type="button"
           aria-label="Templates"
           aria-haspopup="dialog"
           onClick={() => openModal(TEMPLATE_MODAL)}
-          className="flex items-center gap-2 text-sm font-medium text-text-secondary bg-card-border/50 hover:bg-card-border px-3 py-2 rounded-lg transition-colors"
+          className={PLAIN_BUTTON}
         >
           <BookTemplate size={16} aria-hidden="true" />{" "}
           <span className="hidden sm:inline">Templates</span>
         </button>
         <button
+          id="header-share"
           type="button"
           aria-label="Share Link"
           aria-haspopup="dialog"

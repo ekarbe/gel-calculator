@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fmt, formatRange, formatRatio, shareToRatio } from './format';
+import { aboutKcal, fmt, formatDuration, formatRange, signed } from './format';
 
 describe('fmt', () => {
   it('adds thousands separators and keeps at most `digits` decimals', () => {
@@ -32,33 +32,36 @@ describe('formatRange', () => {
   });
 });
 
-describe('formatRatio', () => {
-  it('normalizes to glucose 1', () => {
-    expect(formatRatio({ glucose: 1, fructose: 0.5 })).toBe('1:0.5');
-    expect(formatRatio({ glucose: 2, fructose: 1 })).toBe('1:0.5');
-    expect(formatRatio({ glucose: 1, fructose: 0.8 })).toBe('1:0.8');
-    expect(formatRatio({ glucose: 3, fructose: 1 })).toBe('1:0.33');
-    expect(formatRatio({ glucose: 1, fructose: 0 })).toBe('1:0');
-    // The same manual ratio reads the same in every card.
-    expect(formatRatio({ glucose: 0.95, fructose: 0.85 })).toBe('1:0.89');
-    expect(formatRatio({ glucose: 2, fructose: 0.5 })).toBe('1:0.25');
+describe('signed', () => {
+  it('signs with a real minus and rounds before it picks the sign', () => {
+    expect(signed(0.34, 1)).toBe('+0.3');
+    expect(signed(-1.84, 1)).toBe('\u22121.8');
+    expect(signed(-0.04, 1)).toBe('0');
+    expect(signed(0.04, 1)).toBe('0');
+    expect(signed(-1234)).toBe('\u22121,234');
   });
 
-  it('handles missing glucose or both parts', () => {
-    expect(formatRatio({ glucose: 0, fructose: 1 })).toBe('0:1');
-    expect(formatRatio({ glucose: 0, fructose: 0 })).toBe('0:0');
-    expect(formatRatio({ glucose: NaN, fructose: -1 })).toBe('0:0');
-    expect(formatRatio(undefined)).toBe('0:0');
+  it('shows non-finite values as 0', () => {
+    expect(signed(NaN, 1)).toBe('0');
+    expect(signed(Infinity, 1)).toBe('0');
+    expect(signed(undefined, 1)).toBe('0');
   });
 });
 
-describe('shareToRatio', () => {
-  it('turns a fructose share into ratio text', () => {
-    expect(shareToRatio(0)).toBe('1:0');
-    expect(shareToRatio(1 / 3)).toBe('1:0.5');
-    expect(shareToRatio(0.5)).toBe('1:1');
-    expect(shareToRatio(0.8 / 1.8)).toBe('1:0.8');
-    expect(shareToRatio(1)).toBe('0:1');
-    expect(shareToRatio(NaN)).toBe('0:1');
+describe('formatDuration', () => {
+  it('writes minutes and hours', () => {
+    expect(formatDuration(45)).toBe('45 min');
+    expect(formatDuration(180)).toBe('3 h');
+    expect(formatDuration(150.4)).toBe('2 h 30 min');
+    expect(formatDuration(-5)).toBe('0 min');
+    expect(formatDuration(NaN)).toBe('0 min');
+  });
+});
+
+describe('aboutKcal', () => {
+  it('rounds an estimated burn to 10 kcal', () => {
+    expect(aboutKcal(2035.3)).toBe('2,040');
+    expect(aboutKcal(4)).toBe('0');
+    expect(aboutKcal(NaN)).toBe('0');
   });
 });

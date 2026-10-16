@@ -11,6 +11,7 @@ import {
   deliveredIons,
   saltsForTargets,
   compareIons,
+  saltProfile,
 } from './electrolytes';
 import { CITATIONS } from './evidence';
 import electrolytesCatalog from '../i18n/en/electrolytes';
@@ -560,6 +561,79 @@ describe('saltsForTargets', () => {
         },
       ),
     );
+  });
+});
+
+describe('saltProfile and custom salts', () => {
+  const tabs = { key: 's1', name: '  Race tabs ', sodiumPct: 20, potassiumPct: 5, magnesiumPct: 0, calciumPct: 0, chloridePct: 30 };
+
+  it('describes a built-in salt from constants', () => {
+    expect(saltProfile(31)).toEqual({
+      ref: 31,
+      label: 'Sodium Chloride (Table Salt)',
+      components: [
+        { name: 'Sodium', ratio: 0.393 },
+        { name: 'Chloride', ratio: 0.607 },
+      ],
+      osmPerG: 31.8,
+      custom: false,
+    });
+    expect(saltProfile(35).osmPerG).toBe(0);
+  });
+
+  it('returns null for unknown refs, carb ids and missing custom keys', () => {
+    expect(saltProfile(3)).toBeNull();
+    expect(saltProfile(99)).toBeNull();
+    expect(saltProfile('s2', [tabs])).toBeNull();
+    expect(saltProfile('31')).toBeNull();
+    expect(saltProfile(null)).toBeNull();
+    expect(saltProfile('s1', 'junk')).toBeNull();
+  });
+
+  it('turns a custom label into components and an estimated osmolality', () => {
+    const profile = saltProfile('s1', [tabs]);
+    expect(profile).toMatchObject({ ref: 's1', label: 'Race tabs', custom: true });
+    expect(profile.components).toEqual([
+      { name: 'Sodium', ratio: 0.2 },
+      { name: 'Chloride', ratio: 0.3 },
+      { name: 'Potassium', ratio: 0.05 },
+    ]);
+    // Na 200/22.99 + Cl 300/35.45 + K 50/39.1 mmol/g, plus one anion for the charge chloride leaves open
+    const na = 200 / 22.99;
+    const cl = 300 / 35.45;
+    const k = 50 / 39.1;
+    expect(profile.osmPerG).toBeCloseTo(na + cl + k + (na + k - cl), 9);
+  });
+
+  it('matches table salt within 10 % when its label is typed in', () => {
+    // Ideal NaCl gives 34.2 mOsm/g; the measured effective value is 31.8 (osmotic coefficient 0.93).
+    const nacl = saltProfile('s3', [{ key: 's3', name: '', sodiumPct: 39.3, chloridePct: 60.7 }]);
+    expect(nacl.label).toBe('s3');
+    expect(nacl.osmPerG / 31.8).toBeGreaterThan(1);
+    expect(nacl.osmPerG / 31.8).toBeLessThan(1.1);
+  });
+
+  it('clamps label values and skips ions at 0 %', () => {
+    const profile = saltProfile('s1', [{ key: 's1', sodiumPct: 150, potassiumPct: -5, calciumPct: NaN }]);
+    expect(profile.components).toEqual([{ name: 'Sodium', ratio: 1 }]);
+    expect(saltProfile('s1', [{ key: 's1' }])).toMatchObject({ components: [], osmPerG: 0 });
+  });
+
+  it('deliveredIons reads refs, custom salts and the Phase 1 id', () => {
+    const delivered = deliveredIons(
+      [
+        { ref: 's1', amountMg: 1000 },
+        { ref: 31, amountMg: 1000 },
+        { id: 33, amountMg: 1000 },
+        { ref: 's9', amountMg: 1000 },
+      ],
+      [tabs],
+    );
+    expect(delivered.Sodium).toBeCloseTo(200 + 393 + 234.5, 9);
+    expect(delivered.Chloride).toBeCloseTo(300 + 607, 9);
+    expect(delivered.Potassium).toBeCloseTo(50, 9);
+    // Without the custom list a custom ref delivers nothing.
+    expect(deliveredIons([{ ref: 's1', amountMg: 1000 }])).toEqual(NO_IONS);
   });
 });
 

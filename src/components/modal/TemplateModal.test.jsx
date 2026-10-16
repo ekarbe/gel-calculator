@@ -32,7 +32,7 @@ function OpenTemplates() {
 
 function renderModal(initialInputs, { open = true } = {}) {
   const utils = render(
-    <PlanProvider initialInputs={initialInputs}>
+    <PlanProvider initialInputs={initialInputs} persist={false}>
       <UiProvider>
         <OpenTemplates />
         <TemplateModal />
@@ -50,6 +50,7 @@ const byId = (id) => TEMPLATES.find((tpl) => tpl.id === id);
 afterEach(() => {
   latest.inputs = null;
   latest.ui = null;
+  localStorage.clear();
 });
 
 describe('TemplateModal: listing', () => {
@@ -141,9 +142,14 @@ describe('TemplateModal: applying and closing', () => {
       mode: 'auto',
       ratioMode: 'manual',
       manualRatio: { glucose: 1, fructose: 0.8 },
-      glucoseSources: [{ id: 1, percentage: 100 }],
-      fructoseSources: [{ id: 11, percentage: 100 }],
+      // One ingredient list (inputs v4): weight = label % × the share of the
+      // carbs its v3 list covers at 1:0.8 (5/9 glucose, 4/9 fructose).
+      ingredients: [
+        { ref: 1, weight: 55.56 },
+        { ref: 11, weight: 44.44 },
+      ],
     });
+    expect(latest.inputs.carbs).not.toHaveProperty('glucoseSources');
     expect(latest.inputs.format.gelsPerHour).toBe(3);
     expect(latest.inputs.sodium).toEqual({ mode: 'auto', manualMgPerHour: 500 });
     expect(latest.inputs.salts).toMatchObject({ mode: 'auto', sodiumSalt: 'table' });
@@ -177,7 +183,8 @@ describe('TemplateModal: applying and closing', () => {
     renderModal();
     fireEvent.click(screen.getByRole('button', { name: 'Use template: SiS GO Isotonic Energy Gel' }));
     expect(latest.inputs.carbs.manualRatio).toEqual({ glucose: 1, fructose: 0 });
-    expect(latest.inputs.carbs.fructoseSources).toEqual([]);
+    // Glucose-only: maltodextrin carries all the weight.
+    expect(latest.inputs.carbs.ingredients).toEqual([{ ref: 3, weight: 100 }]);
     expect(latest.inputs.salts.sodiumSalt).toBe('mix');
   });
 

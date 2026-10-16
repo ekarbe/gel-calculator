@@ -26,6 +26,7 @@ const schedule = {
   'schedule.title.caffeine': 'Caffeine',
   'schedule.title.start': 'Start',
   'schedule.title.fuel': 'Fuel',
+  'schedule.title.drink': 'Drink',
   'schedule.title.hydration': 'Hydration',
   'schedule.title.finish': 'Finish',
 
@@ -49,7 +50,13 @@ const schedule = {
   'schedule.fuelWithCaffeine': 'Take gel {gel}. It contains {caffeineMg} mg caffeine.',
   'schedule.fuelWithFluidAndCaffeine':
     'Take gel {gel} with about {fluidMl} ml fluid. It contains {caffeineMg} mg caffeine.',
-  // When no gel carries fluid (no gels, or the fluid per gel rounds to 0)
+  // Drink sips every 20 min when the drink carries the fluid
+  'schedule.drinkSip': 'Drink about {ml} ml from bottle {bottle}.',
+  // The sip empties bottle {bottle} and runs on into the next one
+  'schedule.drinkSipSwitch': 'Drink about {ml} ml. Finish bottle {bottle}, then go on with bottle {next}.',
+  // The sip empties bottles {bottle} to {finished} and runs on into bottle {next}
+  'schedule.drinkSipSpan': 'Drink about {ml} ml. Finish bottles {bottle} to {finished}, then go on with bottle {next}.',
+  // When no gel or drink sip carries fluid (no gels, or the fluid per gel rounds to 0)
   'schedule.hydrationOnly': 'Drink about {mlPerHour} ml/h throughout.',
 
   // Finish

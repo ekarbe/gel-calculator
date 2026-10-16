@@ -15,9 +15,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 /**
- * Number and ratio formatting shared by every card and modal, so the same
+ * Number and range formatting shared by every card and modal, so the same
  * value always reads the same way. Display only: these helpers never compute
- * nutrition, they format numbers the plan already holds.
+ * nutrition, they format numbers the plan already holds. Ratios are formatted
+ * by the domain (`formatRatio` in `src/domain/carbs.js`).
  */
 
 /**
@@ -47,27 +48,44 @@ export function formatRange(range, unit) {
   return `${fmt(lo)}–${fmt(hi)} ${unit}`;
 }
 
+/** The minus sign of signed numbers (U+2212), the same as in domain messages. */
+const MINUS = "−";
+
 /**
- * A glucose:fructose ratio as text, normalized to glucose 1 (`2:1` → `1:0.5`),
- * the form the domain messages use. Without glucose it is `0:1`; without
- * either part `0:0`. Negative or non-finite parts count as 0.
- * @param {{ glucose: number, fructose: number }|null|undefined} ratio
+ * A number with an explicit sign ("+0.3", "−1.8"). The value is rounded to
+ * `digits` decimals first, so a value that shows as zero reads "0" with no
+ * sign; non-finite values count as 0.
+ * @param {number} value
+ * @param {number} [digits=0]
  * @returns {string}
  */
-export function formatRatio(ratio) {
-  const glucose = Number.isFinite(ratio?.glucose) && ratio.glucose > 0 ? ratio.glucose : 0;
-  const fructose = Number.isFinite(ratio?.fructose) && ratio.fructose > 0 ? ratio.fructose : 0;
-  if (glucose > 0) return `1:${Number((fructose / glucose).toFixed(2))}`;
-  return fructose > 0 ? "0:1" : "0:0";
+export function signed(value, digits = 0) {
+  const factor = 10 ** digits;
+  const rounded = Math.round((Number.isFinite(value) ? value : 0) * factor) / factor;
+  if (rounded === 0) return "0";
+  return `${rounded > 0 ? "+" : MINUS}${fmt(Math.abs(rounded), digits)}`;
 }
 
 /**
- * A fructose share (fructose ÷ all carbs) as ratio text (`1/3` → `1:0.5`,
- * `0.5` → `1:1`). A share of 1 or more is `0:1`.
- * @param {number} share
+ * A duration as text: "45 min", "3 h", "2 h 30 min". Rounded to whole
+ * minutes; non-finite or negative values count as 0.
+ * @param {number} minutes
  * @returns {string}
  */
-export function shareToRatio(share) {
-  if (!(share < 1)) return "0:1";
-  return formatRatio({ glucose: 1, fructose: Math.max(0, share) / (1 - share) });
+export function formatDuration(minutes) {
+  const total = Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 0;
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
+/**
+ * An estimated energy use in kcal, rounded to 10 ("2,040"): the estimate is
+ * not precise to the kcal, and every view shows it the same way.
+ * @param {number} kcal
+ * @returns {string}
+ */
+export function aboutKcal(kcal) {
+  return fmt(Math.round((Number.isFinite(kcal) ? kcal : 0) / 10) * 10);
 }

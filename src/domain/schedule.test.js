@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { getGelTimes, getGelCount, formatElapsed, buildSchedule } from './schedule';
+import { getGelTimes, getGelCount, formatElapsed, buildSchedule, DRINK_INTERVAL_MIN } from './schedule';
 import catalog from '../i18n/en/schedule';
 
-const EVENT_TYPES = ['bicarb', 'caffeine', 'start', 'fuel', 'hydration', 'finish'];
+const EVENT_TYPES = ['bicarb', 'caffeine', 'start', 'fuel', 'drink', 'hydration', 'finish'];
 
 // Hand-built plan objects in the shape `planCaffeine` / `planBicarbonate` return
 // (spec section 5), so these tests do not depend on those modules.
@@ -717,6 +717,553 @@ describe('buildSchedule: properties', () => {
   });
 });
 
+/** A sip event in the shape `buildSchedule` returns, for a sip from one bottle. */
+const sip = (timeMin, ml, bottle) => ({
+  timeMin,
+  type: 'drink',
+  message: { key: 'schedule.drinkSip', params: { ml, bottle } },
+  fluidMl: ml,
+  bottle,
+});
+/** A sip that finishes bottle `bottle` (and the ones up to `next − 1`) and goes on with bottle `next`. */
+const sipOn = (timeMin, ml, bottle, next) => ({
+  timeMin,
+  type: 'drink',
+  message:
+    next === bottle + 1
+      ? { key: 'schedule.drinkSipSwitch', params: { ml, bottle, next } }
+      : { key: 'schedule.drinkSipSpan', params: { ml, bottle, finished: next - 1, next } },
+  fluidMl: ml,
+  bottle,
+  lastBottle: next,
+});
+/** Fluid listed per bottle (ml), splitting each sip at the marks of bottles filled to `fillMl`. */
+const fluidPerBottle = (events, fillMl) => {
+  const perBottle = [];
+  let listed = 0;
+  for (const e of byType(events, 'drink')) {
+    const end = listed + e.fluidMl;
+    for (let i = Math.floor(listed / fillMl); i * fillMl < end; i += 1) {
+      const ml = Math.min(end, (i + 1) * fillMl) - Math.max(listed, i * fillMl);
+      if (ml > 0) perBottle[i] = (perBottle[i] ?? 0) + ml;
+    }
+    listed = end;
+  }
+  return Array.from(perBottle, (ml) => ml ?? 0);
+};
+const totalFluid = (events) => events.reduce((sum, e) => sum + (e.fluidMl ?? 0), 0);
+
+describe('buildSchedule: format type', () => {
+  it('treats a missing or unknown type as gel, so the Phase 1 call is unchanged', () => {
+    const base = { durationMin: 180, gelsPerHour: 3, fluidMlPerHour: 500, caffeine: CAFFEINE_180_TABLETS, bicarb: BICARB_ON };
+    const gel = buildSchedule({ ...base, type: 'gel' });
+    expect(buildSchedule(base)).toEqual(gel);
+    for (const type of [undefined, null, '', 'gels', 'Drink', 3, {}]) {
+      expect(buildSchedule({ ...base, type })).toEqual(gel);
+    }
+    // Gel mode ignores the drink.
+    expect(buildSchedule({ ...base, type: 'gel', drink: { bottles: 3, bottleMl: 500 } })).toEqual(gel);
+    expect(byType(gel, 'drink')).toEqual([]);
+  });
+
+  it('drinks every 20 min in drink mode and finishes the bottles in order', () => {
+    expect(DRINK_INTERVAL_MIN).toBe(20);
+    // 120 min at 600 ml/h = 1200 ml in two 750 ml bottles. drinkBottles fills each to 1200 / 2 = 600 ml,
+    // so the plan's fluid empties both. 600 × 20 / 60 = 200 ml per sip: 600 ml are listed before the
+    // sip at 60 min, so bottle 1 is empty and that sip is from bottle 2.
+    expect(
+      buildSchedule({ durationMin: 120, type: 'drink', gelsPerHour: 3, fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750 } }),
+    ).toEqual([
+      { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+      sip(0, 200, 1),
+      sip(20, 200, 1),
+      sip(40, 200, 1),
+      sip(60, 200, 2),
+      sip(80, 200, 2),
+      sip(100, 200, 2),
+      { timeMin: 120, type: 'finish', message: { key: 'schedule.finish' } },
+    ]);
+  });
+
+  it('names the bottle that holds the first ml of the sip', () => {
+    // Three 500 ml bottles for 1200 ml, each filled to 400 ml: 0 and 200 ml listed before the first two
+    // sips → bottle 1; 400 and 600 → bottle 2; 800 and 1000 → bottle 3.
+    const events = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 3, bottleMl: 500 } });
+    expect(byType(events, 'drink').map((e) => e.bottle)).toEqual([1, 1, 2, 2, 3, 3]);
+    expect(byType(events, 'drink').map((e) => e.message.params.bottle)).toEqual([1, 1, 2, 2, 3, 3]);
+  });
+
+  it('lists exactly the drink that was mixed, so its carbs and sodium are all taken', () => {
+    // drinkBottles mixes ceil(F / bottleMl) bottles, each filled to F / bottles. Listing only F (rounded down
+    // to 10 ml) against full 750 ml bottles would leave 700 ml (47 % of the carbs and sodium) in bottle 2.
+    // 120 min at 400 ml/h = 800 ml: two bottles of 400 ml. 133.3 ml per 20 min → 130, 130, 140, … .
+    const events = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 400, drink: { bottles: 2, bottleMl: 750 } });
+    expect(byType(events, 'drink')).toEqual([
+      sip(0, 130, 1),
+      sip(20, 130, 1),
+      sip(40, 140, 1),
+      sip(60, 130, 2),
+      sip(80, 130, 2),
+      sip(100, 140, 2),
+    ]);
+    expect(fluidPerBottle(events, 400)).toEqual([400, 400]);
+    // The fill drinkBottles reports (perBottle.fillMl) gives the same schedule.
+    expect(
+      buildSchedule({
+        durationMin: 120,
+        type: 'drink',
+        fluidMlPerHour: 400,
+        drink: { bottles: 2, bottleMl: 750, perBottle: { fillMl: 400, carbsG: 30 } },
+      }),
+    ).toEqual(events);
+    // Drink sizes like drinkBottles makes them: the listed fluid is the mixed volume to within 10 ml,
+    // and every bottle is emptied (the last one to within 10 ml).
+    for (const [durationMin, fluidMlPerHour, bottleMl] of [
+      [180, 600, 750],
+      [135, 550, 750],
+      [200, 830, 500],
+      [95, 700, 950],
+      [61, 760, 750],
+    ]) {
+      const plannedMl = (fluidMlPerHour * durationMin) / 60;
+      const bottles = Math.max(1, Math.ceil(plannedMl / bottleMl - 1e-9));
+      const fillMl = plannedMl / bottles;
+      const drinkEvents = buildSchedule({
+        durationMin,
+        type: 'drink',
+        fluidMlPerHour,
+        drink: { bottles, bottleMl, perBottle: { fillMl } },
+      });
+      const listed = totalFluid(drinkEvents);
+      expect(listed).toBeLessThanOrEqual(bottles * fillMl + 1e-6);
+      expect(listed).toBeGreaterThan(bottles * fillMl - 10);
+      const perBottle = fluidPerBottle(drinkEvents, fillMl);
+      expect(perBottle).toHaveLength(bottles);
+      perBottle.slice(0, -1).forEach((ml, i) => expect(ml, `bottle ${i + 1}`).toBeCloseTo(fillMl, 6));
+      expect(perBottle.at(-1)).toBeGreaterThan(fillMl - 10);
+      expect(perBottle.at(-1)).toBeLessThanOrEqual(fillMl + 1e-6);
+      const lastSip = byType(drinkEvents, 'drink').at(-1);
+      expect(lastSip.lastBottle ?? lastSip.bottle).toBe(bottles);
+      // Without the fill, the same fill is derived from the plan's fluid.
+      expect(buildSchedule({ durationMin, type: 'drink', fluidMlPerHour, drink: { bottles, bottleMl } })).toEqual(drinkEvents);
+    }
+  });
+
+  it('says when a sip finishes a bottle and goes on with the next ones', () => {
+    // [almond2005] 180 min at 500 ml/h = 1500 ml in two 750 ml bottles. Running totals 160, 330, 500, 660:
+    // the sip at 80 min (660 → 830 ml) empties bottle 1 (90 ml left) and goes on with bottle 2.
+    const events = buildSchedule({ durationMin: 180, type: 'drink', fluidMlPerHour: 500, drink: { bottles: 2, bottleMl: 750 } });
+    expect(byType(events, 'drink')).toEqual([
+      sip(0, 160, 1),
+      sip(20, 170, 1),
+      sip(40, 170, 1),
+      sip(60, 160, 1),
+      sipOn(80, 170, 1, 2),
+      sip(100, 170, 2),
+      sip(120, 160, 2),
+      sip(140, 170, 2),
+      sip(160, 170, 2),
+    ]);
+    expect(at(events, 80)[0].message).toEqual({ key: 'schedule.drinkSipSwitch', params: { ml: 170, bottle: 1, next: 2 } });
+    // 60 min at 1200 ml/h in 250 ml bottles: five bottles of 240 ml, 400 ml sips. The sip at 20 min
+    // (400 → 800 ml) empties bottles 2 and 3 and goes on with bottle 4.
+    const span = buildSchedule({ durationMin: 60, type: 'drink', fluidMlPerHour: 1200, drink: { bottleMl: 250 } });
+    expect(byType(span, 'drink')).toEqual([sipOn(0, 400, 1, 2), sipOn(20, 400, 2, 4), sipOn(40, 400, 4, 5)]);
+    expect(at(span, 20)[0].message).toEqual({
+      key: 'schedule.drinkSipSpan',
+      params: { ml: 400, bottle: 2, finished: 3, next: 4 },
+    });
+    // A sip that ends exactly at a bottle mark stays on that bottle; the next one starts the next bottle.
+    const exact = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750 } });
+    expect(byType(exact, 'drink').every((e) => !('lastBottle' in e))).toBe(true);
+  });
+
+  it('follows the fill the drink reports and derives it when that is missing or invalid', () => {
+    // A fill of 750 ml (filled to the mark) for 1200 ml: the sip at 60 min (600 → 800 ml) goes on with bottle 2.
+    const marked = buildSchedule({
+      durationMin: 120,
+      type: 'drink',
+      fluidMlPerHour: 600,
+      drink: { bottles: 2, bottleMl: 750, perBottle: { fillMl: 750 } },
+    });
+    expect(byType(marked, 'drink').map((e) => [e.bottle, e.lastBottle ?? e.bottle])).toEqual([
+      [1, 1],
+      [1, 1],
+      [1, 1],
+      [1, 2],
+      [2, 2],
+      [2, 2],
+    ]);
+    // Fills that are not a number above 0 and at most the bottle size are ignored: 1200 / 2 = 600 ml.
+    const derived = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750 } });
+    for (const fillMl of [0, -5, NaN, Infinity, 751, '600', null]) {
+      expect(
+        buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750, perBottle: { fillMl } } }),
+      ).toEqual(derived);
+    }
+    for (const perBottle of [null, undefined, 3, {}]) {
+      expect(buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750, perBottle } })).toEqual(
+        derived,
+      );
+    }
+  });
+
+  it('rounds the sips on the running total and never lists more than the plan', () => {
+    // [almond2005] [hewbutler2015] 500 ml/h × 20 min / 60 = 166.7 ml; 120 min = 1000 ml.
+    const events = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 500, drink: { bottles: 2, bottleMl: 750 } });
+    expect(byType(events, 'drink').map((e) => e.fluidMl)).toEqual([160, 170, 170, 160, 170, 170]);
+    expect(totalFluid(events)).toBe(1000);
+    // 70 min at 600 ml/h: the last sip covers 10 min only (700 ml, not 4 × 200).
+    const short = buildSchedule({ durationMin: 70, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 1, bottleMl: 750 } });
+    expect(byType(short, 'drink').map((e) => [e.timeMin, e.fluidMl])).toEqual([
+      [0, 200],
+      [20, 200],
+      [40, 200],
+      [60, 100],
+    ]);
+    // 190 min at 800 ml/h: 2533 ml planned → 2530 ml listed.
+    expect(totalFluid(buildSchedule({ durationMin: 190, type: 'drink', fluidMlPerHour: 800 }))).toBe(2530);
+  });
+
+  it('ignores the gels in drink mode and moves gel caffeine to its own event', () => {
+    const events = buildSchedule({
+      durationMin: 180,
+      type: 'drink',
+      gelsPerHour: 3,
+      fluidMlPerHour: 600,
+      drink: { bottles: 3, bottleMl: 750 },
+      caffeine: CAFFEINE_180_TABLETS,
+      bicarb: BICARB_ON,
+    });
+    expect(byType(events, 'fuel')).toEqual([]);
+    expect(byType(events, 'start')).toEqual([{ timeMin: 0, type: 'start', message: { key: 'schedule.start' } }]);
+    expect(events.slice(0, 4).map((e) => [e.timeMin, e.type])).toEqual([
+      [-90, 'bicarb'],
+      [-60, 'caffeine'],
+      [0, 'start'],
+      [0, 'drink'],
+    ]);
+    // The intra dose was meant for gel 7 (gelIndex 6); without gels it is taken on its own, after the sip.
+    // Three bottles of 600 ml: 1200 ml listed before 120 min, so that sip is from bottle 3.
+    expect(at(events, 120)).toEqual([
+      sip(120, 200, 3),
+      {
+        timeMin: 120,
+        type: 'caffeine',
+        message: { key: 'schedule.caffeineTablets', params: { mg: 50, tablets: 0.5 } },
+        caffeineMg: 50,
+      },
+    ]);
+    expect(byType(events, 'drink')).toHaveLength(9);
+    expect(totalFluid(events)).toBe(1800);
+    expect(events.at(-1)).toEqual({ timeMin: 180, type: 'finish', message: { key: 'schedule.finish' } });
+  });
+
+  it('uses 750 ml bottles and enough of them when the drink is missing or invalid', () => {
+    // 180 min at 600 ml/h = 1800 ml → 3 bottles of 750 ml, each filled to 600 ml; 1200 ml listed before the
+    // sip at 120 min → bottle 3.
+    const expected = buildSchedule({ durationMin: 180, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 3, bottleMl: 750 } });
+    for (const drink of [
+      undefined,
+      null,
+      {},
+      { bottles: 0, bottleMl: -1 },
+      { bottles: NaN, bottleMl: Infinity },
+      // Sizes below 10 ml (one rounding step of the listed fluid) are not bottles: 750 ml.
+      { bottleMl: 1e-320 },
+      { bottleMl: 0.001 },
+      { bottleMl: 9.99 },
+      { bottleMl: Number.MIN_VALUE },
+    ]) {
+      expect(buildSchedule({ durationMin: 180, type: 'drink', fluidMlPerHour: 600, drink })).toEqual(expected);
+    }
+    expect(byType(expected, 'drink').map((e) => e.bottle)).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3]);
+    // The count follows the size when only the size is given: 1800 ml in 500 ml bottles → 4 of 450 ml.
+    const small = buildSchedule({ durationMin: 180, type: 'drink', fluidMlPerHour: 600, drink: { bottleMl: 500 } });
+    expect(Math.max(...byType(small, 'drink').map((e) => e.lastBottle ?? e.bottle))).toBe(4);
+    expect(fluidPerBottle(small, 450)).toEqual([450, 450, 450, 450]);
+    // 10 ml is the smallest size used as given: 60 ml in 10 ml bottles → 6 bottles, 20 ml sips over two each.
+    const tiny = buildSchedule({ durationMin: 60, type: 'drink', fluidMlPerHour: 60, drink: { bottleMl: 10 } });
+    expect(byType(tiny, 'drink')).toEqual([sipOn(0, 20, 1, 2), sipOn(20, 20, 3, 4), sipOn(40, 20, 5, 6)]);
+  });
+
+  it('keeps bottle numbers finite for tiny sizes and huge counts', () => {
+    // [JSON] a non-finite bottle number would turn into null in a share or print payload.
+    for (const drink of [
+      { bottleMl: 1e-320 },
+      { bottleMl: 0.001 },
+      { bottles: Number.MAX_VALUE, bottleMl: 750 },
+      { bottles: 1e300, bottleMl: 1e-320 },
+      { bottles: 1e300, bottleMl: 750, perBottle: { fillMl: Number.MIN_VALUE } },
+    ]) {
+      for (const durationMin of [120, 1e12]) {
+        const events = buildSchedule({ durationMin, type: 'drink', fluidMlPerHour: Number.MAX_VALUE, drink });
+        const sips = byType(events, 'drink');
+        expect(sips.length).toBeGreaterThan(0);
+        for (const e of sips) {
+          for (const n of [e.bottle, e.lastBottle ?? e.bottle, ...Object.values(e.message.params)]) {
+            expect(Number.isSafeInteger(n), JSON.stringify(e)).toBe(true);
+          }
+          expect(e.bottle).toBeGreaterThanOrEqual(1);
+          expect(e.lastBottle ?? e.bottle).toBeLessThanOrEqual(1680000);
+        }
+        expect(JSON.parse(JSON.stringify(events))).toEqual(events);
+      }
+    }
+    // A huge count is clamped to 1 680 000 bottles (100 l/h for 7 days in 10 ml bottles).
+    const huge = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: Number.MAX_VALUE, bottleMl: 750 } });
+    expect(byType(huge, 'drink').at(-1).lastBottle).toBe(1680000);
+  });
+
+  it('never names a bottle past the last one and floors a fractional count', () => {
+    // One 500 ml bottle for 1200 ml: the athlete refills it, the number stays 1.
+    const one = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 1, bottleMl: 500 } });
+    expect(byType(one, 'drink').every((e) => e.bottle === 1)).toBe(true);
+    const frac = buildSchedule({ durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2.7, bottleMl: 500 } });
+    expect(byType(frac, 'drink').map((e) => e.bottle)).toEqual([1, 1, 1, 2, 2, 2]);
+  });
+
+  it('leaves out sips that round to 0 ml and keeps the fluid target visible', () => {
+    // 20 ml/h: 6.7 ml per 20 min. Running total 0, 10, 20 ml → sips of 0, 10 and 10 ml.
+    expect(buildSchedule({ durationMin: 60, type: 'drink', fluidMlPerHour: 20 })).toEqual([
+      { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+      sip(20, 10, 1),
+      sip(40, 10, 1),
+      { timeMin: 60, type: 'finish', message: { key: 'schedule.finish' } },
+    ]);
+    // 10 ml/h: 3.3 ml per sip rounds to 0, so one hydration event states the rate.
+    expect(buildSchedule({ durationMin: 60, type: 'drink', fluidMlPerHour: 10 })).toEqual([
+      { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+      { timeMin: 0, type: 'hydration', message: { key: 'schedule.hydrationOnly', params: { mlPerHour: 10 } } },
+      { timeMin: 60, type: 'finish', message: { key: 'schedule.finish' } },
+    ]);
+  });
+
+  it('has only start and finish in drink mode without fluid or duration', () => {
+    for (const fluidMlPerHour of [0, -100, NaN, undefined]) {
+      expect(buildSchedule({ durationMin: 90, type: 'drink', gelsPerHour: 3, fluidMlPerHour })).toEqual([
+        { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+        { timeMin: 90, type: 'finish', message: { key: 'schedule.finish' } },
+      ]);
+    }
+    for (const durationMin of [0, -30, NaN, Infinity, undefined]) {
+      expect(buildSchedule({ durationMin, type: 'drink', fluidMlPerHour: 500 })).toEqual([
+        { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+        { timeMin: 0, type: 'hydration', message: { key: 'schedule.hydrationOnly', params: { mlPerHour: 500 } } },
+        { timeMin: 0, type: 'finish', message: { key: 'schedule.finish' } },
+      ]);
+    }
+  });
+
+  it('keeps huge inputs bounded and finite in drink mode', () => {
+    const events = buildSchedule({ durationMin: 1e12, type: 'drink', fluidMlPerHour: 600 });
+    expect(events).toEqual(buildSchedule({ durationMin: 10080, type: 'drink', fluidMlPerHour: 600 }));
+    expect(byType(events, 'drink')).toHaveLength(10080 / 20);
+    // Fluid rates above 100 l/h are clamped, so the running totals never overflow.
+    for (const type of ['gel', 'drink', 'both']) {
+      const huge = buildSchedule({ durationMin: 120, type, gelsPerHour: 1, fluidMlPerHour: Number.MAX_VALUE });
+      expect(huge).toEqual(buildSchedule({ durationMin: 120, type, gelsPerHour: 1, fluidMlPerHour: 100000 }));
+      expect(huge.every((e) => !('fluidMl' in e) || Number.isFinite(e.fluidMl))).toBe(true);
+      expect(totalFluid(huge)).toBe(200000);
+    }
+  });
+
+  it('builds gel events with their fluid in both mode, exactly as in gel mode', () => {
+    const drink = { bottles: 2, bottleMl: 750 };
+    for (const base of [
+      { durationMin: 180, gelsPerHour: 3, fluidMlPerHour: 500, caffeine: CAFFEINE_180_TABLETS, bicarb: BICARB_ON },
+      { durationMin: 61, gelsPerHour: 1, fluidMlPerHour: 800 },
+      { durationMin: 100, gelsPerHour: 0.5, fluidMlPerHour: 500, caffeine: CAFFEINE_180 },
+      { durationMin: 90, gelsPerHour: 2, fluidMlPerHour: 0 },
+    ]) {
+      expect(buildSchedule({ ...base, type: 'both', drink })).toEqual(buildSchedule({ ...base, type: 'gel' }));
+    }
+  });
+
+  it('lists the drink as sips in both mode when no gel carries the fluid', () => {
+    // No gels (e.g. a plan without carbs): the bottle carries the fluid and the electrolytes.
+    expect(
+      buildSchedule({ durationMin: 60, type: 'both', gelsPerHour: 0, fluidMlPerHour: 450, drink: { bottles: 1, bottleMl: 500 } }),
+    ).toEqual([
+      { timeMin: 0, type: 'start', message: { key: 'schedule.start' } },
+      sip(0, 150, 1),
+      sip(20, 150, 1),
+      sip(40, 150, 1),
+      { timeMin: 60, type: 'finish', message: { key: 'schedule.finish' } },
+    ]);
+    // 12 gels/h at 30 ml/h: 2.5 ml per gel rounds to 0, but 10 ml per 20 min does not.
+    const events = buildSchedule({ durationMin: 60, type: 'both', gelsPerHour: 12, fluidMlPerHour: 30 });
+    const gelOnly = buildSchedule({ durationMin: 60, type: 'gel', gelsPerHour: 12, fluidMlPerHour: 30 });
+    expect(byType(events, 'fuel')).toEqual(byType(gelOnly, 'fuel'));
+    expect(byType(events, 'hydration')).toEqual([]);
+    expect(byType(events, 'drink')).toEqual([sip(0, 10, 1), sip(20, 10, 1), sip(40, 10, 1)]);
+    // At the same minute the sip comes after the start and before the gel (gel 5 at 20 min).
+    expect(at(events, 0).map((e) => e.type)).toEqual(['start', 'drink']);
+    expect(at(events, 20).map((e) => [e.type, e.message.params])).toEqual([
+      ['drink', { ml: 10, bottle: 1 }],
+      ['fuel', { gel: 5 }],
+    ]);
+  });
+
+  it('does not mutate a drink plan and returns the same output for the same input', () => {
+    const deepFreeze = (o) => {
+      Object.values(o).forEach((v) => v && typeof v === 'object' && deepFreeze(v));
+      return Object.freeze(o);
+    };
+    const input = deepFreeze({
+      durationMin: 180,
+      type: 'drink',
+      fluidMlPerHour: 600,
+      drink: { bottles: 2, bottleMl: 950, perBottle: { carbsG: 45, fillMl: 900 } },
+      caffeine: structuredClone(CAFFEINE_180),
+      bicarb: structuredClone(BICARB_ON),
+    });
+    const first = buildSchedule(input);
+    expect(buildSchedule(input)).toEqual(first);
+    expect(input.drink).toEqual({ bottles: 2, bottleMl: 950, perBottle: { carbsG: 45, fillMl: 900 } });
+    expect(input.caffeine).toEqual(CAFFEINE_180);
+  });
+});
+
+/** Drink and both mode inputs: a drink sized like `drinkBottles`, a given count, or none. */
+const formatInput = fc
+  .record({
+    type: fc.constantFrom('drink', 'both'),
+    durationMin: fc.integer({ min: 0, max: 1440 }),
+    gelsPerHour: fc.constantFrom(0, 0.25, 1, 2, 3, 4, 6, 12),
+    fluidMlPerHour: fc.integer({ min: 0, max: 1500 }),
+    bottleMl: fc.oneof(fc.constantFrom(500, 750, 950), fc.integer({ min: 250, max: 1500 })),
+    bottlesMode: fc.constantFrom('derived', 'given', 'missing'),
+    givenBottles: fc.integer({ min: 1, max: 8 }),
+    intra: fc.array(
+      fc.record({ timeShare: fc.double({ min: 0, max: 1, noNaN: true }), mg: fc.integer({ min: 1, max: 40 }).map((n) => n * 5) }),
+      { maxLength: 4 },
+    ),
+  })
+  .map(({ type, durationMin, gelsPerHour, fluidMlPerHour, bottleMl, bottlesMode, givenBottles, intra }) => {
+    const plannedMl = (fluidMlPerHour * durationMin) / 60;
+    // A missing drink means 750 ml bottles, as many as the plan's fluid needs.
+    const sizeMl = bottlesMode === 'missing' ? 750 : bottleMl;
+    const derived = plannedMl > 0 ? Math.max(1, Math.ceil(plannedMl / sizeMl - 1e-9)) : 0;
+    let drink;
+    if (bottlesMode === 'derived') drink = { bottles: derived, bottleMl };
+    else if (bottlesMode === 'given') drink = { bottles: givenBottles, bottleMl };
+    const doses = intra.map(({ timeShare, mg }) => ({
+      timeMin: Math.round(timeShare * durationMin),
+      mg,
+      kind: 'intra',
+      gelIndex: 0,
+      tablets: null,
+    }));
+    return {
+      type,
+      durationMin,
+      gelsPerHour,
+      fluidMlPerHour,
+      drink,
+      caffeine: { ...CAFFEINE_OFF, enabled: true, doses },
+      expectedBottleMl: sizeMl,
+      expectedBottles: bottlesMode === 'given' ? givenBottles : Math.max(1, derived),
+      countGiven: bottlesMode === 'given',
+    };
+  });
+
+describe('buildSchedule: drink and both properties', () => {
+  it('keeps the sips on the 20 min grid, within the plan, with valid bottle numbers', () => {
+    fc.assert(
+      fc.property(formatInput, ({ expectedBottleMl, expectedBottles, countGiven, ...input }) => {
+        const events = buildSchedule(input);
+        for (let i = 1; i < events.length; i += 1) {
+          expect(events[i].timeMin).toBeGreaterThanOrEqual(events[i - 1].timeMin);
+        }
+        expect(byType(events, 'start')).toHaveLength(1);
+        expect(events.at(-1)).toEqual({ timeMin: input.durationMin, type: 'finish', message: { key: 'schedule.finish' } });
+
+        const gelMode = buildSchedule({ ...input, type: 'gel' });
+        const gelsCarryFluid = gelMode.some((e) => 'fluidMl' in e);
+        if (input.type === 'drink') {
+          expect(byType(events, 'fuel')).toEqual([]);
+          expect(byType(events, 'start')[0].message).toEqual({ key: 'schedule.start' });
+        } else if (gelsCarryFluid) {
+          // Both mode with fluid on the gels is gel mode.
+          expect(events).toEqual(gelMode);
+        } else {
+          expect(byType(events, 'fuel')).toEqual(byType(gelMode, 'fuel'));
+        }
+
+        const sips = byType(events, 'drink');
+        const planned = (input.fluidMlPerHour * input.durationMin) / 60;
+        // Each bottle is filled to an equal share of the plan's fluid (at most its size), as drinkBottles fills it.
+        const fillMl = Math.min(expectedBottleMl, planned / expectedBottles);
+        let listedBefore = 0;
+        let previousLast = 1;
+        for (const e of sips) {
+          expect(e.timeMin % DRINK_INTERVAL_MIN).toBe(0);
+          expect(e.timeMin).toBeLessThan(input.durationMin);
+          expect(e.fluidMl).toBeGreaterThan(0);
+          expect(e.fluidMl % 10).toBe(0);
+          const last = e.lastBottle ?? e.bottle;
+          if (last === e.bottle) {
+            expect('lastBottle' in e).toBe(false);
+            expect(e.message).toEqual({ key: 'schedule.drinkSip', params: { ml: e.fluidMl, bottle: e.bottle } });
+          } else if (last === e.bottle + 1) {
+            expect(e.message).toEqual({ key: 'schedule.drinkSipSwitch', params: { ml: e.fluidMl, bottle: e.bottle, next: last } });
+          } else {
+            expect(last).toBeGreaterThan(e.bottle + 1);
+            expect(e.message).toEqual({
+              key: 'schedule.drinkSipSpan',
+              params: { ml: e.fluidMl, bottle: e.bottle, finished: last - 1, next: last },
+            });
+          }
+          // Within 10 ml of the plan's fluid for its 20 min (or until the finish).
+          const end = Math.min(e.timeMin + DRINK_INTERVAL_MIN, input.durationMin);
+          expect(Math.abs(e.fluidMl - (input.fluidMlPerHour * (end - e.timeMin)) / 60)).toBeLessThan(10 + 1e-6);
+          // [almond2005] the running total never runs ahead of the plan.
+          const before = listedBefore;
+          listedBefore += e.fluidMl;
+          expect(listedBefore).toBeLessThanOrEqual((input.fluidMlPerHour * end) / 60 + 1e-6);
+          // The bottles holding the first and the last ml of the sip, never past the last bottle.
+          expect(e.bottle).toBe(Math.min(expectedBottles, Math.floor(before / fillMl + 1e-9) + 1));
+          expect(last).toBe(Math.min(expectedBottles, Math.max(e.bottle, Math.ceil(listedBefore / fillMl - 1e-9))));
+          // Bottles are drunk in order: a sip starts on the bottle the last one ended in, or the next one.
+          expect(e.bottle).toBeGreaterThanOrEqual(previousLast);
+          expect(e.bottle).toBeLessThanOrEqual(previousLast + 1);
+          expect(last).toBeLessThanOrEqual(expectedBottles);
+          previousLast = last;
+        }
+        // With bottles sized like drinkBottles (the derived or default count), the listed sips empty every
+        // bottle: they reach the last bottle and leave less than 10 ml of the mixed drink.
+        if (!countGiven && sips.length > 0) {
+          expect(previousLast).toBe(expectedBottles);
+          expect(listedBefore).toBeGreaterThan(expectedBottles * fillMl - 10);
+        }
+
+        const listed = totalFluid(events);
+        expect(listed).toBeLessThanOrEqual(planned + 1e-6);
+        const hydration = byType(events, 'hydration');
+        if (input.fluidMlPerHour > 0 && input.durationMin > 0) {
+          if (listed > 0) {
+            expect(hydration).toEqual([]);
+            expect(listed).toBeGreaterThan(planned - 10 - 1e-6);
+          } else {
+            expect(hydration).toHaveLength(1);
+          }
+        } else if (input.fluidMlPerHour === 0) {
+          expect(sips).toEqual([]);
+          expect(hydration).toEqual([]);
+        }
+
+        const plannedMg = input.caffeine.doses.reduce((sum, d) => sum + d.mg, 0);
+        expect(events.reduce((sum, e) => sum + (e.caffeineMg ?? 0), 0)).toBe(plannedMg);
+        for (const e of events) {
+          expect(EVENT_TYPES).toContain(e.type);
+          expect(catalog).toHaveProperty([e.message.key]);
+        }
+      }),
+    );
+  });
+});
+
 describe('i18n catalog (en/schedule)', () => {
   const collectMessages = () => {
     const inputs = [
@@ -745,6 +1292,10 @@ describe('i18n catalog (en/schedule)', () => {
         },
       },
       { durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 20 },
+      { durationMin: 120, type: 'drink', fluidMlPerHour: 600, drink: { bottles: 2, bottleMl: 750 }, caffeine: CAFFEINE_180 },
+      { durationMin: 90, type: 'both', gelsPerHour: 0, fluidMlPerHour: 500, drink: { bottles: 1, bottleMl: 750 } },
+      { durationMin: 180, type: 'drink', fluidMlPerHour: 500, drink: { bottles: 2, bottleMl: 750 } },
+      { durationMin: 60, type: 'drink', fluidMlPerHour: 1200, drink: { bottleMl: 250 } },
     ];
     return inputs.flatMap((input) => buildSchedule(input).map((e) => e.message));
   };

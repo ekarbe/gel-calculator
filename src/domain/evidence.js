@@ -267,6 +267,56 @@ const RAW_CITATIONS = {
     journal: 'Sports Med 52:505–526',
     doi: '10.1007/s40279-021-01575-x',
   },
+  // Phase 2: sweat rate (heat balance, sweat test), drink and gel concentration.
+  jay2024: {
+    authors: 'Jay O et al.',
+    year: 2024,
+    title: 'Whole body sweat rate prediction: outdoor running and cycling exercise',
+    journal: 'J Appl Physiol 136:1478–1487',
+    doi: '10.1152/japplphysiol.00831.2023',
+  },
+  gagnon2013: {
+    authors: 'Gagnon D, Jay O, Kenny GP',
+    year: 2013,
+    title: 'The evaporative requirement for heat balance determines whole-body sweat rate during exercise under conditions permitting full evaporation',
+    journal: 'J Physiol 591:2925–2935',
+    doi: '10.1113/jphysiol.2012.248823',
+  },
+  cramer2019: {
+    authors: 'Cramer MN, Jay O',
+    year: 2019,
+    title: 'Partitional calorimetry',
+    journal: 'J Appl Physiol 126:267–277',
+    doi: '10.1152/japplphysiol.00191.2018',
+  },
+  cheuvront2017: {
+    authors: 'Cheuvront SN, Montain SJ',
+    year: 2017,
+    title: 'Myths and methodologies: making sense of exercise mass and water balance',
+    journal: 'Exp Physiol 102:1047–1053',
+    doi: '10.1113/EP086284',
+  },
+  vist1995: {
+    authors: 'Vist GE, Maughan RJ',
+    year: 1995,
+    title: 'The effect of osmolality and carbohydrate content on the rate of gastric emptying of liquids in man',
+    journal: 'J Physiol 486:523–531',
+    doi: '10.1113/jphysiol.1995.sp020831',
+  },
+  pfeiffer2010: {
+    authors: 'Pfeiffer B et al.',
+    year: 2010,
+    title: 'Oxidation of solid versus liquid CHO sources during exercise',
+    journal: 'Med Sci Sports Exerc 42:2038–2045',
+    doi: '10.1249/MSS.0b013e3181e0efe6',
+  },
+  shi1995: {
+    authors: 'Shi X et al.',
+    year: 1995,
+    title: 'Effects of carbohydrate type and concentration and solution osmolality on water absorption',
+    journal: 'Med Sci Sports Exerc 27:1607–1615',
+    doi: '10.1249/00005768-199512000-00005',
+  },
 };
 
 /**

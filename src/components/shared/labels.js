@@ -33,3 +33,24 @@ export const INTENSITY_ZONES = Object.freeze({
   hard: "Zone 4",
   race: "Zone 4–5",
 });
+
+/** Sport names (`event.sport`, and the conditions of a sweat test). */
+export const SPORT_LABELS = Object.freeze({
+  running: "Running",
+  cycling: "Cycling",
+  other: "Other sport",
+});
+
+/** Where a session takes place (`event.setting`). */
+export const SETTING_LABELS = Object.freeze({
+  outdoor: "Outdoors",
+  indoorFan: "Indoors with a fan",
+  indoorNoFan: "Indoors without a fan",
+});
+
+/** Sunshine outdoors (`environment.sun`). */
+export const SUN_LABELS = Object.freeze({
+  none: "Shade or overcast",
+  partly: "Partly sunny",
+  full: "Full sun",
+});
