@@ -14,7 +14,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-import { Github } from "lucide-react";
+import GithubIcon from "./GithubIcon";
 import StravaIcon from "./StravaIcon";
 
 const Footer = () => (
@@ -37,7 +37,7 @@ const Footer = () => (
         className="hover:text-text-primary transition-colors"
         aria-label="GitHub"
       >
-        <Github size={20} />
+        <GithubIcon size={20} />
       </a>
     </div>
   </footer>
