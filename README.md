@@ -23,7 +23,7 @@ A web application designed for endurance athletes to calculate personalized ener
 
 ## Getting Started
 
-Follow these steps to set up and run the project locally:
+Prerequisite: Node.js 24 (current LTS; CI builds with it). Follow these steps to set up and run the project locally:
 
 1. **Clone the repository:**
 
@@ -61,6 +61,14 @@ Follow these steps to set up and run the project locally:
 
 The main application page is located at `src/app/page.jsx`.
 
+5. **Run the checks** (CI runs the same before every deploy):
+
+    ```bash
+    npm run lint
+    npm test -- --run
+    npm run build   # static export to ./out
+    ```
+
 ## How It Works
 
 1. **Basic Inputs:** Enter the planned duration of your activity and your target carbohydrate intake per hour.
@@ -78,7 +86,8 @@ The main application page is located at `src/app/page.jsx`.
 ## Configuration & Data
 
 * Carbohydrate source data (carbs per gram, glucose/fructose content) is defined in `src/constants/constants.js`.
-* Electrolyte source data (component ratios, estimated absorption rates) is also in `src/constants/constants.js`. **Note:** Absorption rates are simplified estimates and can vary significantly between individuals.
+* Electrolyte source data (component ratios, estimated absorption rates) is also in `src/constants/constants.js`. Ratios refer to the salt **as sold**, including hydrate water (e.g. Epsom salt is the heptahydrate), so check that the form named in the app matches your product. **Note:** Absorption rates are simplified estimates and can vary significantly between individuals.
+* Guard rails (sodium cap, fluid ceiling, carb warnings) live in `src/lib/safety.js`; see [CORE.md](CORE.md) for how every calculation works.
 * Sweat profile ranges and descriptions are located in the same constants file.
 
 ## Contributing
