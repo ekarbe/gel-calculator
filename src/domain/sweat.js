@@ -106,12 +106,14 @@ function presetIndex(index, length) {
  *
  * Unknown `sex` is treated as `'unspecified'` and unknown `intensity` as
  * `'moderate'`. A non-finite `tempC` or `humidity` adds no adjustment (it is
- * treated as the formula's reference value, 15 °C or 50 %).
+ * treated as the formula's reference value, 15 °C or 50 %). A missing or
+ * `null` context is treated as `{}`.
  *
- * @param {SweatContext} [context]
+ * @param {SweatContext | null} [context]
  * @returns {number} Estimated sweat rate in L/h (unrounded).
  */
-export function estimateSweatRateLegacy({ sex, intensity, tempC, humidity } = {}) {
+export function estimateSweatRateLegacy(context) {
+  const { sex, intensity, tempC, humidity } = context ?? {};
   const base = Object.hasOwn(SEX_BASE_LPH, sex) ? SEX_BASE_LPH[sex] : SEX_BASE_LPH.unspecified;
   const factor = Object.hasOwn(INTENSITY_FACTOR, intensity)
     ? INTENSITY_FACTOR[intensity]
@@ -131,20 +133,22 @@ export function estimateSweatRateLegacy({ sex, intensity, tempC, humidity } = {}
  * - Any other source falls back to `'preset'`.
  * - `sodiumMmolL` always comes from `SWEAT_SODIUM_PRESETS_MMOL[saltinessIndex]`.
  * - Indices are rounded and clamped to 0–5; non-finite indices use preset 2.
+ * - A missing or `null` argument is treated as `{}`.
  *
  * Citations: baker2017, barnes2019.
  *
- * @param {SweatInputs} [sweat]
- * @param {SweatContext} [context]  Only used for `'estimate'`.
+ * @param {SweatInputs | null} [sweat]
+ * @param {SweatContext | null} [context]  Only used for `'estimate'`.
  * @returns {SweatResolution}
  */
-export function resolveSweat({ source, rateIndex, saltinessIndex } = {}, context = {}) {
+export function resolveSweat(sweat, context) {
+  const { source, rateIndex, saltinessIndex } = sweat ?? {};
   const resolvedSource = source === 'estimate' ? 'estimate' : 'preset';
   const sodiumMmolL =
     SWEAT_SODIUM_PRESETS_MMOL[presetIndex(saltinessIndex, SWEAT_SODIUM_PRESETS_MMOL.length)];
   const rateLph =
     resolvedSource === 'estimate'
-      ? estimateSweatRateLegacy(context ?? {})
+      ? estimateSweatRateLegacy(context)
       : SWEAT_RATE_PRESETS_LPH[presetIndex(rateIndex, SWEAT_RATE_PRESETS_LPH.length)];
   const uncertaintyLph = UNCERTAINTY_LPH[resolvedSource];
 

@@ -48,9 +48,11 @@
  * @typedef {Object} CaffeineInputs
  * @property {boolean} [enabled]  Whether the athlete uses caffeine at all.
  * @property {number} [massKg]  Body mass in kg; clamped to [30, 200], non-finite → 70.
- * @property {number} [mgPerKg]  Total target dose in mg/kg; clamped to [1, 6], non-finite → 3.
- * @property {number} [durationMin]  Event duration in minutes; non-finite or negative → 0, capped at 2880.
- * @property {number[]} [gelTimesMin]  Gel times in minutes from the start (ascending), used when `asIngredient`.
+ * @property {number} [mgPerKg]  Target dose D in mg/kg; clamped to [1, 6], non-finite → 3. Long events add
+ *   top-ups on top of the pre dose, so the plan total can differ from D.
+ * @property {number} [durationMin]  Event duration in minutes; missing, NaN or ≤ 0 → 0; capped at 2880
+ *   (so +Infinity counts as a 48 h event).
+ * @property {number[]} [gelTimesMin]  Gel times in minutes from the start, used when `asIngredient`.
  * @property {boolean} [asIngredient]  Add intra doses to the gels as tablets.
  * @property {number} [tabletMg]  Caffeine per tablet in mg; non-finite or ≤ 0 → 100.
  */
@@ -90,6 +92,12 @@ const TOP_UP_INTERVAL_MIN = 150;
 const TOP_UP_STOP_BEFORE_FINISH_MIN = 30;
 /** Largest single top-up in mg/kg for long events. */
 const TOP_UP_MAX_MG_PER_KG = 1.5;
+/**
+ * Furthest a dose moves to ride on a gel, in minutes. A dose with no gel this
+ * close stays a separate tablet at its own time, so a late dose stays late
+ * (talanian2016) even when the gels are far apart.
+ */
+const MAX_GEL_SHIFT_MIN = 30;
 
 /** Tolerance for floating-point comparisons against the body-load cap. */
 const EPS = 1e-9;
@@ -192,29 +200,47 @@ function largestAllowedDose(roomMg, { asIngredient, tabletMg }) {
 }
 
 /**
- * Index of the last gel time at or before `timeMin`, or the first gel when
- * every gel comes later. Non-finite gel times are skipped. Returns -1 when
- * there is no usable gel time.
- * @param {number} timeMin
+ * Index of the gel that carries a dose planned for `timeMin`, or -1 when the
+ * dose stays a separate tablet.
+ *
+ * The last gel at or before `timeMin` is used when it is at most 30 min
+ * earlier. Otherwise the first gel after `timeMin` is used when it is at most
+ * 30 min later and at least 30 min before the finish. Non-finite gel times are
+ * skipped; the list need not be sorted. Doses are at least 150 min apart, so
+ * no two doses share a gel.
+ *
+ * @param {number} timeMin  Planned dose time.
  * @param {number[]} gelTimesMin
+ * @param {number} durationMin
  * @returns {number}
  */
-function gelIndexFor(timeMin, gelTimesMin) {
-  let first = -1;
-  let last = -1;
+function gelIndexFor(timeMin, gelTimesMin, durationMin) {
+  let before = -1;
+  let after = -1;
   for (let i = 0; i < gelTimesMin.length; i++) {
     const g = gelTimesMin[i];
     if (!Number.isFinite(g)) continue;
-    if (first < 0) first = i;
-    if (g <= timeMin) last = i;
+    if (g <= timeMin) {
+      if (before < 0 || g > gelTimesMin[before]) before = i;
+    } else if (after < 0 || g < gelTimesMin[after]) {
+      after = i;
+    }
   }
-  return last >= 0 ? last : first;
+  if (before >= 0 && timeMin - gelTimesMin[before] <= MAX_GEL_SHIFT_MIN) return before;
+  if (
+    after >= 0 &&
+    gelTimesMin[after] - timeMin <= MAX_GEL_SHIFT_MIN &&
+    gelTimesMin[after] <= durationMin - TOP_UP_STOP_BEFORE_FINISH_MIN
+  ) {
+    return after;
+  }
+  return -1;
 }
 
 /**
  * Plans caffeine for an event.
  *
- * Total dose `D = mgPerKg × massKg` (1–6 mg/kg; habitual intake does not
+ * Target dose `D = mgPerKg × massKg` (1–6 mg/kg; habitual intake does not
  * change the dose, carvalho2022):
  * - `durationMin ≤ 75`: one `pre` dose of D at −60 min.
  * - `75 < durationMin ≤ 180`: `pre` D × 2/3 at −60 min and `intra` D × 1/3 at
@@ -225,8 +251,11 @@ function gelIndexFor(timeMin, gelTimesMin) {
  *
  * Doses are rounded to 5 mg, or to half tablets (at least one half) when
  * `asIngredient`; then `tablets` is set. With `asIngredient` and gel times,
- * each `intra` dose moves to the last gel at or before its time (or the first
- * gel) and gets that `gelIndex`; doses landing on the same gel are combined.
+ * each `intra` dose rides on a nearby gel and moves to its time: the last gel
+ * at or before the dose when it is at most 30 min earlier, else the first gel
+ * after it when that is at most 30 min later and at least 30 min before the
+ * finish. A dose with no such gel stays a separate tablet at its own time
+ * (`gelIndex` null), so a late dose is never moved to the start.
  *
  * Body-load cap: walking the doses in time order, any dose that would lift
  * {@link bodyLoadAt} above 6 mg/kg is reduced to the largest rounded amount
@@ -237,6 +266,11 @@ function gelIndexFor(timeMin, gelTimesMin) {
  * `caffeine.singleDoseAbove200` (info) when any dose exceeds 200 mg;
  * `caffeine.highTotal` (warning) when the total exceeds 9 mg/kg;
  * `caffeine.capped` (warning) when the cap changed a dose.
+ *
+ * Explanation: summary `caffeine.why.<short|medium|long>` by duration band, or
+ * `caffeine.why.preOnly` when the cap removed every intra dose of a medium or
+ * long plan. Details: `caffeine.why.dose` (D and the real plan total) and
+ * `caffeine.why.habitual`.
  *
  * @param {CaffeineInputs} [inputs]
  * @returns {CaffeinePlan}
@@ -267,7 +301,8 @@ export function planCaffeine({
 
   const mass = Number.isFinite(massKg) ? clamp(massKg, ...MASS_RANGE_KG) : MASS_DEFAULT_KG;
   const perKg = Number.isFinite(mgPerKg) ? clamp(mgPerKg, ...MG_PER_KG_RANGE) : MG_PER_KG_DEFAULT;
-  const d = Number.isFinite(durationMin) && durationMin > 0 ? Math.min(durationMin, MAX_DURATION_MIN) : 0;
+  // `> 0` is false for NaN; +Infinity is a huge duration, so it is capped like any other.
+  const d = typeof durationMin === 'number' && durationMin > 0 ? Math.min(durationMin, MAX_DURATION_MIN) : 0;
   const tablet = Number.isFinite(tabletMg) && tabletMg > 0 ? tabletMg : TABLET_DEFAULT_MG;
   const ingredient = Boolean(asIngredient);
   const gels = Array.isArray(gelTimesMin) ? gelTimesMin : [];
@@ -283,24 +318,12 @@ export function planCaffeine({
     ...roundDose(dose.mg, rounding),
   }));
 
-  // 2. Intra doses ride on gels when caffeine is an ingredient.
+  // 2. Intra doses ride on a nearby gel when caffeine is an ingredient.
   if (ingredient && gels.length > 0) {
-    const merged = [];
-    for (const dose of doses) {
-      const index = dose.kind === 'intra' ? gelIndexFor(dose.timeMin, gels) : -1;
-      if (index < 0) {
-        merged.push(dose);
-        continue;
-      }
-      const sameGel = merged.find((m) => m.kind === 'intra' && m.gelIndex === index);
-      if (sameGel) {
-        sameGel.mg += dose.mg;
-        sameGel.tablets += dose.tablets;
-      } else {
-        merged.push({ ...dose, timeMin: gels[index], gelIndex: index });
-      }
-    }
-    doses = merged;
+    doses = doses.map((dose) => {
+      const index = dose.kind === 'intra' ? gelIndexFor(dose.timeMin, gels, d) : -1;
+      return index < 0 ? dose : { ...dose, timeMin: gels[index], gelIndex: index };
+    });
   }
   doses.sort((a, b) => a.timeMin - b.timeMin);
 
@@ -396,13 +419,20 @@ export function planCaffeine({
     peakBodyLoadMgPerKg,
     why: {
       summary: {
-        key: `caffeine.why.${band}`,
-        params: { preMg, intraMg, totalMg, topUps: intraDoses.length },
+        // Pick the text from the doses that remain: the cap can drop every intra dose.
+        key: band !== 'short' && intraDoses.length === 0 ? 'caffeine.why.preOnly' : `caffeine.why.${band}`,
+        params: { preMg, intraMg, totalMg, topUps: intraDoses.length, maxMgPerKg: MAX_BODY_LOAD_MG_PER_KG },
       },
       details: [
         {
           key: 'caffeine.why.dose',
-          params: { mgPerKg: round1(perKg), massKg: round1(mass), doseMg: Math.round(perKg * mass) },
+          params: {
+            mgPerKg: round1(perKg),
+            massKg: round1(mass),
+            doseMg: Math.round(perKg * mass),
+            totalMg,
+            totalMgPerKg: round1(totalMgPerKg),
+          },
         },
         { key: 'caffeine.why.habitual' },
       ],

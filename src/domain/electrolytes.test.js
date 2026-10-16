@@ -23,6 +23,17 @@ function placeholders(text) {
   return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
 }
 
+/** Every number anywhere in a result, walking arrays and objects. */
+function numbersIn(value) {
+  if (typeof value === 'number') return [value];
+  if (value && typeof value === 'object') return Object.values(value).flatMap(numbersIn);
+  return [];
+}
+
+function expectAllFinite(value) {
+  for (const n of numbersIn(value)) expect(Number.isFinite(n), String(n)).toBe(true);
+}
+
 /** Collects every message descriptor in a recommendation or a warning list. */
 function messagesOf(result) {
   if (Array.isArray(result)) return result.map((w) => w.message);
@@ -156,6 +167,7 @@ describe('recommendSodium', () => {
       expect(noSalt.estimatedLossMgPerHour).toBe(0);
     }
     expect(recommendSodium()).toMatchObject({ mgPerHour: 0, range: [0, 300], optional: true });
+    expect(recommendSodium(null)).toMatchObject({ mgPerHour: 0, range: [0, 300], optional: true });
     expect(recommendSodium({})).toMatchObject({ mgPerHour: 0, estimatedLossMgPerHour: 0 });
   });
 
@@ -163,8 +175,16 @@ describe('recommendSodium', () => {
     for (const durationMin of [60, 180, 600, 1e9]) {
       const r = recommendSodium({ durationMin, sweatRateLph: 1e6, sweatSodiumMmolL: 1e6 });
       expect(r.mgPerHour).toBeLessThanOrEqual(SODIUM_HIGH_MG_PER_HOUR);
-      expect(Number.isFinite(r.mgPerHour)).toBe(true);
+      expectAllFinite(r);
     }
+  });
+
+  it('caps an overflowing loss at the largest finite number', () => {
+    const r = recommendSodium({ durationMin: 180, sweatRateLph: 1e200, sweatSodiumMmolL: 1e200 });
+    expect(r.estimatedLossMgPerHour).toBe(Number.MAX_VALUE);
+    expect(r.why.summary.params.loss).toBe(Number.MAX_VALUE);
+    expect(r.mgPerHour).toBe(1000);
+    expectAllFinite(r);
   });
 
   it('does not mutate its input', () => {
@@ -194,6 +214,13 @@ describe('recommendSodium', () => {
 });
 
 describe('sodiumWarnings', () => {
+  it('shows the per-hour sodium as whole mg but checks the unrounded value', () => {
+    // Manual salts give any per-hour amount: 30 g table salt over 7 h is 1684.29 mg/h.
+    expect(sodiumWarnings(30000 * 0.393 / 7)[0].message.params).toEqual({ mgPerHour: 1684, limitMgPerHour: 1500 });
+    expect(sodiumWarnings(1000.4)[0].message.params).toEqual({ mgPerHour: 1000, limitMgPerHour: 1000 });
+    expect(sodiumWarnings(1500.2)[0].id).toBe('electrolytes.sodiumFarAbove');
+  });
+
   it('flags intakes far above guidelines as danger', () => {
     // [mccubbin2023] [hoffman2015] no guideline supports more than 1500 mg/h
     const w = sodiumWarnings(1501);
@@ -262,18 +289,40 @@ describe('sodiumWarnings', () => {
       expect(sodiumWarnings(900, { fluidMlPerHour })).toEqual([]);
     }
     expect(sodiumWarnings(900)).toEqual([]);
+    expect(sodiumWarnings(900, null)).toEqual([]);
   });
 
-  it('treats non-finite or negative intakes as 0', () => {
-    for (const mg of [NaN, Infinity, -Infinity, -2000, undefined, null]) {
+  it('still checks the intake with a null context', () => {
+    expect(sodiumWarnings(1200, null).map((w) => w.id)).toEqual(['electrolytes.sodiumHigh']);
+  });
+
+  it('treats NaN, negative or non-number intakes as 0', () => {
+    for (const mg of [NaN, -Infinity, -2000, undefined, null, '2000']) {
       expect(sodiumWarnings(mg, { fluidMlPerHour: 500 })).toEqual([]);
     }
     expect(sodiumWarnings(0, { fluidMlPerHour: 500 })).toEqual([]);
   });
 
+  it('flags an infinite intake as danger instead of ignoring it', () => {
+    // [mccubbin2023] [hoffman2015] the safety check must not fail open
+    const w = sodiumWarnings(Infinity, { fluidMlPerHour: 500 });
+    expect(w.map((x) => x.id)).toEqual(['electrolytes.sodiumFarAbove', 'electrolytes.concentrationHigh']);
+    expect(w[0].level).toBe('danger');
+    expect(w[0].message.params.mgPerHour).toBe(Number.MAX_VALUE);
+    expectAllFinite(w);
+    expect(sodiumWarnings(Infinity).map((x) => x.id)).toEqual(['electrolytes.sodiumFarAbove']);
+  });
+
   it('handles huge values', () => {
     const ids = sodiumWarnings(1e12, { fluidMlPerHour: 1 }).map((w) => w.id);
     expect(ids).toEqual(['electrolytes.sodiumFarAbove', 'electrolytes.concentrationHigh']);
+    // 1000 mg/h in a vanishing fluid intake overflows the division
+    const [w] = sodiumWarnings(1000, { fluidMlPerHour: 1e-320 });
+    expect(w.id).toBe('electrolytes.concentrationHigh');
+    expect(w.message.params.mgPerL).toBe(Number.MAX_VALUE);
+    for (const [mg, fluidMlPerHour] of [[Number.MAX_VALUE, 1], [Number.MAX_VALUE, 5e-324], [1, 5e-324]]) {
+      expectAllFinite(sodiumWarnings(mg, { fluidMlPerHour }));
+    }
   });
 });
 
@@ -322,6 +371,7 @@ describe('recommendExtras', () => {
       expect(off.Calcium).toEqual({ mgPerHour: 0, enabled: false });
     }
     expect(recommendExtras().Potassium).toEqual({ mgPerHour: 0, enabled: false });
+    expect(recommendExtras(null).Potassium).toEqual({ mgPerHour: 0, enabled: false });
   });
 
   it('treats non-finite or negative sweat rates as 0', () => {
@@ -378,7 +428,8 @@ describe('deliveredIons', () => {
         { id: 3, amountMg: 1000 },
         { id: 31, amountMg: -100 },
         { id: 31, amountMg: NaN },
-        { id: 31, amountMg: Infinity },
+        { id: 31, amountMg: -Infinity },
+        { id: 31, amountMg: '1000' },
         { id: 31 },
         null,
       ]),
@@ -386,6 +437,21 @@ describe('deliveredIons', () => {
     for (const salts of [[], undefined, null, 'x']) {
       expect(deliveredIons(salts)).toEqual(NO_IONS);
     }
+  });
+
+  it('keeps huge and infinite amounts huge and finite', () => {
+    const twice = deliveredIons([
+      { id: 31, amountMg: Number.MAX_VALUE },
+      { id: 31, amountMg: Number.MAX_VALUE },
+    ]);
+    // 2 × 0.607 × MAX_VALUE overflows: capped, not Infinity
+    expect(twice.Chloride).toBe(Number.MAX_VALUE);
+    expect(twice.Sodium).toBeCloseTo(2 * 0.393 * Number.MAX_VALUE, -300);
+    expectAllFinite(twice);
+
+    const inf = deliveredIons([{ id: 31, amountMg: Infinity }]);
+    expect(inf.Sodium).toBeGreaterThan(1e307);
+    expectAllFinite(inf);
   });
 
   it('does not mutate its input', () => {
@@ -439,14 +505,37 @@ describe('saltsForTargets', () => {
     expect(saltsForTargets({ sodiumMg: 0.1, sodiumSalt: 'table' })).toEqual([]);
     expect(saltsForTargets({ potassiumMg: 100 })).toEqual([{ id: 39, amountMg: 277 }]);
     expect(saltsForTargets()).toEqual([]);
+    expect(saltsForTargets(null)).toEqual([]);
   });
 
-  it('treats non-finite or negative targets as 0', () => {
-    for (const bad of [NaN, Infinity, -Infinity, -100, undefined, null, '500']) {
+  it('treats NaN, negative or non-number targets as 0', () => {
+    for (const bad of [NaN, -Infinity, -100, undefined, null, '500']) {
       expect(
         saltsForTargets({ sodiumMg: bad, potassiumMg: bad, magnesiumMg: bad, calciumMg: bad }),
       ).toEqual([]);
     }
+  });
+
+  it('returns finite whole-mg amounts for huge and infinite targets', () => {
+    for (const huge of [Number.MAX_VALUE, 1e308, Infinity]) {
+      for (const sodiumSalt of ['table', 'citrate', 'mix']) {
+        const salts = saltsForTargets({
+          sodiumMg: huge,
+          potassiumMg: huge,
+          magnesiumMg: huge,
+          calciumMg: huge,
+          sodiumSalt,
+        });
+        expect(salts.length).toBeGreaterThanOrEqual(4);
+        for (const s of salts) {
+          expect(Number.isFinite(s.amountMg)).toBe(true);
+          expect(Number.isInteger(s.amountMg)).toBe(true);
+          expect(s.amountMg).toBeGreaterThan(1e300);
+        }
+        expectAllFinite(deliveredIons(salts));
+      }
+    }
+    expect(saltsForTargets({ sodiumMg: Number.MAX_VALUE })).toEqual([{ id: 31, amountMg: Number.MAX_VALUE }]);
   });
 
   it('round-trips through deliveredIons within the compareIons tolerance (property)', () => {
@@ -515,10 +604,74 @@ describe('compareIons', () => {
     });
     expect(compareIons(NO_IONS, NO_IONS)).toEqual({});
     expect(compareIons(undefined, undefined)).toEqual({});
+    expect(compareIons(null, null)).toEqual({});
   });
 
-  it('treats non-finite or negative amounts as 0', () => {
-    expect(compareIons({ Sodium: NaN, Potassium: -5 }, { Sodium: Infinity, Potassium: -1 })).toEqual({});
+  it('treats NaN, negative or non-number amounts as 0', () => {
+    expect(
+      compareIons({ Sodium: NaN, Potassium: -5, Calcium: '9' }, { Sodium: -Infinity, Potassium: -1, Calcium: '9' }),
+    ).toEqual({});
+  });
+
+  it('reports a huge or infinite overdose as over, never as short or missing', () => {
+    const overdose = deliveredIons([
+      { id: 31, amountMg: Number.MAX_VALUE },
+      { id: 31, amountMg: Number.MAX_VALUE },
+    ]);
+    const r = compareIons(overdose, { Sodium: 500 });
+    expect(r.Sodium.status).toBe('over');
+    expect(r.Chloride).toMatchObject({ target: 0, delivered: Number.MAX_VALUE, status: 'over' });
+    expectAllFinite(r);
+
+    expect(compareIons({ Sodium: Infinity }, { Sodium: 500 }).Sodium).toEqual({
+      target: 500,
+      delivered: Number.MAX_VALUE,
+      diff: Number.MAX_VALUE - 500,
+      status: 'over',
+    });
+    expect(compareIons({ Sodium: 500 }, { Sodium: Infinity }).Sodium.status).toBe('short');
+    expect(compareIons({ Sodium: Infinity }, { Sodium: Infinity }).Sodium).toMatchObject({ diff: 0, status: 'met' });
+  });
+});
+
+describe('finite outputs for any input (property)', () => {
+  // fc.double() includes NaN, ±Infinity, ±0, Number.MAX_VALUE and subnormals
+  const anyDouble = fc.oneof(fc.double(), fc.constantFrom(Number.MAX_VALUE, Infinity, 1e308, 5e-324));
+
+  it('returns only finite numbers from every function', () => {
+    fc.assert(
+      fc.property(
+        anyDouble,
+        anyDouble,
+        anyDouble,
+        anyDouble,
+        fc.constantFrom('table', 'citrate', 'mix'),
+        (a, b, c, d, sodiumSalt) => {
+          expectAllFinite(recommendSodium({ durationMin: a, sweatRateLph: b, sweatSodiumMmolL: c }));
+          expectAllFinite(sodiumWarnings(a, { fluidMlPerHour: b }));
+          expectAllFinite(recommendExtras({ sweatRateLph: a, enabled: ALL_EXTRAS }));
+          const salts = saltsForTargets({ sodiumMg: a, potassiumMg: b, magnesiumMg: c, calciumMg: d, sodiumSalt });
+          expectAllFinite(salts);
+          for (const s of salts) expect(Number.isInteger(s.amountMg)).toBe(true);
+          const delivered = deliveredIons([
+            { id: 31, amountMg: a },
+            { id: 31, amountMg: b },
+            { id: 33, amountMg: c },
+            { id: 39, amountMg: d },
+          ]);
+          expectAllFinite(delivered);
+          expectAllFinite(compareIons(delivered, { Sodium: a, Chloride: b, Potassium: c, Magnesium: d }));
+        },
+      ),
+    );
+  });
+
+  it('warns about any intake above 1500 mg/h, however large', () => {
+    fc.assert(
+      fc.property(fc.oneof(fc.double({ min: 1500.0001, noNaN: true }), fc.constant(Infinity)), (mg) => {
+        expect(sodiumWarnings(mg).map((w) => w.id)).toEqual(['electrolytes.sodiumFarAbove']);
+      }),
+    );
   });
 });
 
@@ -568,9 +721,19 @@ describe('i18n catalog and citations', () => {
   });
 
   it('follows the copy style: no em dashes, en dash ranges', () => {
-    for (const text of Object.values(electrolytesCatalog)) {
-      expect(text).not.toMatch(/—/);
-      expect(text).not.toMatch(/\d-\d/);
+    for (const [key, text] of Object.entries(electrolytesCatalog)) {
+      expect(text, key).not.toMatch(/—/);
+      // a hyphen between numbers or placeholders, e.g. "2-4 h", "{lo}-{hi}", "460 - 1,150"
+      expect(text, key).not.toMatch(/[\d}]\s*-\s*[\d{]/);
     }
+    expect(electrolytesCatalog['electrolytes.why.sodium.medium']).toContain('{lo}–{hi} mg/h');
+    expect(electrolytesCatalog['electrolytes.why.sodium.long']).toContain('{lo}–{hi} mg/h');
+  });
+
+  it('describes the concentration as sodium per litre of fluid, not as drink content', () => {
+    // [efsa2011] the figure is all plan sodium over all fluid, so gels count too
+    const text = electrolytesCatalog['electrolytes.warn.concentrationHigh'];
+    expect(text).toContain('per litre of fluid');
+    expect(text).not.toMatch(/your drinks? (would )?hold/i);
   });
 });

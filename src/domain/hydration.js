@@ -75,11 +75,17 @@ const sweatOrZero = (sweatRateLph) =>
  * - `warnings` are {@link fluidWarnings} for the recommended value. They are
  *   empty for every sweat rate of 0.125 L/h or more; below that, rounding to
  *   50 ml/h can lift the plan above the sweat loss and the warning says so.
+ * - `why.summary` params: `mlPerHour`, `sweatMlPerHour` (whole ml), and the
+ *   rule constants `sharePct` (80) and `maxMlPerHour` (800) so the text cannot
+ *   drift from the rule. Rounding to 50 ml/h means the plan replaces about,
+ *   not at most, 80% of sweat loss.
+ * - A missing or `null` input is treated as `{}`.
  *
- * @param {{ durationMin?: number, sweatRateLph?: number, tempC?: number }} [input]
+ * @param {{ durationMin?: number, sweatRateLph?: number, tempC?: number } | null} [input]
  * @returns {FluidRecommendation}
  */
-export function recommendFluid({ durationMin, sweatRateLph, tempC } = {}) {
+export function recommendFluid(input) {
+  const { durationMin, sweatRateLph, tempC } = input ?? {};
   const sweat = sweatOrZero(sweatRateLph);
   const duration = Number.isFinite(durationMin) && durationMin > 0 ? durationMin : 0;
   const sweatMlPerHour = sweat * 1000;
@@ -99,7 +105,12 @@ export function recommendFluid({ durationMin, sweatRateLph, tempC } = {}) {
     why: {
       summary: {
         key: 'fluid.why.plan',
-        params: { mlPerHour, sweatMlPerHour: Math.round(sweatMlPerHour) },
+        params: {
+          mlPerHour,
+          sweatMlPerHour: Math.round(sweatMlPerHour),
+          sharePct: Math.round(FLUID_SHARE_OF_SWEAT * 100),
+          maxMlPerHour: FLUID_MAX_ML_PER_HOUR,
+        },
       },
       details,
       citations: [...FLUID_CITATIONS],
@@ -116,18 +127,25 @@ export function recommendFluid({ durationMin, sweatRateLph, tempC } = {}) {
  *   exercise-associated hyponatremia (almond2005, hewbutler2015).
  * - Otherwise intake above 800 ml/h → warning `fluid.aboveCeiling` (sawka2007).
  *
+ * The sweat loss is compared in whole ml/h, the same value the message
+ * shows. This keeps float noise in estimated rates (0.5499999999999999 L/h)
+ * from flagging an intake equal to the sweat loss (550 ml/h), and the message
+ * never reads as "550 is more than 550".
+ *
  * A non-finite sweat rate skips the sweat comparison. A non-finite or
- * non-positive intake returns no warnings.
+ * non-positive intake returns no warnings. A missing or `null` context is
+ * treated as `{}`.
  *
  * @param {number} mlPerHour  Fluid intake in ml/h.
- * @param {{ sweatRateLph?: number }} [context]
+ * @param {{ sweatRateLph?: number } | null} [context]
  * @returns {Warning[]}
  */
-export function fluidWarnings(mlPerHour, { sweatRateLph } = {}) {
+export function fluidWarnings(mlPerHour, context) {
+  const { sweatRateLph } = context ?? {};
   if (!Number.isFinite(mlPerHour) || mlPerHour <= 0) return [];
 
   if (Number.isFinite(sweatRateLph)) {
-    const sweatMlPerHour = Math.max(0, sweatRateLph) * 1000;
+    const sweatMlPerHour = Math.round(Math.max(0, sweatRateLph) * 1000);
     if (mlPerHour > sweatMlPerHour) {
       return [
         {
@@ -135,7 +153,7 @@ export function fluidWarnings(mlPerHour, { sweatRateLph } = {}) {
           level: 'danger',
           message: {
             key: 'fluid.warn.aboveSweat',
-            params: { mlPerHour, sweatMlPerHour: Math.round(sweatMlPerHour) },
+            params: { mlPerHour, sweatMlPerHour },
           },
           citations: ['almond2005', 'hewbutler2015'],
         },

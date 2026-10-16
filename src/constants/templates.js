@@ -33,7 +33,9 @@
  *   ratio is either stated by the manufacturer or follows directly from the
  *   ingredients (one sugar, or glucose only). `verified: false` means at least
  *   one value is an estimate; `notes` says which one and how it was derived.
- * - `notes` starts with the carbohydrate ingredients in label order.
+ * - `notes` starts with the carbohydrate ingredients in label order, as one
+ *   sentence that lists carbohydrates only. Water and everything else go in
+ *   `otherIngredients`, so no ingredient appears in both.
  * - Sugar splits follow `src/constants/constants.js`: sucrose, honey and maple
  *   syrup count half glucose, half fructose; maltodextrin and glucose syrups
  *   count as glucose.
@@ -96,20 +98,23 @@ const RAW_TEMPLATES = [
     ratio: { glucose: 1, fructose: 0.33 },
     glucoseSources: [{ id: 3, percentage: 100 }],
     fructoseSources: [{ id: 11, percentage: 100 }],
-    sodiumSalt: 'citrate',
+    sodiumSalt: 'mix',
     otherIngredients:
-      'Water, amino acids (leucine, valine, isoleucine, histidine), potassium citrate, sodium citrate, citric acid, malic acid, natural flavors, calcium carbonate, preservatives (sodium benzoate, potassium sorbate)',
+      'Water, L-leucine, potassium citrate, sodium citrate, citric acid, malic acid, calcium carbonate, sea salt, L-valine, natural flavors, gellan gum, L-isoleucine, sunflower oil, sodium benzoate (preservative), potassium sorbate (preservative), fruit and vegetable juice (for color)',
     verified: false,
     sources: [
       { label: 'Manufacturer product page', url: 'https://guenergy.com/products/energy-gel', checked: CHECKED },
-      { label: 'Running Warehouse nutrition panel (Strawberry Banana)', url: 'https://www.runningwarehouse.com/descpage-GU24TB.html', checked: CHECKED },
-      { label: 'REI ingredient list', url: 'https://www.rei.com/product/610028', checked: CHECKED },
+      { label: 'Running Warehouse nutrition panels (Strawberry Banana 24-pack)', url: 'https://www.runningwarehouse.com/GU_Energy_Gel/descpage-GU24.html', checked: CHECKED },
+      { label: 'Running Warehouse nutrition panel (Flavor Mix, Strawberry Banana)', url: 'https://www.runningwarehouse.com/GU_Energy_Gel_Flavor_Mix_24-Pack/descpage-GUV24.html', checked: CHECKED },
+      { label: 'REI ingredient list (Strawberry Banana)', url: 'https://www.rei.com/product/610028', checked: CHECKED },
+      { label: 'Bicycle Warehouse ingredient list (Strawberry Banana)', url: 'https://bicyclewarehouse.com/products/gu-energy-gel-strawberry-banana-box-of-24', checked: CHECKED },
     ],
     notes:
-      'Carbohydrates in label order: maltodextrin, water, fructose. GU does not publish the maltodextrin to fructose split. ' +
+      'Carbohydrates in label order: maltodextrin, fructose. Water sits between them on the label. GU does not publish the maltodextrin to fructose split. ' +
       'The 1:0.33 ratio is an estimate. Retailers quote a blend of 70–80% maltodextrin and 20–30% fructose, and the label shows only 7–8 g sugars per gel, so fructose is at most about 7 g of 23 g. ' +
-      'Sodium differs by source. The Strawberry Banana panel shows 55 mg; the GU product page states 60–125 mg across flavors, with salted flavors at the top. ' +
-      'Carbs are 21–23 g depending on flavor. Caffeinated flavors add 20–40 mg. The order of the minor ingredients comes from retailer listings.',
+      'Sodium and carbs differ by label version. The Flavor Mix panel shows 23 g and 55 mg; the single-flavor panels show 22–23 g and 55–65 mg. The GU product page states 60–125 mg sodium across flavors, with salted flavors at the top. ' +
+      'The label lists sodium citrate and sea salt, so the sodium salt setting is a mix. ' +
+      'Carbs are 21–23 g depending on flavor. Caffeinated flavors add 20–40 mg. The ingredient list comes from retailer listings of the Strawberry Banana label.',
   },
   {
     id: 'honey-stinger-organic-energy-gel',
@@ -156,7 +161,7 @@ const RAW_TEMPLATES = [
       { label: 'Bikable nutrition panel (EU label)', url: 'https://bikable.com/accessories/energy-bars-and-energy-powder/maurten-gel-100-neutral-12-x-40-g', checked: CHECKED },
     ],
     notes:
-      'Carbohydrates in label order: water, glucose, fructose. Maurten states the 0.8:1 fructose to glucose ratio. ' +
+      'Carbohydrates in label order: glucose, fructose. Maurten states the 0.8:1 fructose to glucose ratio. ' +
       'Sodium is 20 mg on the US label. EU labels list 0.085 g salt per 40 g gel, which is about 34 mg sodium. ' +
       'The sodium comes from sodium alginate. There is no added salt, so the sodium salt setting is only a default. Gel 100 Caf 100 adds 100 mg caffeine.',
   },
@@ -172,7 +177,7 @@ const RAW_TEMPLATES = [
     glucoseSources: [{ id: 6, percentage: 100 }],
     fructoseSources: [{ id: 20, percentage: 100 }],
     sodiumSalt: 'table',
-    otherIngredients: 'Apple puree, purified water, lemon juice concentrate, sea salt, ground cinnamon',
+    otherIngredients: 'Purified water, lemon juice concentrate, sea salt, ground cinnamon',
     verified: false,
     sources: [
       { label: 'Vitacost listing (Apple Cinnamon panel and ingredients)', url: 'https://www.vitacost.com/products/bpn-go-gel-endurance-gel-apple-cinnamon-10-packets-1-45-oz-41-g-each-142023', checked: CHECKED },
@@ -205,7 +210,7 @@ const RAW_TEMPLATES = [
       { label: 'Snow+Rock ingredient list (Orange)', url: 'https://www.snowandrock.com/p/sis-go-isotonic-gel-orange-60ml-E6314096.html', checked: CHECKED },
     ],
     notes:
-      'Carbohydrates in label order: water, maltodextrin (33%). Maltodextrin is the only carbohydrate, so the ratio is glucose only. ' +
+      'Carbohydrates in label order: maltodextrin (33%). Water comes first on the label. Maltodextrin is the only carbohydrate, so the ratio is glucose only. ' +
       'Sodium is a trace. UK panels list 0.01 g salt per gel, which is about 4 mg sodium. Some flavors list 0.04 g salt, about 16 mg sodium. ' +
       'Minor ingredients vary by flavor. The separate GO Energy + Electrolyte gel has about 118 mg sodium.',
   },
@@ -226,10 +231,11 @@ const RAW_TEMPLATES = [
     sources: [
       { label: 'Manufacturer product page', url: 'https://www.precisionhydration.com/us/en/products/pf-30-gel/', checked: CHECKED },
       { label: 'Steed Cycles nutrition panel and ingredients', url: 'https://steedcycles.com/products/precision-fuel-pf-30-gel', checked: CHECKED },
+      { label: 'The Feed nutrition panel', url: 'https://thefeed.com/products/precision-fuel-and-hydration-pf30-gel', checked: CHECKED },
     ],
     notes:
-      'Carbohydrates in label order: maltodextrin, water, fructose. PF&H states the 2:1 glucose to fructose ratio. ' +
-      'The ingredients contain no sodium source and PF&H sells the gel to be paired with separate electrolytes. No panel found lists a sodium value, so 0 mg means none added. ' +
+      'Carbohydrates in label order: maltodextrin, fructose. Water sits between them on the label. PF&H states the 2:1 glucose to fructose ratio. ' +
+      'The Feed panel lists 30 g carbs, 0 mg sodium and 0 mg caffeine. The ingredients contain no sodium source, and PF&H sells the gel to be paired with separate electrolytes. ' +
       'The sodium salt setting is only a default. The PF 30 Caffeine Gel adds 100 mg caffeine.',
   },
   {
@@ -253,7 +259,7 @@ const RAW_TEMPLATES = [
       { label: 'REI ingredient list', url: 'https://www.rei.com/product/777986', checked: CHECKED },
     ],
     notes:
-      'Carbohydrates in label order: maltodextrin, water, fructose. GU does not publish the maltodextrin to fructose split. ' +
+      'Carbohydrates in label order: maltodextrin, fructose. Water sits between them on the label. GU does not publish the maltodextrin to fructose split. ' +
       'The 1:0.33 ratio is an estimate based on the same blend as GU Energy Gel. About 6 g of the 21 g carbs are sugars, so fructose is at most about 6 g. ' +
       'GU now states 19–21 g carbs and 125–180 mg sodium across flavors. Caffeinated flavors add 35 or 70 mg. ' +
       'Retailer listings disagree on the minor ingredients, so their order is not confirmed.',
@@ -273,12 +279,14 @@ const RAW_TEMPLATES = [
     otherIngredients: 'None',
     verified: true,
     sources: [
-      { label: 'Manufacturer product page', url: 'https://untapped.cc/product/maple-untapped-energy-gel/', checked: CHECKED },
-      { label: 'Manufacturer education center (sodium by flavor)', url: 'https://untapped.cc/untapped-education-center/', checked: CHECKED },
+      { label: 'Manufacturer product page (Maple)', url: 'https://untapped.cc/product/maple-untapped-energy-gel/', checked: CHECKED },
+      { label: 'The Feed nutrition panel (Maple)', url: 'https://thefeed.com/products/untapped-pure-maple-syrup', checked: CHECKED },
+      { label: 'Manufacturer product page (Salted Raspberry, 60 mg sodium)', url: 'https://untapped.cc/product/salted-raspberry-untapped-energy-gel/', checked: CHECKED },
+      { label: 'Manufacturer product page (Salted Citrus, 100 mg sodium)', url: 'https://untapped.cc/product/salted-citrus-untapped/', checked: CHECKED },
     ],
     notes:
       'Carbohydrates in label order: organic pure Vermont maple syrup. Maple syrup sugar is mostly sucrose, which splits evenly into glucose and fructose, so the ratio is 1:1. ' +
-      'That is the most fructose the calculator accepts. Sodium is 5 mg and potassium about 82 mg per 38 g packet. ' +
+      'That is the most fructose the calculator accepts. Sodium is 5 mg and potassium 80–85 mg per 38 g packet, depending on the panel. ' +
       'There is no added salt, so the sodium salt setting is only a default. Salted flavors have 60–100 mg sodium from sea salt. The Coffee flavor adds 27 mg caffeine.',
   },
 ];

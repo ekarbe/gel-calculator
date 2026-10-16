@@ -329,6 +329,36 @@ describe('buildRecipeItems: caffeine', () => {
     };
     expect(buildRecipeItems({ caffeine })).toEqual([]);
   });
+
+  it('skips doses for a gel that does not exist, like buildSchedule does', () => {
+    // buildSchedule only puts a dose in a gel when gelIndex < gelTimes.length (= gelCount);
+    // otherwise it shows the dose as a separate caffeine event.
+    const caffeine = {
+      enabled: true,
+      doses: [
+        { timeMin: 240, mg: 50, kind: 'intra', gelIndex: 12, tablets: 0.5 },
+        { timeMin: 180, mg: 100, kind: 'intra', gelIndex: 9, tablets: 1 },
+        { timeMin: 160, mg: 50, kind: 'intra', gelIndex: 8, tablets: 0.5 },
+      ],
+    };
+    for (const view of ['total', 'perGel']) {
+      expect(buildRecipeItems({ caffeine, gelCount: 9, view }).map((item) => item.key)).toEqual(['caffeine:gel:8']);
+    }
+    expect(buildRecipeItems({ caffeine, gelCount: 0 })).toEqual([]);
+  });
+
+  it('lists every gel dose when the gel count is unknown', () => {
+    const caffeine = {
+      enabled: true,
+      doses: [
+        { timeMin: 240, mg: 50, kind: 'intra', gelIndex: 12, tablets: 0.5 },
+        { timeMin: 160, mg: 50, kind: 'intra', gelIndex: 8, tablets: 0.5 },
+      ],
+    };
+    for (const gelCount of [undefined, null, NaN, Infinity, -1, '9']) {
+      expect(buildRecipeItems({ caffeine, gelCount }).map((item) => item.key)).toEqual(['caffeine:gel:8', 'caffeine:gel:12']);
+    }
+  });
 });
 
 describe('buildRecipeItems: edge cases', () => {
@@ -360,12 +390,48 @@ describe('buildRecipeItems: edge cases', () => {
     expect(items.map((item) => item.key)).toEqual(['carb:fructose:18', 'salt:34']);
   });
 
-  it('shows small positive amounts without dropping them', () => {
+  it('treats solver float noise as zero, so it never becomes a "0 g" line', () => {
+    // solveCarbSources({ totalCarbsG: 125, ratio: { glucose: 1, fructose: 1 },
+    //   glucoseSources: [{ id: 3, percentage: 100 }], fructoseSources: [{ id: 14, percentage: 100 }] }).items
+    // Honey already covers the glucose target, so maltodextrin is left with rounding error.
+    const carbSources = [
+      { id: 3, grams: 7.47939721852737e-15, carbsG: 7.105427357601001e-15, glucoseG: 7.105427357601001e-15, fructoseG: 0, pathway: 'glucose' },
+      { id: 14, grams: 152.4390243902439, carbsG: 124.99999999999999, glucoseG: 62.49999999999999, fructoseG: 62.49999999999999, pathway: 'fructose' },
+    ];
+    for (const view of ['total', 'perGel']) {
+      const items = buildRecipeItems({ carbSources, salts: [{ id: 31, amountMg: 3e-12 }], gelCount: 9, view });
+      expect(items.map((item) => item.key)).toEqual(['carb:fructose:14']);
+    }
+  });
+
+  it('skips whole-activity amounts of 1 µg or less and keeps anything above', () => {
     const items = buildRecipeItems({
-      carbSources: [{ id: 3, grams: 0.3, carbsG: 0.285, glucoseG: 0.285, fructoseG: 0, pathway: 'glucose' }],
-      salts: [{ id: 35, amountMg: 0.4 }],
+      carbSources: [
+        { id: 3, grams: 1e-6, carbsG: 1e-6, glucoseG: 1e-6, fructoseG: 0, pathway: 'glucose' },
+        { id: 1, grams: 2e-6, carbsG: 2e-6, glucoseG: 2e-6, fructoseG: 0, pathway: 'glucose' },
+        { id: 11, grams: 0.6, carbsG: 0.6, glucoseG: 0, fructoseG: 0.6, pathway: 'fructose' },
+      ],
+      salts: [
+        { id: 31, amountMg: 1e-3 },
+        { id: 35, amountMg: 2e-3 },
+        { id: 39, amountMg: 0.6 },
+      ],
     });
-    expect(items.map((item) => item.display)).toEqual(['0 g', '0 mg']);
+    expect(items.map((item) => item.key)).toEqual(['carb:glucose:1', 'carb:fructose:11', 'salt:35', 'salt:39']);
+  });
+
+  it('decides on the whole-activity amount, so both views keep the same keys', () => {
+    // 3 g over 30 gels is 0.1 g per gel: still a real amount, so it stays in both views.
+    const args = {
+      carbSources: [{ id: 3, grams: 3, carbsG: 2.85, glucoseG: 2.85, fructoseG: 0, pathway: 'glucose' }],
+      salts: [{ id: 31, amountMg: 3e-2 }],
+      gelCount: 30,
+    };
+    const total = buildRecipeItems({ ...args, view: 'total' });
+    const perGel = buildRecipeItems({ ...args, view: 'perGel' });
+    expect(total.map((item) => item.key)).toEqual(['carb:glucose:3', 'salt:31']);
+    expect(perGel.map((item) => item.key)).toEqual(total.map((item) => item.key));
+    expect(perGel[1].amount).toBeCloseTo(1e-3, 12);
   });
 
   it('treats missing or invalid carb breakdown values as 0', () => {
@@ -435,8 +501,9 @@ describe('buildRecipeItems: properties', () => {
   const glucoseIds = [1, 2, 3, 4, 5, 6, 7, 8];
   const fructoseIds = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
   const saltIds = [31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
-  // Realistic amounts (no subnormal floats, which underflow to 0 when divided).
-  const amount = fc.oneof(fc.double({ min: 1e-6, max: 5000, noNaN: true }), fc.constant(0));
+  // Realistic amounts, exact zeros and solver-style float noise (≤ 1e-9), which must be skipped.
+  const noise = fc.double({ min: 0, max: 1e-9, noNaN: true });
+  const amount = fc.oneof(fc.double({ min: 1e-6, max: 5000, noNaN: true }), fc.constant(0), noise);
   const carbItem = (ids, pathway) =>
     fc.record({
       id: fc.constantFrom(...ids),
@@ -450,9 +517,10 @@ describe('buildRecipeItems: properties', () => {
     carbSources: fc
       .tuple(fc.array(carbItem(glucoseIds, 'glucose'), { maxLength: 4 }), fc.array(carbItem(fructoseIds, 'fructose'), { maxLength: 4 }))
       .chain(([g, f]) => fc.shuffledSubarray([...g, ...f], { minLength: g.length + f.length })),
-    salts: fc.array(fc.record({ id: fc.constantFrom(...saltIds), amountMg: fc.oneof(fc.double({ min: 1e-6, max: 1e5, noNaN: true }), fc.constant(0)) }), {
-      maxLength: 5,
-    }),
+    salts: fc.array(
+      fc.record({ id: fc.constantFrom(...saltIds), amountMg: fc.oneof(fc.double({ min: 1e-6, max: 1e5, noNaN: true }), fc.constant(0), noise) }),
+      { maxLength: 5 },
+    ),
     caffeine: fc.record({
       enabled: fc.boolean(),
       doses: fc.array(
@@ -479,7 +547,20 @@ describe('buildRecipeItems: properties', () => {
           expect(item.amount).toBeGreaterThan(0);
           expect(item.display).toBe(formatAmount(item.amount, item.unit));
           if (index > 0) expect(rank(item)).toBeGreaterThanOrEqual(rank(items[index - 1]));
+          // Caffeine only goes into gels that exist (gel is 1-based).
+          if (item.kind === 'caffeine') expect(item.label.params.gel).toBeLessThanOrEqual(args.gelCount);
         });
+      }),
+    );
+  });
+
+  it('never lists float noise: whole-activity amounts are above 1 µg', () => {
+    fc.assert(
+      fc.property(input, (args) => {
+        for (const item of buildRecipeItems({ ...args, view: 'total' })) {
+          if (item.kind === 'carb') expect(item.amount).toBeGreaterThan(1e-6);
+          if (item.kind === 'salt') expect(item.amount).toBeGreaterThan(1e-3);
+        }
       }),
     );
   });

@@ -14,13 +14,20 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-import { useCalculatorContext } from "../../context/CalculatorContext";
+"use client";
+
 import { BookTemplate, Share2 } from "lucide-react";
 import FuelBeakerIcon from "../shared/FuelBeakerIcon";
 import { ThemeToggle } from "../shared/ThemeToggle";
+import { useUi, SHARE_MODAL, TEMPLATE_MODAL } from "../../state/UiProvider";
 
+/**
+ * App header: brand, theme toggle, and buttons that open the templates and
+ * share modals through `useUi().openModal`. On phones the button text is
+ * hidden, so each button also carries an `aria-label`.
+ */
 const Header = () => {
-  const { onOpenTemplates, onOpenShare } = useCalculatorContext();
+  const { openModal } = useUi();
   return (
     <header className="bg-card backdrop-blur-xl border-b border-card-border px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-40">
       <div className="flex items-center gap-2">
@@ -34,17 +41,23 @@ const Header = () => {
       <div className="flex items-center gap-2 sm:gap-4">
         <ThemeToggle />
         <button
-          onClick={onOpenTemplates}
+          type="button"
+          aria-label="Templates"
+          aria-haspopup="dialog"
+          onClick={() => openModal(TEMPLATE_MODAL)}
           className="flex items-center gap-2 text-sm font-medium text-text-secondary bg-card-border/50 hover:bg-card-border px-3 py-2 rounded-lg transition-colors"
         >
-          <BookTemplate size={16} />{" "}
+          <BookTemplate size={16} aria-hidden="true" />{" "}
           <span className="hidden sm:inline">Templates</span>
         </button>
         <button
-          onClick={onOpenShare}
+          type="button"
+          aria-label="Share Link"
+          aria-haspopup="dialog"
+          onClick={() => openModal(SHARE_MODAL)}
           className="flex items-center gap-2 text-sm font-medium text-text-primary bg-card hover:bg-card-border/50 border border-card-border px-3 py-2 rounded-lg transition-colors shadow-sm"
         >
-          <Share2 size={16} />{" "}
+          <Share2 size={16} aria-hidden="true" />{" "}
           <span className="hidden sm:inline">Share Link</span>
         </button>
       </div>

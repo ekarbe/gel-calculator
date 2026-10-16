@@ -26,17 +26,21 @@ const carbs = {
   'carbs.why.rinse':
     'For 45–75 min, a carb mouth rinse or a small amount of carbs can help. The range is {lo}–{hi} g/h. Your target is {gPerHour} g/h.',
   'carbs.why.short':
-    'For 75–120 min, take {lo}–{hi} g/h of carbs. Your target is {gPerHour} g/h.',
+    'For 75–120 min, the evidence range is {lo}–{hi} g/h of carbs. Your target is {gPerHour} g/h.',
   'carbs.why.medium':
-    'For 2–2.5 h, take {lo}–{hi} g/h of carbs. Your target is {gPerHour} g/h.',
+    'For 2–2.5 h, the evidence range is {lo}–{hi} g/h of carbs. Your target is {gPerHour} g/h.',
   'carbs.why.long':
-    'Over 2.5 h, take {lo}–{hi} g/h of carbs from mixed glucose and fructose. Your target is {gPerHour} g/h.',
+    'Over 2.5 h, the evidence range is {lo}–{hi} g/h of carbs from mixed glucose and fructose. Your target is {gPerHour} g/h.',
   'carbs.why.veryHigh':
-    'High-carb mode for events over 2.5 h uses {lo}–{hi} g/h. Studies tested this in trained athletes. Your target is {gPerHour} g/h.',
+    'For events over 2.5 h, gut-trained mode uses a range of {lo}–{hi} g/h. Studies tested this in trained athletes. Your target is {gPerHour} g/h.',
+
+  // recommendCarbs: how to do the mouth rinse (45–75 min)
+  'carbs.mouthRinse.howTo':
+    'Rinsing your mouth with a carb drink can improve performance even when you swallow little or no carbs. Swish 25 ml of a 6–8% maltodextrin drink in your mouth for 5–10 s, then spit it out. Repeat every 5–10 min.',
 
   // recommendCarbs: position inside the range
   'carbs.why.intensity.easy':
-    'Easy intensity puts your target at the low end. You burn less carbohydrate at low intensity.',
+    'Easy intensity sets your target to about 80% of the low end of the range. You burn less carbohydrate at low intensity.',
   'carbs.why.intensity.moderate':
     'Moderate intensity puts your target in the middle of the range.',
   'carbs.why.intensity.hard':
@@ -54,7 +58,7 @@ const carbs = {
 
   // Warnings
   'carbs.warn.highCarbLongOnly':
-    'High-carb mode only applies to events over 150 min. The standard range is used instead.',
+    'Gut-trained mode only applies to events over 150 min. The standard range is used instead.',
   'carbs.warn.gutTraining':
     'Intakes above 90 g/h need 2–4 weeks of gut training. Extra benefit above 90 g/h is unproven.',
   'carbs.warn.aboveStudied':

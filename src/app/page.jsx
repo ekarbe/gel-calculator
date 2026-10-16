@@ -15,7 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import App from "./app";
-import { CalculatorProvider } from "../context/CalculatorContext";
+import { PlanProvider } from "../state/PlanProvider";
+import { UiProvider } from "../state/UiProvider";
 
 const siteUrl = 'https://eikekarbe.com';
 const pageUrl = `${siteUrl}/gel-calculator`;
@@ -56,12 +57,20 @@ export const metadata = {
   },
 };
 
+/**
+ * The calculator page. `PlanProvider` holds the inputs and the computed plan
+ * (and restores a `?s=` share link on mount); `UiProvider` holds modals, the
+ * toast and display units. `App` renders its own `<main>`, so the wrapper here
+ * is a plain `<div>` (a page has one `main` landmark).
+ */
 export default function Page() {
   return (
-    <CalculatorProvider>
-      <main className="min-h-screen">
-        <App />
-      </main>
-    </CalculatorProvider>
+    <PlanProvider>
+      <UiProvider>
+        <div className="min-h-screen">
+          <App />
+        </div>
+      </UiProvider>
+    </PlanProvider>
   );
 }

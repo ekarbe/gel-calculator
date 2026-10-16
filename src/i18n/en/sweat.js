@@ -30,7 +30,7 @@ const sweat = {
   'sweat.why.sodium':
     'You picked a sweat sodium level of {sodiumMmolL} mmol/L. Most athletes fall in the 10–90 mmol/L range.',
   'sweat.why.variability':
-    'Sweat rate and sweat sodium vary widely between athletes. To measure your own rate, weigh yourself before and after a 1 h session.',
+    'Sweat rate and sweat sodium vary widely between athletes. To measure your own rate, weigh yourself before and after a 1 h session. Add what you drank during the session to the weight you lost. Count 1 kg as 1 L.',
 };
 
 export default sweat;

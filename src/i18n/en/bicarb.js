@@ -22,11 +22,11 @@
 const bicarb = {
   // planBicarbonate: summary by event length
   'bicarb.why.short':
-    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg improve performance in high-intensity events of up to about 1 h.',
+    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg improve performance. Most evidence is for efforts of 30 s to 12 min. It may still help in hard events of up to about 1 h.',
   'bicarb.why.medium':
-    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg help in events of up to about 1 h. Evidence for 60–90 min is limited.',
+    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg improve performance. Most evidence is for efforts of 30 s to 12 min. Evidence for 60–90 min is limited.',
   'bicarb.why.long':
-    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg help in events of up to about 1 h. There is no evidence of a benefit in multi-hour events.',
+    'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg improve performance. Most evidence is for efforts of 30 s to 12 min. There is no evidence of a benefit in multi-hour events.',
 
   // planBicarbonate: details
   'bicarb.why.dose': 'Your dose is {gPerKg} g/kg for {massKg} kg, or {doseG} g.',

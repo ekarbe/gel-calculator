@@ -13,7 +13,7 @@ import sweatCatalog from '../i18n/en/sweat';
 const SEXES = ['unspecified', 'female', 'male'];
 const INTENSITIES = ['easy', 'moderate', 'hard', 'race'];
 
-/** The formula exactly as it was written in src/hooks/useStrategyCalculation.js. */
+/** The formula exactly as it was written in the former useStrategyCalculation hook. */
 function originalHookFormula({ gender, intensity, tempInC, humidity }) {
   let intensityModifier = 1.0;
   if (intensity === 'recovery') intensityModifier = 0.8;
@@ -103,9 +103,10 @@ describe('estimateSweatRateLegacy', () => {
     expect(estimateSweatRateLegacy({ sex: 'male', intensity: 'hard', tempC: '30', humidity: null })).toBe(ref);
   });
 
-  it('works with no arguments', () => {
+  it('works with no arguments or null', () => {
     expect(estimateSweatRateLegacy()).toBeCloseTo(0.78, 10);
     expect(estimateSweatRateLegacy({})).toBeCloseTo(0.78, 10);
+    expect(estimateSweatRateLegacy(null)).toBe(estimateSweatRateLegacy());
   });
 
   it('matches the original hook formula for male and female athletes (property)', () => {
@@ -206,6 +207,8 @@ describe('resolveSweat', () => {
     expect(resolveSweat({ source: 'estimate' })).toMatchObject({ source: 'estimate', sodiumMmolL: 40 });
     expect(resolveSweat({ source: 'estimate' }).rateLph).toBeCloseTo(0.78, 10);
     expect(resolveSweat({ source: 'estimate' }, null).rateLph).toBeCloseTo(0.78, 10);
+    expect(resolveSweat(null)).toEqual(resolveSweat());
+    expect(resolveSweat(null, null)).toEqual(resolveSweat());
   });
 
   it('explains the source with a summary and the sodium preset in details', () => {
@@ -299,5 +302,11 @@ describe('i18n catalog (src/i18n/en/sweat.js)', () => {
 
   it('keeps every key in the sweat namespace', () => {
     for (const key of Object.keys(sweatCatalog)) expect(key.startsWith('sweat.')).toBe(true);
+  });
+
+  it('tells athletes to count fluid drunk during a sweat test', () => {
+    // [baker2017] sweat loss = body mass lost + fluid drunk
+    expect(sweatCatalog['sweat.why.variability']).toMatch(/weigh yourself before and after/);
+    expect(sweatCatalog['sweat.why.variability']).toMatch(/what you drank/);
   });
 });

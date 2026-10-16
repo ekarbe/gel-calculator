@@ -14,228 +14,239 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-import { useCalculatorContext } from "../../context/CalculatorContext";
+"use client";
+
+import { useId } from "react";
 import { ListRestart, ChevronRight, Download } from "lucide-react";
-import { sourceDataMap } from "../../constants/constants";
-import TooltipInfo from "../shared/TooltipInfo";
 import Card from "../shared/Card";
+import TooltipInfo from "../shared/TooltipInfo";
+import Warnings from "../shared/Warnings";
+import NumberInput from "../shared/NumberInput";
+import { fmt } from "../shared/format";
+import { carbRecipeWarnings, recipeItemDotClass, recipeItemLabel } from "../shared/recipe";
+import { usePlan, usePlanInputs } from "../../state/PlanProvider";
+import { useUi, MIXING_MODAL } from "../../state/UiProvider";
+import { INPUT_LIMITS } from "../../domain/plan";
+import { formatAmount } from "../../domain/recipe";
 
-const FinalRecipe = () => {
-  const {
-    recipeRef,
-    recipeView,
-    setRecipeView,
-    gelsPerHour,
-    setGelsPerHour,
-    totals,
-    calculatedSourceGrams,
-    duration,
-    getDisplayValue,
-    onOpenInstructions,
-    glucoseSources,
-    fructoseSources,
-    electrolyteSources,
-    strategy,
-    targetCarbs
-  } = useCalculatorContext();
+/** The two recipe views (`inputs.format.view`). */
+const VIEWS = [
+  { value: "total", label: "Total Batch" },
+  { value: "perGel", label: "Per Gel" },
+];
 
-  const durationHours = duration / 60;
-  const costAnalysis = strategy.getCostAnalysis(targetCarbs * durationHours);
+/**
+ * A money amount with two decimals (rough estimate; currency is Phase 3).
+ * @param {number} value
+ * @returns {string}
+ */
+function money(value) {
+  return `$${(Number.isFinite(value) ? value : 0).toFixed(2)}`;
+}
 
-  const handleDownloadPDF = async () => {
-    if (!recipeRef.current) return;
-    try {
-      // Loaded on demand: these two libraries are the largest part of the bundle.
-      const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
-      const isDark = document.documentElement.classList.contains("dark");
-      const dataUrl = await toPng(recipeRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
-      });
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      // Estimate height based on the aspect ratio of the DOM node
-      const rect = recipeRef.current.getBoundingClientRect();
-      const pdfHeight = (rect.height * pdfWidth) / rect.width;
-      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save('Fueling-Recipe.pdf');
-    } catch (e) {
-      console.error('Failed to generate PDF', e);
-    }
-  };
+/**
+ * Tooltip text for a carb line: the carbs it delivers, split by pathway.
+ * @param {{ detail: { carbsG: number, glucoseG: number, fructoseG: number } }} props
+ */
+function CarbDetail({ detail }) {
+  return (
+    <div className="flex flex-col gap-1 text-left min-w-max">
+      <span className="font-semibold">{formatAmount(detail.carbsG, "g")} total carbs</span>
+      <span className="text-xs text-text-secondary">
+        Glucose: {formatAmount(detail.glucoseG, "g")} | Fructose: {formatAmount(detail.fructoseG, "g")}
+      </span>
+    </div>
+  );
+}
 
-  const recipeItems = [];
+/**
+ * Saves the recipe card as an A4 PDF. The two libraries are loaded on demand
+ * because they are the largest part of the bundle.
+ * @param {HTMLElement|null} node
+ */
+async function downloadPdf(node) {
+  if (!node) return;
+  try {
+    const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
+    const isDark = document.documentElement.classList.contains("dark");
+    const dataUrl = await toPng(node, {
+      cacheBust: true,
+      pixelRatio: 2,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+    });
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    // Keep the aspect ratio of the card.
+    const rect = node.getBoundingClientRect();
+    const pdfHeight = rect.width > 0 ? (rect.height * pdfWidth) / rect.width : pdfWidth;
+    pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
+    pdf.save("Fueling-Recipe.pdf");
+  } catch (error) {
+    console.error("Failed to generate PDF", error);
+  }
+}
 
-  glucoseSources.forEach(source => {
-    if (source.percentage > 0) {
-      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
-      if (powderAmount > 0) {
-        const data = sourceDataMap.get(source.name);
-        let tooltipContent = null;
-        if (data) {
-          const totalCarbs = powderAmount * (data.carbsPerGram || 1);
-          const gProvided = totalCarbs * (data.glucoseContent || 0);
-          const fProvided = totalCarbs * (data.fructoseContent || 0);
-          tooltipContent = (
-            <div className="flex flex-col gap-1 text-left min-w-max">
-              <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
-              <span className="text-xs text-text-secondary">
-                Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
-              </span>
-            </div>
-          );
-        }
-        
-        recipeItems.push({
-          label: source.name,
-          value: `${getDisplayValue(powderAmount)}g`,
-          color: "bg-apple-blue",
-          tooltipContent,
-        });
-      }
-    }
-  });
+/**
+ * The recipe card: what to weigh out, for the whole batch or for one gel.
+ *
+ * Every line comes from `buildRecipeItems` (`plan.recipe.items`, built with
+ * the view in `inputs.format.view` and the gel count in `plan.gels.count`):
+ * carb sources, salts and caffeine tablets added to specific gels. The view
+ * toggle and the gels-per-hour input edit `inputs.format`. The cost is the
+ * plan's rough estimate (`plan.cost`). The card is the target of
+ * `useUi().recipeRef`, which the PDF export captures.
+ *
+ * Warnings: why the recipe has no carbs (the sources cannot make the ratio,
+ * or the ratio is 0:0), and the "tablets, never powder" danger when the
+ * recipe lists caffeine tablets. A plan with no carbs has no gels, and the
+ * card says so.
+ */
+export default function FinalRecipe() {
+  const plan = usePlan();
+  const { inputs, set } = usePlanInputs();
+  const { recipeRef, openModal } = useUi();
+  const baseId = useId();
+  const gelsInputId = `${baseId}-gels-per-hour`;
+  const gelsHelpId = `${baseId}-gels-help`;
+  const headingId = `${baseId}-heading`;
 
-  fructoseSources.forEach(source => {
-    if (source.percentage > 0) {
-      const powderAmount = calculatedSourceGrams?.finalGrams?.[source.name] || 0;
-      if (powderAmount > 0) {
-        const data = sourceDataMap.get(source.name);
-        let tooltipContent = null;
-        if (data) {
-          const totalCarbs = powderAmount * (data.carbsPerGram || 1);
-          const gProvided = totalCarbs * (data.glucoseContent || 0);
-          const fProvided = totalCarbs * (data.fructoseContent || 0);
-          tooltipContent = (
-            <div className="flex flex-col gap-1 text-left min-w-max">
-              <span className="font-semibold">{getDisplayValue(totalCarbs)}g Total Carbs</span>
-              <span className="text-xs text-text-secondary">
-                Glucose: {getDisplayValue(gProvided)}g | Fructose: {getDisplayValue(fProvided)}g
-              </span>
-            </div>
-          );
-        }
+  const view = inputs.format.view;
+  const gelsPerHour = inputs.format.gelsPerHour;
+  const gelCount = plan.gels.count;
+  const items = plan.recipe.items;
+  const hasCaffeineItems = items.some((item) => item.kind === "caffeine");
+  const recipeWarnings = [
+    ...carbRecipeWarnings(plan),
+    ...(hasCaffeineItems ? plan.caffeine.warnings.filter((warning) => warning.id === "caffeine.noPowder") : []),
+  ];
+  const noCarbs = plan.carbs.totalG <= 0;
 
-        recipeItems.push({
-          label: source.name,
-          value: `${getDisplayValue(powderAmount)}g`,
-          color: "bg-apple-purple",
-          tooltipContent,
-        });
-      }
-    }
-  });
+  let description;
+  if (view === "total") {
+    description = `Total batch for a ${plan.durationH.toFixed(1)} hour activity.`;
+  } else if (gelCount > 0) {
+    description = `Amounts to mix for one single gel flask (${fmt(gelsPerHour, 2)} gels/hr).`;
+  } else {
+    description = "No gels are planned, so these are the amounts for the whole activity.";
+  }
 
-  electrolyteSources.forEach(source => {
-    if (source.amount > 0) {
-      recipeItems.push({
-        label: source.name,
-        value: `${getDisplayValue(source.amount)}mg`,
-        color: "bg-apple-teal",
-      });
-    }
-  });
+  let gelsHelp;
+  if (gelCount > 0) gelsHelp = `${fmt(gelCount)} ${gelCount === 1 ? "gel" : "gels"} in total`;
+  else if (noCarbs) gelsHelp = "No gels needed: this plan has no carbs";
+  else gelsHelp = "No gels planned";
 
   return (
     <div ref={recipeRef} className="sticky top-24">
       <Card className="!p-0 flex flex-col h-full">
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <ListRestart size={20} className="text-apple-blue" />
-            <h3 className="text-lg font-bold text-text-primary">Final Recipe</h3>
+        <section aria-labelledby={headingId} className="p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <ListRestart size={20} className="text-apple-blue" aria-hidden="true" />
+              <h3 id={headingId} className="text-lg font-bold text-text-primary">
+                Final Recipe
+              </h3>
+            </div>
+            <div role="group" aria-label="Recipe view" className="flex bg-card-border/50 p-1 rounded-lg">
+              {VIEWS.map((option) => {
+                const active = view === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    id={`${baseId}-view-${option.value}`}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => set("format.view", option.value)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${active ? "bg-apple-blue text-white shadow-sm" : "text-text-secondary"}`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex bg-card-border/50 p-1 rounded-lg">
-            <button
-              onClick={() => setRecipeView("total")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "total" ? "bg-apple-blue text-white shadow-sm" : "text-text-secondary"}`}
-            >
-              Total Batch
-            </button>
-            <button
-              onClick={() => setRecipeView("perGel")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${recipeView === "perGel" ? "bg-apple-blue text-white shadow-sm" : "text-text-secondary"}`}
-            >
-              Per Gel
-            </button>
-          </div>
-        </div>
 
-        {recipeView === "perGel" && (
-          <div className="mb-6 p-4 bg-apple-blue/10 rounded-xl border border-apple-blue/30 flex items-center justify-between">
-            <label className="text-sm font-semibold text-apple-blue">
-              Gels per Hour
-            </label>
-            <input
-              type="number"
+          <div className="mb-6 p-4 bg-apple-blue/10 rounded-xl border border-apple-blue/30 flex items-center justify-between gap-4">
+            <div>
+              <label htmlFor={gelsInputId} className="text-sm font-semibold text-apple-blue">
+                Gels per Hour
+              </label>
+              <p id={gelsHelpId} className="text-xs text-text-secondary">
+                {gelsHelp}
+              </p>
+            </div>
+            <NumberInput
+              id={gelsInputId}
               value={gelsPerHour}
-              onChange={(e) => setGelsPerHour(Number(e.target.value))}
-              className="w-20 px-3 py-1.5 text-sm font-bold text-text-primary text-right border border-card-border rounded-lg outline-none focus:ring-2 focus:ring-apple-blue"
+              min={INPUT_LIMITS.gelsPerHour[0]}
+              max={INPUT_LIMITS.gelsPerHour[1]}
+              step={0.5}
+              aria-describedby={gelsHelpId}
+              onCommit={(n) => set("format.gelsPerHour", n)}
+              className="w-20 px-3 py-1.5 text-sm font-bold text-text-primary text-right bg-card border border-card-border rounded-lg outline-none focus:ring-2 focus:ring-apple-blue"
             />
           </div>
-        )}
 
-        <div className="text-sm text-text-secondary mb-6 bg-card-border/30 p-3 rounded-xl border border-card-border">
-          {recipeView === "total"
-            ? `Total batch for a ${(duration / 60).toFixed(1)} hour activity.`
-            : `Amounts to mix for one single gel flask (${gelsPerHour} gels/hr).`}
+          <p className="text-sm text-text-secondary mb-6 bg-card-border/30 p-3 rounded-xl border border-card-border">
+            {description}
+          </p>
+
+          {items.length > 0 ? (
+            <ul aria-label="Ingredients" className="space-y-4">
+              {items.map((item) => (
+                <li
+                  key={item.key}
+                  className="flex justify-between items-center gap-3 py-2 border-b border-card-border border-dashed"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span aria-hidden="true" className={`w-2 h-2 rounded-full flex-shrink-0 ${recipeItemDotClass(item)}`} />
+                    <div className="flex items-center min-w-0">
+                      <span className="font-medium text-text-primary">{recipeItemLabel(item)}</span>
+                      {item.kind === "carb" && item.detail && <TooltipInfo content={<CarbDetail detail={item.detail} />} />}
+                    </div>
+                  </div>
+                  <span className="font-bold text-text-primary whitespace-nowrap">{item.display}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-text-secondary">Nothing to mix for this plan.</p>
+          )}
+
+          <Warnings warnings={recipeWarnings} className="mt-6" />
+        </section>
+
+        <div className="px-6 py-4 bg-card-border/10 border-t border-card-border flex items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-text-primary">Est. Cost (DIY)</h4>
+            <p className="text-xs text-text-secondary">{money(plan.cost.diy)}</p>
+          </div>
+          <div className="text-right">
+            <h4 className="text-sm font-bold text-apple-green">You Save</h4>
+            <p className="text-xs font-semibold text-apple-green/80">{money(plan.cost.savings)} vs Commercial</p>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          {recipeItems.map((item, idx) => (
-            <div
-              key={idx}
-              className={`flex justify-between items-center py-2 ${item.noBorder ? "pt-2" : "border-b border-card-border border-dashed"}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
-                <div className="flex items-center">
-                  <span className="font-medium text-text-primary">{item.label}</span>
-                  {item.tooltipContent && (
-                    <TooltipInfo content={item.tooltipContent} />
-                  )}
-                </div>
-              </div>
-              <span className="font-bold text-text-primary">{item.value}</span>
-            </div>
-          ))}
+        <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem] flex flex-col gap-3">
+          <button
+            id={`${baseId}-open-mixing`}
+            type="button"
+            onClick={() => openModal(MIXING_MODAL)}
+            className="w-full bg-apple-blue hover:bg-apple-blue/90 text-white font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 group"
+          >
+            View Mixing Instructions{" "}
+            <ChevronRight size={18} aria-hidden="true" className="group-hover:translate-x-1 transition-transform" />
+          </button>
+          <button
+            id={`${baseId}-save-pdf`}
+            type="button"
+            onClick={() => downloadPdf(recipeRef.current)}
+            className="w-full bg-card hover:bg-card-border/50 text-text-primary font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 border border-card-border"
+          >
+            <Download size={18} aria-hidden="true" />
+            Save as PDF
+          </button>
         </div>
-      </div>
-
-      <div className="px-6 py-4 bg-card-border/10 border-t border-card-border flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-bold text-text-primary">Est. Cost (DIY)</h4>
-          <p className="text-xs text-text-secondary">${costAnalysis.diyTotal.toFixed(2)}</p>
-        </div>
-        <div className="text-right">
-          <h4 className="text-sm font-bold text-apple-green">You Save</h4>
-          <p className="text-xs font-semibold text-apple-green/80">${costAnalysis.savings.toFixed(2)} vs Commercial</p>
-        </div>
-      </div>
-
-      <div className="p-6 bg-card-border/30 border-t border-card-border rounded-b-[2rem] flex flex-col gap-3">
-        <button
-          onClick={onOpenInstructions}
-          className="w-full bg-apple-blue hover:bg-apple-blue/90 text-white font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 group"
-        >
-          View Mixing Instructions{" "}
-          <ChevronRight
-            size={18}
-            className="group-hover:translate-x-1 transition-transform"
-          />
-        </button>
-        <button
-          onClick={handleDownloadPDF}
-          className="w-full bg-card hover:bg-card-border/50 text-text-primary font-semibold py-3 px-7 rounded-full shadow-sm transition-all flex items-center justify-center gap-2 border border-card-border"
-        >
-          <Download size={18} />
-          Save as PDF
-        </button>
-      </div>
       </Card>
     </div>
   );
-};
-
-export default FinalRecipe;
+}

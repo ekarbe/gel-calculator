@@ -19,8 +19,9 @@
  * high-intensity events.
  *
  * Evidence: Grgic et al. 2021 (ISSN position stand), de Oliveira et al. 2022
- * (meta-analysis of extracellular buffers). The benefit is shown for hard
- * efforts up to about 1 h; there is no evidence for multi-hour events.
+ * (meta-analysis of extracellular buffers). Most evidence is for hard efforts
+ * of 30 s to 12 min; there is no evidence for multi-hour events. The 60 min
+ * eligibility cutoff is a product rule, not a finding of those papers.
  *
  * Pure module: no React, no DOM, no clocks, no randomness. Functions never
  * return English text; they return message descriptors whose keys live in
@@ -38,7 +39,8 @@
  * @property {boolean} [enabled]  Whether the athlete uses bicarbonate.
  * @property {number} [massKg]  Body mass in kg; clamped to [30, 200], non-finite → 70.
  * @property {number} [gPerKg]  Dose in g/kg; clamped to [0.2, 0.3], non-finite → 0.3.
- * @property {number} [durationMin]  Event duration in minutes; non-finite or negative → 0.
+ * @property {number} [durationMin]  Event duration in minutes; missing, NaN or ≤ 0 → 0. +Infinity is
+ *   kept, so it counts as a long event.
  */
 
 /**
@@ -55,7 +57,7 @@
  *
  * @typedef {Object} BicarbPlan
  * @property {boolean} enabled
- * @property {boolean} eligible  `durationMin ≤ 60`: the event is in the range where bicarbonate is shown to help.
+ * @property {boolean} eligible  `durationMin ≤ 60`: the product shows bicarbonate as an option for this event.
  * @property {boolean} visibleByDefault  `durationMin ≤ 90`: the UI shows the option without a "Show" link.
  * @property {number} doseG  Sodium bicarbonate in g (unrounded); 0 when disabled.
  * @property {number} sodiumMg  Sodium in the dose in mg (unrounded); 0 when disabled.
@@ -110,7 +112,8 @@ function tierFor(durationMin) {
  * @returns {BicarbPlan}
  */
 export function planBicarbonate({ enabled, massKg, gPerKg = G_PER_KG_DEFAULT, durationMin } = {}) {
-  const d = Number.isFinite(durationMin) && durationMin > 0 ? durationMin : 0;
+  // `> 0` is false for NaN; +Infinity stays, so an endless event is not eligible.
+  const d = typeof durationMin === 'number' && durationMin > 0 ? durationMin : 0;
   const eligible = d <= ELIGIBLE_MAX_MIN;
   const visibleByDefault = d <= VISIBLE_MAX_MIN;
   const tier = tierFor(d);

@@ -10,31 +10,72 @@ const sumPercent = (list) => list.reduce((s, x) => s + x.percentage, 0);
 const fructoseShare = ({ glucose, fructose }) => (glucose + fructose > 0 ? fructose / (glucose + fructose) : 0);
 
 /**
- * Checks that a template's own sources can deliver its ratio, using the same
- * order as the carb solver: the fructose list covers the fructose target first
- * (a mixed source like honey also delivers glucose), then the glucose list
- * covers what is left of the glucose target. Independent of the solver code.
+ * Delivers a blend's ratio from its own sources by the carb solver algorithm
+ * in the Phase 1 spec (section 2), on carbohydrate grams:
+ * 1. mixed sources (glucose and fructose content both > 0), from either list,
+ *    each cover their percentage of their own list's target;
+ * 2. pure sources split what each list still needs, in proportion to their
+ *    percentages;
+ * 3. feasible when glucose, fructose and the total are each within
+ *    `max(0.5, total * 1%)` of the targets.
+ * Sources with no content for their list's pathway are skipped, as in the
+ * solver. Written from the spec, not from `src/domain/carbs.js`, so this test
+ * does not depend on the solver implementation.
+ *
+ * @param {{ carbsPerGelG: number, ratio: { glucose: number, fructose: number },
+ *   glucoseSources: { id: number, percentage: number }[],
+ *   fructoseSources: { id: number, percentage: number }[] }} blend
  */
-function deliver(tpl) {
-  const total = tpl.carbsPerGelG;
-  const fTarget = total * fructoseShare(tpl.ratio);
-  const gTarget = total - fTarget;
-  let glucose = 0;
-  let fructose = 0;
-  for (const { id, percentage } of tpl.fructoseSources) {
-    const s = sourceDataByIdMap.get(id);
-    const carbs = (fTarget * percentage) / 100 / s.fructoseContent;
-    glucose += carbs * s.glucoseContent;
-    fructose += carbs * s.fructoseContent;
+function deliver({ carbsPerGelG: total, ratio, glucoseSources, fructoseSources }) {
+  const fructoseTarget = total * fructoseShare(ratio);
+  const target = { glucose: total - fructoseTarget, fructose: fructoseTarget };
+  const content = (data, pathway) => (pathway === 'glucose' ? data.glucoseContent : data.fructoseContent);
+  const sources = [
+    ...glucoseSources.map((s) => ({ ...s, pathway: 'glucose' })),
+    ...fructoseSources.map((s) => ({ ...s, pathway: 'fructose' })),
+  ]
+    .map((s) => ({ ...s, data: sourceDataByIdMap.get(s.id) }))
+    .filter((s) => s.data && content(s.data, s.pathway) > 0);
+  const isMixed = (s) => s.data.glucoseContent > 0 && s.data.fructoseContent > 0;
+
+  const delivered = { glucose: 0, fructose: 0 };
+  const addCarbs = (s, carbsG) => {
+    delivered.glucose += carbsG * s.data.glucoseContent;
+    delivered.fructose += carbsG * s.data.fructoseContent;
+  };
+
+  for (const s of sources.filter(isMixed)) {
+    addCarbs(s, (target[s.pathway] * s.percentage) / 100 / content(s.data, s.pathway));
   }
-  const glucoseNeed = gTarget - glucose;
-  for (const { id, percentage } of tpl.glucoseSources) {
-    const s = sourceDataByIdMap.get(id);
-    const carbs = (Math.max(0, glucoseNeed) * percentage) / 100 / s.glucoseContent;
-    glucose += carbs * s.glucoseContent;
-    fructose += carbs * s.fructoseContent;
+  const remaining = {
+    glucose: Math.max(0, target.glucose - delivered.glucose),
+    fructose: Math.max(0, target.fructose - delivered.fructose),
+  };
+  for (const pathway of ['glucose', 'fructose']) {
+    const pool = sources.filter((s) => !isMixed(s) && s.pathway === pathway);
+    const percentageSum = sumPercent(pool);
+    if (remaining[pathway] <= 0 || percentageSum <= 0) continue;
+    for (const s of pool) {
+      addCarbs(s, (remaining[pathway] * s.percentage) / percentageSum / content(s.data, pathway));
+    }
   }
-  return { gTarget, fTarget, glucoseNeed, glucose, fructose };
+
+  const tol = Math.max(0.5, total * 0.01);
+  const feasible =
+    Math.abs(delivered.glucose + delivered.fructose - total) <= tol &&
+    Math.abs(delivered.glucose - target.glucose) <= tol &&
+    Math.abs(delivered.fructose - target.fructose) <= tol;
+  return { target, delivered, feasible };
+}
+
+/** Hosts of a template's sources, without a leading `www.`. */
+const sourceHosts = (t) => new Set(t.sources.map((s) => new URL(s.url).hostname.replace(/^www\./, '')));
+
+/** Carbohydrates named in the first sentence of `notes`, lower case, parentheses dropped. */
+function labelOrderCarbs(notes) {
+  const m = /^Carbohydrates in label order: ([^.]+)\./.exec(notes);
+  if (!m) return null;
+  return m[1].split(', ').map((c) => c.replace(/\s*\(.*\)$/, '').trim().toLowerCase());
 }
 
 describe('TEMPLATES', () => {
@@ -111,18 +152,54 @@ describe('TEMPLATES', () => {
     }
   });
 
-  it('can deliver its own ratio with its own sources', () => {
+  it('can deliver its own ratio with its own sources, per gel and per hour', () => {
     for (const t of TEMPLATES) {
-      const tol = Math.max(0.5, t.carbsPerGelG * 0.01);
-      const r = deliver(t);
-      // Mixed fructose-list sources must not overshoot the glucose target.
-      expect(r.glucoseNeed, t.id).toBeGreaterThanOrEqual(-tol);
-      // Any glucose still needed must have a glucose-list source to come from.
-      if (r.glucoseNeed > tol) expect(t.glucoseSources.length, t.id).toBeGreaterThan(0);
-      if (r.fTarget > tol) expect(t.fructoseSources.length, t.id).toBeGreaterThan(0);
-      expect(Math.abs(r.glucose - r.gTarget), t.id).toBeLessThanOrEqual(tol);
-      expect(Math.abs(r.fructose - r.fTarget), t.id).toBeLessThanOrEqual(tol);
+      for (const carbsPerGelG of [t.carbsPerGelG, 60, 90, 120]) {
+        const r = deliver({ ...t, carbsPerGelG });
+        expect(r.feasible, `${t.id} at ${carbsPerGelG} g: ${JSON.stringify(r)}`).toBe(true);
+      }
     }
+  });
+
+  describe('deliver() test helper follows the spec solver order', () => {
+    it('runs a mixed glucose-list source before the pure fructose source', () => {
+      // Barley malt (id 7) is 0.97 glucose / 0.03 fructose. As a mixed source it
+      // covers the glucose target first; crystalline fructose fills the rest.
+      const r = deliver({
+        carbsPerGelG: 30,
+        ratio: { glucose: 1, fructose: 0.5 },
+        glucoseSources: [{ id: 7, percentage: 100 }],
+        fructoseSources: [{ id: 11, percentage: 100 }],
+      });
+      expect(r.feasible).toBe(true);
+      expect(r.delivered.glucose).toBeCloseTo(20, 9);
+      expect(r.delivered.fructose).toBeCloseTo(10, 9);
+    });
+
+    it('splits pure sources by percentage after a mixed fructose-list source', () => {
+      // Honey (id 14, 50/50) covers the 10 g fructose target and adds 10 g glucose;
+      // maltodextrin and dextrose split the remaining 10 g glucose 1:3.
+      const r = deliver({
+        carbsPerGelG: 30,
+        ratio: { glucose: 1, fructose: 0.5 },
+        glucoseSources: [{ id: 3, percentage: 25 }, { id: 1, percentage: 75 }],
+        fructoseSources: [{ id: 14, percentage: 100 }],
+      });
+      expect(r.feasible).toBe(true);
+      expect(r.delivered.glucose).toBeCloseTo(20, 9);
+      expect(r.delivered.fructose).toBeCloseTo(10, 9);
+    });
+
+    it('flags a blend that cannot reach its ratio', () => {
+      // Honey alone gives 1:1; a 1:0.5 target leaves 10 g glucose with no source.
+      const r = deliver({
+        carbsPerGelG: 30,
+        ratio: { glucose: 1, fructose: 0.5 },
+        glucoseSources: [],
+        fructoseSources: [{ id: 14, percentage: 100 }],
+      });
+      expect(r.feasible).toBe(false);
+    });
   });
 
   it('uses a known sodium salt', () => {
@@ -142,8 +219,24 @@ describe('TEMPLATES', () => {
     }
   });
 
-  it('records the carbohydrate label order in the notes', () => {
-    for (const t of TEMPLATES) expect(t.notes, t.id).toMatch(/^Carbohydrates in label order: /);
+  it('cites a nutrition panel for every template and two sites for every verified one', () => {
+    for (const t of TEMPLATES) {
+      expect(t.sources.some((s) => /panel/i.test(s.label)), t.id).toBe(true);
+      if (t.verified) expect(sourceHosts(t).size, t.id).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('records the carbohydrates, and only those, in label order in the notes', () => {
+    for (const t of TEMPLATES) {
+      const carbs = labelOrderCarbs(t.notes);
+      expect(carbs, t.id).not.toBeNull();
+      const other = t.otherIngredients.toLowerCase();
+      for (const c of carbs) {
+        expect(c.length, t.id).toBeGreaterThan(0);
+        expect(c, t.id).not.toMatch(/\bwater\b/);
+        expect(other, `${t.id}: ${c} is also in otherIngredients`).not.toContain(c);
+      }
+    }
   });
 
   it('explains every unverified template as an estimate', () => {
@@ -172,9 +265,11 @@ describe('TEMPLATES', () => {
       expect(t.verified).toBe(true);
     });
 
-    it('PF 30 Gel: 30 g, no sodium source, stated 2:1', () => {
+    it('PF 30 Gel: 30 g, 0 mg sodium on a cited panel, stated 2:1', () => {
       const t = byId['pf-30-gel'];
       expect([t.carbsPerGelG, t.sodiumPerGelMg]).toEqual([30, 0]);
+      expect(t.verified).toBe(true);
+      expect(t.notes).toMatch(/0 mg sodium/);
       expect(t.ratio).toEqual({ glucose: 1, fructose: 0.5 });
       expect(t.glucoseSources).toEqual([{ id: 3, percentage: 100 }]);
       expect(t.fructoseSources).toEqual([{ id: 11, percentage: 100 }]);
@@ -207,6 +302,11 @@ describe('TEMPLATES', () => {
     it('GU gels and Honey Stinger: label numbers, estimated ratio, marked unverified', () => {
       expect([byId['gu-energy-gel'].carbsPerGelG, byId['gu-energy-gel'].sodiumPerGelMg]).toEqual([23, 55]);
       expect([byId['gu-roctane-energy-gel'].carbsPerGelG, byId['gu-roctane-energy-gel'].sodiumPerGelMg]).toEqual([21, 125]);
+      // Both GU labels list sodium citrate and sea salt.
+      expect(byId['gu-energy-gel'].sodiumSalt).toBe('mix');
+      expect(byId['gu-roctane-energy-gel'].sodiumSalt).toBe('mix');
+      expect(byId['gu-energy-gel'].otherIngredients).toMatch(/sea salt/);
+      expect(byId['gu-energy-gel'].otherIngredients).not.toMatch(/histidine/i);
       const hs = byId['honey-stinger-organic-energy-gel'];
       expect([hs.carbsPerGelG, hs.sodiumPerGelMg]).toEqual([24, 50]);
       for (const id of ['gu-energy-gel', 'gu-roctane-energy-gel', 'honey-stinger-organic-energy-gel']) {

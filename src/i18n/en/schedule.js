@@ -37,8 +37,11 @@ const schedule = {
   // Start
   'schedule.start': 'Start your activity.',
   'schedule.startWithGel': 'Start your activity and take gel 1.',
+  'schedule.startWithGelAndFluid': 'Start your activity and take gel 1 with about {fluidMl} ml fluid.',
   'schedule.startWithGelAndCaffeine':
     'Start your activity and take gel 1. It contains {caffeineMg} mg caffeine.',
+  'schedule.startWithGelFluidAndCaffeine':
+    'Start your activity and take gel 1 with about {fluidMl} ml fluid. It contains {caffeineMg} mg caffeine.',
 
   // During the activity
   'schedule.fuel': 'Take gel {gel}.',
@@ -46,7 +49,8 @@ const schedule = {
   'schedule.fuelWithCaffeine': 'Take gel {gel}. It contains {caffeineMg} mg caffeine.',
   'schedule.fuelWithFluidAndCaffeine':
     'Take gel {gel} with about {fluidMl} ml fluid. It contains {caffeineMg} mg caffeine.',
-  'schedule.hydrationOnly': 'No gels in this plan. Drink about {mlPerHour} ml/h throughout.',
+  // When no gel carries fluid (no gels, or the fluid per gel rounds to 0)
+  'schedule.hydrationOnly': 'Drink about {mlPerHour} ml/h throughout.',
 
   // Finish
   'schedule.finish': 'Finish. Begin your recovery.',

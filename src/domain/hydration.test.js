@@ -6,10 +6,13 @@ import {
   recommendFluid,
   fluidWarnings,
 } from './hydration';
+import { estimateSweatRateLegacy } from './sweat';
 import { CITATIONS } from './evidence';
 import fluidCatalog from '../i18n/en/fluid';
 
 const PLAN_CITATIONS = ['sawka2007', 'hewbutler2015', 'kenefick2018', 'almond2005'];
+/** Rule constants passed to the fluid.why.plan text. */
+const RULE_PARAMS = { sharePct: 80, maxMlPerHour: 800 };
 
 /** Collects every message descriptor in a recommendFluid result or a warning list. */
 function messagesOf(result) {
@@ -55,7 +58,7 @@ describe('recommendFluid', () => {
       const r = recommendFluid({ durationMin: 180, sweatRateLph, tempC: 20 });
       expect(r.mlPerHour).toBe(0);
       expect(r.warnings).toEqual([]);
-      expect(r.why.summary.params).toEqual({ mlPerHour: 0, sweatMlPerHour: 0 });
+      expect(r.why.summary.params).toEqual({ mlPerHour: 0, sweatMlPerHour: 0, ...RULE_PARAMS });
     }
   });
 
@@ -88,24 +91,25 @@ describe('recommendFluid', () => {
     expect(recommendFluid({ durationMin: 240, sweatRateLph: 1.25, tempC: -Infinity }).drinkToThirst).toBe(false);
   });
 
-  it('works with no arguments', () => {
+  it('works with no arguments or null', () => {
     const r = recommendFluid();
     expect(r).toMatchObject({ mlPerHour: 0, range: [400, 800], drinkToThirst: true, warnings: [] });
     expect(recommendFluid({}).mlPerHour).toBe(0);
+    expect(recommendFluid(null)).toEqual(r);
   });
 
   it('explains the plan and adds the thirst detail only when it applies', () => {
     // [sawka2007] [hewbutler2015] [kenefick2018] [almond2005]
     const long = recommendFluid({ durationMin: 180, sweatRateLph: 1.25, tempC: 20 });
     expect(long.why).toEqual({
-      summary: { key: 'fluid.why.plan', params: { mlPerHour: 800, sweatMlPerHour: 1250 } },
+      summary: { key: 'fluid.why.plan', params: { mlPerHour: 800, sweatMlPerHour: 1250, ...RULE_PARAMS } },
       details: [],
       citations: PLAN_CITATIONS,
     });
 
     const short = recommendFluid({ durationMin: 60, sweatRateLph: 0.6, tempC: 20 });
     expect(short.why).toEqual({
-      summary: { key: 'fluid.why.plan', params: { mlPerHour: 500, sweatMlPerHour: 600 } },
+      summary: { key: 'fluid.why.plan', params: { mlPerHour: 500, sweatMlPerHour: 600, ...RULE_PARAMS } },
       details: [{ key: 'fluid.why.thirst' }],
       citations: PLAN_CITATIONS,
     });
@@ -203,6 +207,57 @@ describe('fluidWarnings', () => {
     expect(fluidWarnings(500, { sweatRateLph: 1.25 })).toEqual([]);
   });
 
+  it('ignores float noise when intake equals the estimated sweat loss', () => {
+    // [almond2005] [hewbutler2015] strict ">": intake equal to sweat loss is not a danger
+    expect(fluidWarnings(550, { sweatRateLph: 0.5499999999999999 })).toEqual([]);
+    expect(fluidWarnings(450, { sweatRateLph: 0.44999999999999996 })).toEqual([]);
+    const male = estimateSweatRateLegacy({ sex: 'male', intensity: 'moderate', tempC: 3, humidity: 40 });
+    expect(male * 1000).toBeLessThan(550);
+    expect(fluidWarnings(550, { sweatRateLph: male })).toEqual([]);
+    const easy = estimateSweatRateLegacy({ sex: 'unspecified', intensity: 'easy', tempC: 18, humidity: 18 });
+    expect(fluidWarnings(450, { sweatRateLph: easy })).toEqual([]);
+    // one ml/h above the sweat loss still warns, with the shown sweat loss
+    expect(fluidWarnings(551, { sweatRateLph: male })).toEqual([
+      {
+        id: 'fluid.aboveSweat',
+        level: 'danger',
+        message: { key: 'fluid.warn.aboveSweat', params: { mlPerHour: 551, sweatMlPerHour: 550 } },
+        citations: ['almond2005', 'hewbutler2015'],
+      },
+    ]);
+  });
+
+  it('never flags intake equal to any legacy estimate on the 50 ml grid as above sweat loss', () => {
+    for (const sex of ['unspecified', 'female', 'male']) {
+      for (const intensity of ['easy', 'moderate', 'hard', 'race']) {
+        for (let tempC = -20; tempC <= 50; tempC += 1) {
+          for (let humidity = 0; humidity <= 100; humidity += 1) {
+            const sweatRateLph = estimateSweatRateLegacy({ sex, intensity, tempC, humidity });
+            const ml = Math.round(sweatRateLph * 1000);
+            if (ml % 50 !== 0) continue;
+            const ids = fluidWarnings(ml, { sweatRateLph }).map((w) => w.id);
+            expect(ids, `${sex}/${intensity}/${tempC} °C/${humidity} %`).not.toContain('fluid.aboveSweat');
+          }
+        }
+      }
+    }
+  });
+
+  it('only warns above sweat loss when the shown numbers agree (property)', () => {
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 5, noNaN: true }), fc.integer({ min: 1, max: 3000 }), (sweatRateLph, ml) => {
+        const shown = Math.round(sweatRateLph * 1000);
+        const w = fluidWarnings(ml, { sweatRateLph });
+        const above = w.find((x) => x.id === 'fluid.aboveSweat');
+        expect(Boolean(above)).toBe(ml > shown);
+        if (above) {
+          expect(above.message.params.sweatMlPerHour).toBe(shown);
+          expect(above.message.params.mlPerHour).toBeGreaterThan(above.message.params.sweatMlPerHour);
+        }
+      }),
+    );
+  });
+
   it('treats a zero or negative sweat rate as no sweat loss', () => {
     expect(fluidWarnings(100, { sweatRateLph: 0 }).map((x) => x.id)).toEqual(['fluid.aboveSweat']);
     expect(fluidWarnings(100, { sweatRateLph: -1 }).map((x) => x.id)).toEqual(['fluid.aboveSweat']);
@@ -211,7 +266,9 @@ describe('fluidWarnings', () => {
   it('skips the sweat check when the sweat rate is unknown', () => {
     expect(fluidWarnings(900, { sweatRateLph: NaN }).map((x) => x.id)).toEqual(['fluid.aboveCeiling']);
     expect(fluidWarnings(900).map((x) => x.id)).toEqual(['fluid.aboveCeiling']);
+    expect(fluidWarnings(900, null).map((x) => x.id)).toEqual(['fluid.aboveCeiling']);
     expect(fluidWarnings(500, {})).toEqual([]);
+    expect(fluidWarnings(500, null)).toEqual([]);
   });
 
   it('returns no warnings for zero, negative or non-finite intake', () => {
@@ -256,5 +313,14 @@ describe('i18n catalog (src/i18n/en/fluid.js)', () => {
 
   it('keeps every key in the fluid namespace', () => {
     for (const key of Object.keys(fluidCatalog)) expect(key.startsWith('fluid.')).toBe(true);
+  });
+
+  it('takes the share and the cap of the plan text from params', () => {
+    // round50 can lift the plan above 80% (0.3 L/h → 250 ml/h = 83%), so the text must not say "up to"
+    expect(recommendFluid({ durationMin: 180, sweatRateLph: 0.3, tempC: 20 }).mlPerHour).toBe(250);
+    expect(fluidCatalog['fluid.why.plan']).not.toMatch(/up to|80|800/);
+    expect(placeholders(fluidCatalog['fluid.why.plan'])).toEqual(
+      expect.arrayContaining(['sharePct', 'maxMlPerHour']),
+    );
   });
 });

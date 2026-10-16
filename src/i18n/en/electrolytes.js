@@ -40,7 +40,7 @@ const electrolytes = {
   'electrolytes.warn.sodiumHigh':
     'You plan {mgPerHour} mg/h of sodium. That is above the usual upper limit of {limitMgPerHour} mg/h. Only heavy, salty sweaters in long events may need this much. Test it in training.',
   'electrolytes.warn.concentrationHigh':
-    'Your drinks would hold about {mgPerL} mg of sodium per litre. That is above {limitMgPerL} mg/L. Sports drinks usually hold 460–1,150 mg/L. Very salty drinks can upset your stomach. Use less sodium or spread it over more fluid.',
+    'Your plan has about {mgPerL} mg of sodium per litre of fluid you drink. That is above {limitMgPerL} mg/L. Sports drinks usually hold 460–1,150 mg/L. A lot of salt with little fluid can upset your stomach. Use less sodium or spread it over more fluid.',
 };
 
 export default electrolytes;

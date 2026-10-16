@@ -16,8 +16,9 @@
 
 "use client";
 
-import { useCalculatorContext } from "../context/CalculatorContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useUi } from "../state/UiProvider";
+import { usePlanInputs } from "../state/PlanProvider";
 import { SlidersHorizontal, Beaker, PieChart } from "lucide-react";
 import Header from "../components/feature/Header";
 import ActivityBasics from "../components/feature/ActivityBasics";
@@ -32,9 +33,39 @@ import ShareModal from "../components/modal/ShareModal";
 import Toast from "../components/shared/Toast";
 import VisualTimeline from "../components/feature/VisualTimeline";
 
+/** How long the "share link could not be loaded" notice stays, in ms. */
+const SHARE_LINK_NOTICE_MS = 8000;
+
+/** Phone bottom-bar tabs: which group of cards each one shows. */
+const MOBILE_TABS = [
+  { id: "inputs", label: "Setup", Icon: SlidersHorizontal },
+  { id: "recipe", label: "Recipe", Icon: Beaker },
+  { id: "analysis", label: "Analysis", Icon: PieChart },
+];
+
+/**
+ * The calculator layout: header, input cards, recipe, analysis and schedule,
+ * footer, the phone tab bar, the modals and the toast.
+ *
+ * Must be rendered inside `PlanProvider` and `UiProvider` (see `page.jsx`).
+ * The toast text comes from `useUi()`. When the page was opened with a share
+ * link that could not be read (damaged, or from an older version), a toast
+ * says the default plan is shown instead. On phones one tab group is shown at
+ * a time; from the `md` breakpoint up every card is visible.
+ */
 export default function App() {
-  const { toastMessage } = useCalculatorContext();
-  const [activeMobileTab, setActiveMobileTab] = useState('inputs'); // 'inputs', 'recipe', 'analysis'
+  const { toastMessage, showToast } = useUi();
+  const { shareLinkFailed } = usePlanInputs();
+  const [activeMobileTab, setActiveMobileTab] = useState("inputs");
+
+  useEffect(() => {
+    if (shareLinkFailed) {
+      showToast(
+        "This share link is from an older version or is damaged, so the default plan is shown.",
+        SHARE_LINK_NOTICE_MS,
+      );
+    }
+  }, [shareLinkFailed, showToast]);
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary pb-24 lg:pb-8 font-sans transition-colors duration-300">
@@ -67,31 +98,25 @@ export default function App() {
       <Footer />
 
       {/* Mobile Tab Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-3xl border-t border-card-border shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-40 pb-safe">
+      <nav aria-label="Sections" className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-3xl border-t border-card-border shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-40 pb-safe">
         <div className="flex justify-around items-center px-2 pt-2 pb-1">
-          <button
-            onClick={() => setActiveMobileTab('inputs')}
-            className={`flex flex-col items-center gap-1 p-2 w-full transition-colors ${activeMobileTab === 'inputs' ? 'text-apple-blue' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            <SlidersHorizontal size={22} className={activeMobileTab === 'inputs' ? 'stroke-[2.5px]' : ''} />
-            <span className="text-[10px] font-bold">Setup</span>
-          </button>
-          <button
-            onClick={() => setActiveMobileTab('recipe')}
-            className={`flex flex-col items-center gap-1 p-2 w-full transition-colors ${activeMobileTab === 'recipe' ? 'text-apple-blue' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            <Beaker size={22} className={activeMobileTab === 'recipe' ? 'stroke-[2.5px]' : ''} />
-            <span className="text-[10px] font-bold">Recipe</span>
-          </button>
-          <button
-            onClick={() => setActiveMobileTab('analysis')}
-            className={`flex flex-col items-center gap-1 p-2 w-full transition-colors ${activeMobileTab === 'analysis' ? 'text-apple-blue' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            <PieChart size={22} className={activeMobileTab === 'analysis' ? 'stroke-[2.5px]' : ''} />
-            <span className="text-[10px] font-bold">Analysis</span>
-          </button>
+          {MOBILE_TABS.map(({ id, label, Icon }) => {
+            const active = activeMobileTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setActiveMobileTab(id)}
+                className={`flex flex-col items-center gap-1 p-2 w-full transition-colors ${active ? 'text-apple-blue' : 'text-text-secondary hover:text-text-primary'}`}
+              >
+                <Icon size={22} aria-hidden="true" className={active ? 'stroke-[2.5px]' : ''} />
+                <span className="text-[10px] font-bold">{label}</span>
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </nav>
 
       <MixingModal />
       <TemplateModal />

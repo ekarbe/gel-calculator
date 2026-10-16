@@ -63,7 +63,7 @@ const BICARB_OFF = { ...BICARB_ON, enabled: false, doseG: 0, sodiumMg: 0 };
 const byType = (events, type) => events.filter((e) => e.type === type);
 const at = (events, timeMin) => events.filter((e) => e.timeMin === timeMin);
 
-describe('getGelTimes / getGelCount / formatElapsed (moved from src/lib/schedule.js)', () => {
+describe('getGelTimes / getGelCount / formatElapsed (moved from the former src/lib/schedule.js)', () => {
   it('takes the first gel at the start and one per interval after', () => {
     expect(getGelTimes(60, 2)).toEqual([0, 30]);
     expect(getGelTimes(90, 2)).toEqual([0, 30, 60]);
@@ -84,11 +84,53 @@ describe('getGelTimes / getGelCount / formatElapsed (moved from src/lib/schedule
     expect(getGelCount(60, NaN)).toBe(0);
   });
 
+  it('takes one gel at the start when the rate is too small for a finite interval', () => {
+    // 60 / 5e-324 overflows to Infinity; 0 * Infinity used to give [NaN].
+    expect(getGelTimes(180, Number.MIN_VALUE)).toEqual([0]);
+    expect(getGelTimes(180, 1e-10)).toEqual([0]);
+    expect(getGelCount(180, Number.MIN_VALUE)).toBe(1);
+  });
+
+  it('returns no gels for an infinite duration instead of building an endless list', () => {
+    expect(getGelTimes(Infinity, 3)).toEqual([]);
+    expect(getGelTimes(-Infinity, 3)).toEqual([]);
+  });
+
   it('formats elapsed time without producing 60 minutes', () => {
     expect(formatElapsed(30)).toBe('T+30m');
     expect(formatElapsed(60)).toBe('T+1h');
     expect(formatElapsed(85.7)).toBe('T+1h 26m');
     expect(formatElapsed(119.6)).toBe('T+2h');
+  });
+
+  it('formats times before the start with a minus sign on the absolute value', () => {
+    expect(formatElapsed(-90)).toBe('T\u22121h 30m');
+    expect(formatElapsed(-60)).toBe('T\u22121h');
+    expect(formatElapsed(-30)).toBe('T\u221230m');
+    expect(formatElapsed(-1)).toBe('T\u22121m');
+    expect(formatElapsed(-180.4)).toBe('T\u22123h');
+    // Anything that rounds to 0 is the start.
+    expect(formatElapsed(-0.4)).toBe('T+0m');
+    expect(formatElapsed(0)).toBe('T+0m');
+  });
+
+  it('formats every buildSchedule event time, including pre-race doses', () => {
+    const events = buildSchedule({
+      durationMin: 180,
+      gelsPerHour: 1,
+      fluidMlPerHour: 500,
+      caffeine: CAFFEINE_180,
+      bicarb: BICARB_ON,
+    });
+    expect(events.map((e) => [e.type, formatElapsed(e.timeMin)])).toEqual([
+      ['bicarb', 'T\u22121h 30m'],
+      ['caffeine', 'T\u22121h'],
+      ['start', 'T+0m'],
+      ['fuel', 'T+1h'],
+      ['fuel', 'T+2h'],
+      ['caffeine', 'T+2h'],
+      ['finish', 'T+3h'],
+    ]);
   });
 
   it('gives one gel at the start for a zero duration and none for a negative one', () => {
@@ -101,7 +143,12 @@ describe('getGelTimes / getGelCount / formatElapsed (moved from src/lib/schedule
 describe('buildSchedule: gels and fluid', () => {
   it('builds start, one fuel event per later gel, and finish', () => {
     expect(buildSchedule({ durationMin: 60, gelsPerHour: 2, fluidMlPerHour: 500 })).toEqual([
-      { timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } },
+      {
+        timeMin: 0,
+        type: 'start',
+        message: { key: 'schedule.startWithGelAndFluid', params: { fluidMl: 250 } },
+        fluidMl: 250,
+      },
       {
         timeMin: 30,
         type: 'fuel',
@@ -119,7 +166,12 @@ describe('buildSchedule: gels and fluid', () => {
     expect(fuel.map((e) => e.message.params.gel)).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
     // 600 ml/h × 20 min / 60 = 200 ml per gel
     expect(fuel.every((e) => e.fluidMl === 200)).toBe(true);
-    expect(events[0]).toEqual({ timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } });
+    expect(events[0]).toEqual({
+      timeMin: 0,
+      type: 'start',
+      message: { key: 'schedule.startWithGelAndFluid', params: { fluidMl: 200 } },
+      fluidMl: 200,
+    });
     expect(events.at(-1)).toEqual({ timeMin: 180, type: 'finish', message: { key: 'schedule.finish' } });
   });
 
@@ -135,16 +187,82 @@ describe('buildSchedule: gels and fluid', () => {
 
   it('leaves out the fluid when there is no fluid target or it rounds to 0', () => {
     for (const fluidMlPerHour of [0, -200, NaN, undefined]) {
-      const fuel = byType(buildSchedule({ durationMin: 90, gelsPerHour: 2, fluidMlPerHour }), 'fuel');
-      expect(fuel).toEqual([
+      expect(buildSchedule({ durationMin: 90, gelsPerHour: 2, fluidMlPerHour })).toEqual([
+        { timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } },
         { timeMin: 30, type: 'fuel', message: { key: 'schedule.fuel', params: { gel: 2 } } },
         { timeMin: 60, type: 'fuel', message: { key: 'schedule.fuel', params: { gel: 3 } } },
+        { timeMin: 90, type: 'finish', message: { key: 'schedule.finish' } },
       ]);
     }
     // 20 ml/h × 5 min / 60 = 1.7 → 0
-    const fuel = byType(buildSchedule({ durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 20 }), 'fuel');
+    const events = buildSchedule({ durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 20 });
+    const fuel = byType(events, 'fuel');
     expect(fuel).toHaveLength(11);
     expect(fuel.every((e) => !('fluidMl' in e) && e.message.key === 'schedule.fuel')).toBe(true);
+    expect(events[0]).toEqual({ timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } });
+  });
+
+  it('keeps the fluid target as a hydration event when the fluid per gel rounds to 0', () => {
+    // 20 ml/h at 12 gels/h is 1.7 ml per gel, which rounds to 0.
+    const events = buildSchedule({ durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 20 });
+    expect(byType(events, 'hydration')).toEqual([
+      { timeMin: 0, type: 'hydration', message: { key: 'schedule.hydrationOnly', params: { mlPerHour: 20 } } },
+    ]);
+    expect(events.some((e) => 'fluidMl' in e)).toBe(false);
+  });
+
+  it('gives the first gel its fluid, so a one-gel plan keeps the fluid target', () => {
+    // 60 min at 1 gel/h: the only gel is at the start.
+    expect(buildSchedule({ durationMin: 60, gelsPerHour: 1, fluidMlPerHour: 500 })).toEqual([
+      {
+        timeMin: 0,
+        type: 'start',
+        message: { key: 'schedule.startWithGelAndFluid', params: { fluidMl: 500 } },
+        fluidMl: 500,
+      },
+      { timeMin: 60, type: 'finish', message: { key: 'schedule.finish' } },
+    ]);
+    // 40 min at 1.5 gels/h: one gel, 500 ml/h × 40 min / 60 = 333 → 330
+    const [start] = buildSchedule({ durationMin: 40, gelsPerHour: 1.5, fluidMlPerHour: 500 });
+    expect(start.fluidMl).toBe(330);
+    // 20 min at 3 gels/h: one gel, 500 ml/h × 20 min / 60 = 167 → 160 (rounded down, never above the plan)
+    expect(buildSchedule({ durationMin: 20, gelsPerHour: 3, fluidMlPerHour: 500 })[0].fluidMl).toBe(160);
+  });
+
+  // [almond2005] [hewbutler2015] the schedule must never list more fluid than the plan
+  it('gives the last gel only the fluid until the finish', () => {
+    const fluidOf = (events) => events.filter((e) => e.type === 'start' || e.type === 'fuel').map((e) => e.fluidMl ?? 0);
+    // 61 min at 1 gel/h: gel 2 at 60 min covers the last minute only (813 ml in total).
+    expect(fluidOf(buildSchedule({ durationMin: 61, gelsPerHour: 1, fluidMlPerHour: 800 }))).toEqual([800, 10]);
+    // 30 min at 3 gels/h: gel 2 at 20 min covers 10 min (400 ml in total, not 2 × 270).
+    expect(fluidOf(buildSchedule({ durationMin: 30, gelsPerHour: 3, fluidMlPerHour: 800 }))).toEqual([260, 140]);
+    // 130 min at 1 gel/h: 1733 ml in total, not 3 × 800.
+    expect(fluidOf(buildSchedule({ durationMin: 130, gelsPerHour: 1, fluidMlPerHour: 800 }))).toEqual([800, 800, 130]);
+  });
+
+  it('rounds on the running total, so many small gels add up to the plan', () => {
+    const total = (events) => events.reduce((sum, e) => sum + (e.fluidMl ?? 0), 0);
+    // 12 gels/h at 800 ml/h: 66.7 ml each; rounding each gel alone would list 840 ml in the hour.
+    const twelve = buildSchedule({ durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 800 });
+    expect(total(twelve)).toBe(800);
+    expect(new Set(twelve.filter((e) => 'fluidMl' in e).map((e) => e.fluidMl))).toEqual(new Set([60, 70]));
+    // 190 min at 3 gels/h, 800 ml/h: 2533 ml planned → 2530 ml listed (was 2700).
+    expect(total(buildSchedule({ durationMin: 190, gelsPerHour: 3, fluidMlPerHour: 800 }))).toBe(2530);
+  });
+
+  it('caps the fluid of a single gel at the event duration', () => {
+    // 0.25 gels/h is one gel per 240 min, but the event lasts only 60 min: 500 ml, not 2000 ml.
+    const [start] = buildSchedule({ durationMin: 60, gelsPerHour: 0.25, fluidMlPerHour: 500 });
+    expect(start.fluidMl).toBe(500);
+  });
+
+  it('lists the whole fluid target across the gels', () => {
+    // 180 min at 600 ml/h = 1800 ml; 9 gels × 200 ml.
+    const events = buildSchedule({ durationMin: 180, gelsPerHour: 3, fluidMlPerHour: 600 });
+    expect(events.reduce((sum, e) => sum + (e.fluidMl ?? 0), 0)).toBe(1800);
+    // 60 min at 500 ml/h = 500 ml; 2 gels × 250 ml.
+    const short = buildSchedule({ durationMin: 60, gelsPerHour: 2, fluidMlPerHour: 500 });
+    expect(short.reduce((sum, e) => sum + (e.fluidMl ?? 0), 0)).toBe(500);
   });
 
   it('uses a single hydration event when there are no gels', () => {
@@ -170,11 +288,48 @@ describe('buildSchedule: gels and fluid', () => {
 
   it('treats a non-finite or negative duration as 0', () => {
     for (const durationMin of [0, -30, NaN, Infinity, undefined]) {
+      // A zero-length event gives the gel no fluid, so the target is a hydration event.
       expect(buildSchedule({ durationMin, gelsPerHour: 3, fluidMlPerHour: 500 })).toEqual([
+        { timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } },
+        {
+          timeMin: 0,
+          type: 'hydration',
+          message: { key: 'schedule.hydrationOnly', params: { mlPerHour: 500 } },
+        },
+        { timeMin: 0, type: 'finish', message: { key: 'schedule.finish' } },
+      ]);
+      expect(buildSchedule({ durationMin, gelsPerHour: 3 })).toEqual([
         { timeMin: 0, type: 'start', message: { key: 'schedule.startWithGel' } },
         { timeMin: 0, type: 'finish', message: { key: 'schedule.finish' } },
       ]);
     }
+  });
+
+  it('treats a non-finite gel rate as no gels and never throws on huge values', () => {
+    for (const gelsPerHour of [Infinity, -Infinity]) {
+      expect(buildSchedule({ durationMin: 60, gelsPerHour, fluidMlPerHour: 500 })).toEqual(
+        buildSchedule({ durationMin: 60, gelsPerHour: 0, fluidMlPerHour: 500 }),
+      );
+    }
+    // Finite rates above 60 gels/h are clamped to one gel per minute.
+    for (const gelsPerHour of [1e9, Number.MAX_VALUE]) {
+      const events = buildSchedule({ durationMin: 60, gelsPerHour, fluidMlPerHour: 600 });
+      expect(events).toEqual(buildSchedule({ durationMin: 60, gelsPerHour: 60, fluidMlPerHour: 600 }));
+      expect(byType(events, 'fuel')).toHaveLength(59);
+      // 600 ml/h × 1 min / 60 = 10 ml
+      expect(byType(events, 'fuel').every((e) => e.fluidMl === 10)).toBe(true);
+    }
+    // Finite durations above 7 days are clamped to 10080 min.
+    for (const durationMin of [1e12, Number.MAX_VALUE]) {
+      const events = buildSchedule({ durationMin, gelsPerHour: 1, fluidMlPerHour: 500 });
+      expect(events).toEqual(buildSchedule({ durationMin: 10080, gelsPerHour: 1, fluidMlPerHour: 500 }));
+      expect(byType(events, 'fuel')).toHaveLength(167);
+      expect(events.at(-1)).toEqual({ timeMin: 10080, type: 'finish', message: { key: 'schedule.finish' } });
+    }
+    // Both at once stay bounded: at most one gel per minute for 7 days.
+    const worst = buildSchedule({ durationMin: 1e12, gelsPerHour: 1e9, fluidMlPerHour: 500 });
+    expect(byType(worst, 'fuel')).toHaveLength(10080 - 1);
+    expect(worst.every((e) => Number.isFinite(e.timeMin))).toBe(true);
   });
 
   it('works without arguments', () => {
@@ -278,6 +433,7 @@ describe('buildSchedule: caffeine', () => {
         { timeMin: 0, mg: 50, kind: 'intra', gelIndex: 0, tablets: 0.5 },
       ],
     };
+    // The single gel covers the whole 100 min: 500 ml/h × 100 / 60 = 833 → 830 ml.
     expect(buildSchedule({ durationMin: 100, gelsPerHour: 0.5, fluidMlPerHour: 500, caffeine })).toEqual([
       {
         timeMin: -60,
@@ -288,11 +444,21 @@ describe('buildSchedule: caffeine', () => {
       {
         timeMin: 0,
         type: 'start',
-        message: { key: 'schedule.startWithGelAndCaffeine', params: { caffeineMg: 50 } },
+        message: {
+          key: 'schedule.startWithGelFluidAndCaffeine',
+          params: { fluidMl: 830, caffeineMg: 50 },
+        },
+        fluidMl: 830,
         caffeineMg: 50,
       },
       { timeMin: 100, type: 'finish', message: { key: 'schedule.finish' } },
     ]);
+    expect(buildSchedule({ durationMin: 100, gelsPerHour: 0.5, caffeine })[1]).toEqual({
+      timeMin: 0,
+      type: 'start',
+      message: { key: 'schedule.startWithGelAndCaffeine', params: { caffeineMg: 50 } },
+      caffeineMg: 50,
+    });
   });
 
   it('sums intra doses that share a gel', () => {
@@ -500,8 +666,38 @@ describe('buildSchedule: properties', () => {
           message: { key: 'schedule.finish' },
         });
         expect(byType(events, 'fuel')).toHaveLength(Math.max(0, gelCount - 1));
-        expect(byType(events, 'hydration')).toHaveLength(gelCount === 0 && input.fluidMlPerHour > 0 ? 1 : 0);
         expect(byType(events, 'bicarb')).toHaveLength(input.bicarb.enabled ? 1 : 0);
+
+        // Fluid: each gel carries the fluid for its own stretch of time, or none
+        // does and one hydration event states the rate. A fluid target > 0 always
+        // shows up.
+        const gelEvents = events.filter((e) => e.type === 'fuel' || (e.type === 'start' && gelCount > 0));
+        expect(gelEvents).toHaveLength(gelCount);
+        const withFluid = events.filter((e) => 'fluidMl' in e);
+        const hydration = byType(events, 'hydration');
+        if (input.fluidMlPerHour > 0) {
+          expect(withFluid.length > 0 ? 0 : 1).toBe(hydration.length);
+          if (withFluid.length > 0) {
+            expect(withFluid).toEqual(gelEvents.filter((e) => 'fluidMl' in e));
+            // [almond2005] the listed fluid never exceeds the plan, and misses it by
+            // less than 10 ml (rounding on the running total).
+            const planned = (input.fluidMlPerHour * input.durationMin) / 60;
+            const listed = withFluid.reduce((sum, e) => sum + e.fluidMl, 0);
+            expect(listed).toBeLessThanOrEqual(planned + 1e-6);
+            expect(listed).toBeGreaterThan(planned - 10 - 1e-6);
+            // Each gel gets the fluid until the next gel (or the finish), within 10 ml.
+            gelEvents.forEach((e, i) => {
+              const end = i + 1 < gelEvents.length ? gelEvents[i + 1].timeMin : input.durationMin;
+              const exact = (input.fluidMlPerHour * (end - e.timeMin)) / 60;
+              expect(Math.abs((e.fluidMl ?? 0) - exact)).toBeLessThan(10 + 1e-6);
+            });
+          } else {
+            expect(hydration[0].message.params.mlPerHour).toBe(input.fluidMlPerHour);
+          }
+        } else {
+          expect(withFluid).toHaveLength(0);
+          expect(hydration).toHaveLength(0);
+        }
 
         const plannedMg = input.caffeine.doses.reduce((sum, d) => sum + d.mg, 0);
         const scheduledMg = events.reduce((sum, e) => sum + (e.caffeineMg ?? 0), 0);
@@ -538,6 +734,17 @@ describe('i18n catalog (en/schedule)', () => {
           doses: [{ timeMin: 0, mg: 50, kind: 'intra', gelIndex: 0, tablets: 0.5 }],
         },
       },
+      {
+        durationMin: 100,
+        gelsPerHour: 0.5,
+        fluidMlPerHour: 500,
+        caffeine: {
+          ...CAFFEINE_OFF,
+          enabled: true,
+          doses: [{ timeMin: 0, mg: 50, kind: 'intra', gelIndex: 0, tablets: 0.5 }],
+        },
+      },
+      { durationMin: 60, gelsPerHour: 12, fluidMlPerHour: 20 },
     ];
     return inputs.flatMap((input) => buildSchedule(input).map((e) => e.message));
   };

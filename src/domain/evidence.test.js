@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { CITATIONS, citationLabel, citationUrl } from './evidence';
+import { CITATIONS, citationLabel, citationUrl, _labelFor, _urlFor } from './evidence';
 
 // Required ids, years and DOIs from the Phase 1 spec (section 1).
 const REQUIRED = {
@@ -88,6 +88,26 @@ describe('evidence: CITATIONS registry', () => {
     expect(CITATIONS.efsa2015.authors).toBe('EFSA NDA Panel');
   });
 
+  it('uses the published titles for entries the spec table had wrong', () => {
+    // [rowlands2015] the 2015 Sports Med review (the 0.8:1 ratio guidance), not
+    // the 2012 Appl Physiol Nutr Metab race study by the same first author.
+    expect(CITATIONS.rowlands2015.title).toBe(
+      'Fructose–glucose composite carbohydrates and endurance performance: critical review and future perspectives',
+    );
+    // [hearris2022] published title, not a paraphrase
+    expect(CITATIONS.hearris2022.title).toBe(
+      '13C-glucose-fructose labeling reveals comparable exogenous CHO oxidation during exercise when consuming 120 g/h in fluid, gel, jelly chew, or coingestion',
+    );
+    // [carvalho2022] published title, not a paraphrase
+    expect(CITATIONS.carvalho2022.title).toBe(
+      'Can I have my coffee and drink it? A systematic review and meta-analysis to determine whether habitual caffeine consumption affects the ergogenic effect of caffeine',
+    );
+    // [efsa2011] leading part of the (very long) published title
+    expect(CITATIONS.efsa2011.title).toBe(
+      'Scientific opinion on the substantiation of health claims related to carbohydrate-electrolyte solutions',
+    );
+  });
+
   it('is frozen so callers cannot mutate it', () => {
     expect(Object.isFrozen(CITATIONS)).toBe(true);
     for (const id of ids) expect(Object.isFrozen(CITATIONS[id])).toBe(true);
@@ -123,16 +143,26 @@ describe('evidence: citationUrl', () => {
   });
 
   it('falls back to url when there is no DOI, and to null when there is neither', () => {
-    const registry = {
-      web2020: { authors: 'Doe J', year: 2020, title: 'T', journal: 'J', url: 'https://example.org/paper' },
-      both2020: { authors: 'Doe J', year: 2020, title: 'T', journal: 'J', doi: '10.1/x', url: 'https://example.org/x' },
-      bare2020: { authors: 'Doe J', year: 2020, title: 'T', journal: 'J' },
-      blank2020: { authors: 'Doe J', year: 2020, title: 'T', journal: 'J', doi: '  ', url: '' },
-    };
-    expect(citationUrl('web2020', registry)).toBe('https://example.org/paper');
-    expect(citationUrl('both2020', registry)).toBe('https://doi.org/10.1/x');
-    expect(citationUrl('bare2020', registry)).toBeNull();
-    expect(citationUrl('blank2020', registry)).toBeNull();
+    // No registry entry lacks a DOI, so the fallbacks are checked on the helper.
+    const base = { authors: 'Doe J', year: 2020, title: 'T', journal: 'J' };
+    expect(_urlFor({ ...base, url: 'https://example.org/paper' })).toBe('https://example.org/paper');
+    expect(_urlFor({ ...base, doi: '10.1/x', url: 'https://example.org/x' })).toBe('https://doi.org/10.1/x');
+    expect(_urlFor({ ...base, doi: ' 10.1/y ' })).toBe('https://doi.org/10.1/y');
+    expect(_urlFor(base)).toBeNull();
+    expect(_urlFor({ ...base, doi: '  ', url: '' })).toBeNull();
+  });
+
+  it('takes one argument, so it can be passed straight to map', () => {
+    expect(citationUrl).toHaveLength(1);
+    // Regression: map passes (id, index, array); index 0 used to be read as a
+    // registry and every lookup missed.
+    expect(['jeukendrup2014', 'thomas2016', 'burke2011'].map(citationUrl)).toEqual([
+      'https://doi.org/10.1007/s40279-014-0148-z',
+      'https://doi.org/10.1249/MSS.0000000000000852',
+      'https://doi.org/10.1080/02640414.2011.585473',
+    ]);
+    expect(ids.map(citationUrl)).toEqual(ids.map((id) => citationUrl(id)));
+    expect(ids.map(citationUrl)).not.toContain(null);
   });
 });
 
@@ -187,15 +217,25 @@ describe('evidence: citationLabel', () => {
     expect(citationLabel(7)).toBe('');
   });
 
-  it('uses a custom registry when given one', () => {
-    const registry = {
-      solo2000: { authors: 'Smith J', year: 2000, title: 'T', journal: 'J' },
-      pair2001: { authors: 'Smith J, Jones K', year: 2001, title: 'T', journal: 'J' },
-      etal2002: { authors: 'Smith JA, et al.', year: 2002, title: 'T', journal: 'J' },
-    };
-    expect(citationLabel('solo2000', registry)).toBe('Smith 2000');
-    expect(citationLabel('pair2001', registry)).toBe('Smith et al. 2001');
-    expect(citationLabel('etal2002', registry)).toBe('Smith et al. 2002');
+  it('formats author lists that no registry entry uses', () => {
+    const base = { title: 'T', journal: 'J' };
+    expect(_labelFor({ ...base, authors: 'Smith J', year: 2000 })).toBe('Smith 2000');
+    expect(_labelFor({ ...base, authors: 'Smith J, Jones K', year: 2001 })).toBe('Smith et al. 2001');
+    expect(_labelFor({ ...base, authors: 'Smith JA, et al.', year: 2002 })).toBe('Smith et al. 2002');
+    expect(_labelFor({ ...base, authors: 'Smith J-P et al', year: 2003 })).toBe('Smith et al. 2003');
+  });
+
+  it('takes one argument, so it can be passed straight to map', () => {
+    expect(citationLabel).toHaveLength(1);
+    // Regression: map passes (id, index, array); index 0 used to be read as a
+    // registry and every label fell back to the raw id.
+    expect(['jeukendrup2014', 'thomas2016', 'podlogar2022'].map(citationLabel)).toEqual([
+      'Jeukendrup 2014',
+      'Thomas et al. 2016',
+      'Podlogar et al. 2022',
+    ]);
+    expect(ids.map(citationLabel)).toEqual(ids.map((id) => citationLabel(id)));
+    for (const label of ids.map(citationLabel)) expect(ids).not.toContain(label);
   });
 });
 
@@ -210,11 +250,20 @@ describe('evidence: properties', () => {
     );
   });
 
-  it('is deterministic for registered ids', () => {
+  it('resolves every registered id to its label and DOI link, whatever extra arguments follow', () => {
     fc.assert(
-      fc.property(fc.constantFrom(...ids), (id) => {
-        expect(citationLabel(id)).toBe(citationLabel(id));
-        expect(citationUrl(id)).toBe(citationUrl(id));
+      fc.property(fc.constantFrom(...ids), fc.anything(), (id, extra) => {
+        const label = citationLabel(id);
+        const url = citationUrl(id);
+        expect(label).not.toBe(id);
+        expect(label).toMatch(new RegExp(` ${CITATIONS[id].year}$`));
+        expect(url).toBe(`https://doi.org/${CITATIONS[id].doi}`);
+        // Extra positional arguments (map's index and array, or anything else)
+        // never change the result.
+        expect(citationLabel(id, extra)).toBe(label);
+        expect(citationUrl(id, extra)).toBe(url);
+        expect(citationLabel(id, extra, ids)).toBe(label);
+        expect(citationUrl(id, extra, ids)).toBe(url);
       }),
     );
   });

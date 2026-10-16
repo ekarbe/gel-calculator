@@ -18,9 +18,10 @@ import { CheckCircle2 } from "lucide-react";
 
 const Toast = ({ message, visible }) => (
   <div
-    className={`fixed bottom-24 left-1/2 -translate-x-1/2 bg-card text-text-primary px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all duration-300 z-50 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"}`}
+    role="status"
+    className={`fixed bottom-24 left-1/2 -translate-x-1/2 w-max max-w-[calc(100vw-2rem)] bg-card text-text-primary px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all duration-300 z-50 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"}`}
   >
-    <CheckCircle2 size={18} className="text-apple-teal" />
+    <CheckCircle2 size={18} aria-hidden="true" className="text-apple-teal flex-shrink-0" />
     <span className="text-sm font-medium">{message}</span>
   </div>
 );

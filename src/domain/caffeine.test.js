@@ -141,7 +141,7 @@ describe('planCaffeine: golden examples', () => {
     expect(gels[plan.doses[1].gelIndex]).toBe(120);
   });
 
-  it('moves an intra dose to the last gel before it', () => {
+  it('moves an intra dose to the last gel up to 30 min before it', () => {
     const plan = planCaffeine({
       enabled: true,
       massKg: 70,
@@ -176,6 +176,17 @@ describe('planCaffeine: golden examples', () => {
     ]);
   });
 
+  it('habitual intake does not change the dose', () => {
+    // [carvalho2022] habitual intake does not change the dose
+    const input = { enabled: true, massKg: 70, mgPerKg: 3, durationMin: 180 };
+    const plan = planCaffeine(input);
+    for (const habit of [{ habituation: 'high' }, { habitual: true }, { habitualMgPerDay: 600 }]) {
+      expect(planCaffeine({ ...input, ...habit })).toEqual(plan);
+    }
+    expect(plan.why.details).toContainEqual({ key: 'caffeine.why.habitual' });
+    expect(plan.why.citations).toContain('carvalho2022');
+  });
+
   it('top-ups are mgPerKg / 2 when that is below 1.5 mg/kg', () => {
     const plan = planCaffeine({ enabled: true, massKg: 80, mgPerKg: 2, durationMin: 240 });
     // pre 2 × 80 × 2/3 = 106.67 → 105; top-up 1 × 80 = 80 at 120
@@ -189,9 +200,39 @@ describe('planCaffeine: golden examples', () => {
 describe('planCaffeine: gel assignment', () => {
   const base = { enabled: true, massKg: 70, mgPerKg: 3, durationMin: 180, asIngredient: true, tabletMg: 100 };
 
-  it('falls back to the first gel when every gel comes later', () => {
+  it('uses the first gel after the dose when every gel comes later', () => {
     const plan = planCaffeine({ ...base, gelTimesMin: [130, 160] });
     expect(plan.doses[1]).toMatchObject({ timeMin: 130, gelIndex: 0 });
+  });
+
+  // [talanian2016] a late dose must stay late: never moved to a gel far earlier
+  it('keeps a late dose as a separate tablet when the only gel is at the start', () => {
+    // 100 min at 0.5 gels/h: one gel at 0; the dose is planned at round(100 × 2/3) = 67 min.
+    const plan = planCaffeine({ ...base, durationMin: 100, gelTimesMin: gelTimes(100, 0.5) });
+    expect(strip(plan)).toEqual([
+      { timeMin: -60, mg: 150, kind: 'pre', gelIndex: null, tablets: 1.5 },
+      { timeMin: 67, mg: 50, kind: 'intra', gelIndex: null, tablets: 0.5 },
+    ]);
+    expect(plan.why.summary.key).toBe('caffeine.why.medium');
+  });
+
+  it('uses the next gel when the last earlier gel is more than 30 min before the dose', () => {
+    // 150 min at 1 gel/h (0, 60, 120): the dose at 100 min goes to 120, not back to 60.
+    const plan = planCaffeine({ ...base, durationMin: 150, gelTimesMin: gelTimes(150, 1) });
+    expect(plan.doses[1]).toMatchObject({ kind: 'intra', timeMin: 120, gelIndex: 2 });
+  });
+
+  it('never moves a dose more than 30 min or into the last 30 min', () => {
+    // Earlier gel 50 min before, later gel 40 min after: neither is close enough.
+    expect(planCaffeine({ ...base, gelTimesMin: [0, 70, 160] }).doses[1]).toMatchObject({
+      timeMin: 120,
+      gelIndex: null,
+    });
+    // 150 min: the gel at 125 is close to the dose at 100 but inside the last 30 min.
+    expect(planCaffeine({ ...base, durationMin: 150, gelTimesMin: [0, 125] }).doses[1]).toMatchObject({
+      timeMin: 100,
+      gelIndex: null,
+    });
   });
 
   it('keeps gelIndex null without gel times', () => {
@@ -216,13 +257,19 @@ describe('planCaffeine: gel assignment', () => {
     expect(none.doses[1]).toMatchObject({ timeMin: 120, gelIndex: null });
   });
 
-  it('combines doses that land on the same gel', () => {
-    // 1440 min, 70 kg, 2 mg/kg: top-ups of 70 mg at 720, 870, 1020, 1170, 1320 all map to gel 0
+  it('keeps top-ups far from every gel as separate tablets at their own times', () => {
+    // 1440 min, 70 kg, 2 mg/kg: five top-ups of 70 mg → half a tablet (50 mg) each at 720, 870,
+    // 1020, 1170 and 1320. The only gel (600 min) is more than 30 min from all of them.
     const plan = planCaffeine({ ...base, mgPerKg: 2, durationMin: 1440, gelTimesMin: [600] });
     const intra = plan.doses.filter((d) => d.kind === 'intra');
-    expect(intra).toHaveLength(1);
-    expect(intra[0]).toMatchObject({ gelIndex: 0, timeMin: 600 });
-    expect(intra[0].tablets * 100).toBe(intra[0].mg);
+    expect(intra.map((d) => [d.timeMin, d.mg, d.gelIndex, d.tablets])).toEqual([
+      [720, 50, null, 0.5],
+      [870, 50, null, 0.5],
+      [1020, 50, null, 0.5],
+      [1170, 50, null, 0.5],
+      [1320, 50, null, 0.5],
+    ]);
+    expect(plan.totalMg).toBe(100 + 250); // pre 93.3 mg → 2 half tablets
   });
 });
 
@@ -243,40 +290,88 @@ describe('planCaffeine: body-load cap', () => {
   });
 
   it('reduces an intra dose to the largest half-tablet amount that fits', () => {
-    // pre 280 → 300 mg at −60; two top-ups of 105 → 100 mg both on the gel at 0 → 200 mg;
-    // at 0 min the pre dose leaves 300 × 0.5^(60/300) = 261.2 mg, room 158.8 mg → 150 mg
+    // 50 kg, 3 mg/kg, 48 h at 2 gels/h: pre 100 mg, then top-ups of 75 → 100 mg (one tablet) every
+    // 150 min from 1440. They build up in the body; at 2340 and 2640 min a whole tablet would pass
+    // 300 mg (6 mg/kg), so those gels get half a tablet.
     const plan = planCaffeine({
       enabled: true,
-      massKg: 70,
-      mgPerKg: 6,
-      durationMin: 600,
-      gelTimesMin: [0],
+      massKg: 50,
+      mgPerKg: 3,
+      durationMin: 2880,
+      gelTimesMin: gelTimes(2880, 2),
       asIngredient: true,
       tabletMg: 100,
     });
-    expect(strip(plan)).toEqual([
-      { timeMin: -60, mg: 300, kind: 'pre', gelIndex: null, tablets: 3 },
-      { timeMin: 0, mg: 150, kind: 'intra', gelIndex: 0, tablets: 1.5 },
+    const intra = plan.doses.filter((d) => d.kind === 'intra');
+    expect(intra.map((d) => [d.timeMin, d.mg, d.tablets])).toEqual([
+      [1440, 100, 1],
+      [1590, 100, 1],
+      [1740, 100, 1],
+      [1890, 100, 1],
+      [2040, 100, 1],
+      [2190, 100, 1],
+      [2340, 50, 0.5],
+      [2490, 100, 1],
+      [2640, 50, 0.5],
+      [2790, 100, 1],
     ]);
+    expect(intra.every((d) => d.gelIndex !== null)).toBe(true);
     expect(ids(plan)).toContain('caffeine.capped');
     expect(plan.peakBodyLoadMgPerKg).toBeLessThanOrEqual(6);
   });
 
   it('drops an intra dose when not even half a tablet fits', () => {
-    // 30 kg, 200 mg tablets: pre 120 → 100 mg; intra 60 → 100 mg moved to 0 min;
-    // load 100 × 0.5^(60/300) + 100 = 187 mg > 180 mg, room 92.9 mg < 100 mg
+    // 30 kg, 200 mg tablets: pre 120 → 100 mg; intra 60 → 100 mg, planned at 51 min, moved to the
+    // gel at 30 min; load 100 × 0.5^(90/300) + 100 = 181.2 mg > 180 mg, room 98.8 mg < 100 mg
     const plan = planCaffeine({
       enabled: true,
       massKg: 30,
       mgPerKg: 6,
       durationMin: 76,
-      gelTimesMin: [0],
+      gelTimesMin: [30],
       asIngredient: true,
       tabletMg: 200,
     });
     expect(plan.doses.map((d) => d.kind)).toEqual(['pre']);
     expect(ids(plan)).toContain('caffeine.capped');
-    expect(plan.why.summary.params.intraMg).toBe(0);
+    // The summary must not promise a 0 mg dose during the event.
+    expect(plan.why.summary).toEqual({
+      key: 'caffeine.why.preOnly',
+      params: { preMg: 100, intraMg: 0, totalMg: 100, topUps: 0, maxMgPerKg: 6 },
+    });
+  });
+
+  it('uses the pre-only summary when the cap drops the intra dose on a real gel schedule', () => {
+    // 40 kg, 6 mg/kg, 200 mg tablets, 100 min, 2 gels/h: pre 240 → 200 mg; intra 80 → 100 mg on the
+    // gel at 60 min; load 200 × 0.5^(120/300) + 100 = 251.6 mg > 240 mg, room 88.4 mg < 100 mg
+    const plan = planCaffeine({
+      enabled: true,
+      massKg: 40,
+      mgPerKg: 6,
+      durationMin: 100,
+      gelTimesMin: gelTimes(100, 2),
+      asIngredient: true,
+      tabletMg: 200,
+    });
+    expect(strip(plan)).toEqual([{ timeMin: -60, mg: 200, kind: 'pre', gelIndex: null, tablets: 1 }]);
+    expect(ids(plan)).toContain('caffeine.capped');
+    expect(plan.why.summary.key).toBe('caffeine.why.preOnly');
+    expect(plan.why.summary.params).toMatchObject({ preMg: 200, maxMgPerKg: 6 });
+  });
+
+  it('keeps the band summary when an intra dose was only reduced', () => {
+    const plan = planCaffeine({
+      enabled: true,
+      massKg: 50,
+      mgPerKg: 3,
+      durationMin: 2880,
+      gelTimesMin: gelTimes(2880, 2),
+      asIngredient: true,
+      tabletMg: 100,
+    });
+    expect(ids(plan)).toContain('caffeine.capped');
+    expect(plan.why.summary.key).toBe('caffeine.why.long');
+    expect(plan.why.summary.params).toMatchObject({ preMg: 100, intraMg: 900, topUps: 10 });
   });
 
   it('does not warn when nothing was capped', () => {
@@ -341,18 +436,21 @@ describe('planCaffeine: edge cases', () => {
     expect(planCaffeine({ enabled: true, massKg: 70, durationMin: 60, asIngredient: true, tabletMg: 0 }).doses[0].tablets).toBe(2);
   });
 
-  it('treats zero, negative or non-finite duration as 0 (single pre dose)', () => {
-    for (const durationMin of [0, -30, Number.NaN, -Infinity, undefined]) {
+  it('treats zero, negative, NaN or missing duration as 0 (single pre dose)', () => {
+    for (const durationMin of [0, -30, Number.NaN, -Infinity, undefined, null, '300']) {
       const plan = planCaffeine({ enabled: true, massKg: 70, durationMin });
       expect(plan.doses.map((d) => d.kind)).toEqual(['pre']);
     }
   });
 
-  it('bounds the number of top-ups for huge durations', () => {
-    const plan = planCaffeine({ enabled: true, massKg: 70, mgPerKg: 3, durationMin: 1e9 });
+  it('bounds the number of top-ups for huge durations, including Infinity', () => {
     const atMax = planCaffeine({ enabled: true, massKg: 70, mgPerKg: 3, durationMin: 2880 });
-    expect(plan.doses).toEqual(atMax.doses);
-    expect(plan.doses.length).toBeLessThan(12);
+    for (const durationMin of [1e9, Infinity]) {
+      const plan = planCaffeine({ enabled: true, massKg: 70, mgPerKg: 3, durationMin });
+      expect(plan.doses).toEqual(atMax.doses);
+      expect(plan.why.summary.key).toBe('caffeine.why.long');
+    }
+    expect(atMax.doses.length).toBeLessThan(12);
   });
 
   it('gives at least half a tablet per dose', () => {
@@ -426,8 +524,42 @@ describe('planCaffeine: properties', () => {
           if (dose.gelIndex !== null) expect(dose.timeMin).toBe(gelTimesMin[dose.gelIndex]);
           sum += dose.mg;
         });
+        // [talanian2016] a dose on a gel is at most 30 min from its planned time and never in the last
+        // 30 min (unless planned there); doses never share a gel.
+        const plannedIntra = [];
+        if (durationMin > 75 && durationMin <= 180) plannedIntra.push(Math.round((durationMin * 2) / 3));
+        if (durationMin > 180) {
+          for (let t = Math.round(durationMin / 2); t <= durationMin - 30; t += 150) plannedIntra.push(t);
+        }
+        for (const dose of plan.doses.filter((d) => d.kind === 'intra')) {
+          const plannedAt = plannedIntra.find((t) => Math.abs(t - dose.timeMin) <= 30 + 1e-9);
+          expect(plannedAt).toBeDefined();
+          if (dose.timeMin > plannedAt) expect(dose.timeMin).toBeLessThanOrEqual(durationMin - 30 + 1e-9);
+        }
+        const gelIndexes = plan.doses.filter((d) => d.gelIndex !== null).map((d) => d.gelIndex);
+        expect(new Set(gelIndexes).size).toBe(gelIndexes.length);
         expect(plan.totalMg).toBeCloseTo(sum, 9);
         expect(plan.totalMgPerKg).toBeCloseTo(sum / massKg, 9);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it('explains the plan with the amounts it actually contains', () => {
+    fc.assert(
+      fc.property(inputs, ({ massKg, mgPerKg, durationMin, asIngredient, tabletMg, gelsPerHour }) => {
+        const gelTimesMin = gelsPerHour > 0 ? gelTimes(durationMin, gelsPerHour) : [];
+        const plan = planCaffeine({ enabled: true, massKg, mgPerKg, durationMin, gelTimesMin, asIngredient, tabletMg });
+        const { key, params } = plan.why.summary;
+        const intra = plan.doses.filter((d) => d.kind === 'intra');
+        // Only the single-dose texts may stand for a plan without intra doses.
+        if (intra.length === 0) expect(['caffeine.why.short', 'caffeine.why.preOnly']).toContain(key);
+        else expect(['caffeine.why.medium', 'caffeine.why.long']).toContain(key);
+        if (key !== 'caffeine.why.short' && key !== 'caffeine.why.preOnly') expect(params.intraMg).toBeGreaterThan(0);
+        expect(params.preMg + params.intraMg).toBeCloseTo(plan.totalMg, 9);
+        const dose = plan.why.details.find((m) => m.key === 'caffeine.why.dose');
+        expect(dose.params.totalMg).toBe(plan.totalMg);
+        expect(dose.params.totalMgPerKg).toBe(Math.round(plan.totalMgPerKg * 10) / 10);
       }),
       { numRuns: 300 },
     );
@@ -441,8 +573,21 @@ describe('caffeine i18n catalog', () => {
     planCaffeine({ enabled: true, massKg: 70, mgPerKg: 3, durationMin: 180, asIngredient: true, gelTimesMin: gelTimes(180, 3) }),
     planCaffeine({ enabled: true, massKg: 70, mgPerKg: 6, durationMin: 1440 }),
     planCaffeine({ enabled: true, massKg: 40, mgPerKg: 6, durationMin: 60, asIngredient: true }),
+    planCaffeine({ enabled: true, massKg: 40, mgPerKg: 6, durationMin: 100, asIngredient: true, tabletMg: 200, gelTimesMin: gelTimes(100, 2) }),
   ];
   const messages = plans.flatMap(messagesOf);
+
+  it('states the real plan total, not D, in the dose detail', () => {
+    // 70 kg, 6 mg/kg, 1440 min: D is 420 mg, but pre + top-ups add up to 805 mg (11.5 mg/kg),
+    // the same numbers the highTotal warning shows.
+    const plan = plans[3];
+    const dose = plan.why.details.find((m) => m.key === 'caffeine.why.dose');
+    const high = plan.warnings.find((w) => w.id === 'caffeine.highTotal');
+    expect(dose.params).toEqual({ mgPerKg: 6, massKg: 70, doseMg: 420, totalMg: 805, totalMgPerKg: 11.5 });
+    expect(high.message.params).toEqual({ totalMg: dose.params.totalMg, totalMgPerKg: dose.params.totalMgPerKg });
+    expect(caffeineCatalog['caffeine.why.dose']).not.toMatch(/\{doseMg\} mg in total/);
+    expect(caffeineCatalog['caffeine.why.dose']).toContain('{totalMg} mg');
+  });
 
   it('has text for every key the module returns, with every placeholder filled', () => {
     for (const message of messages) {

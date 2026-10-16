@@ -14,23 +14,22 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-"use client";
+/**
+ * Display labels shared by several cards.
+ */
 
-import { createContext, useContext } from "react";
-import { useCalculator } from "../hooks/useCalculator";
+/** Intensity names (`event.intensity`). */
+export const INTENSITY_LABELS = Object.freeze({
+  easy: "Easy",
+  moderate: "Moderate",
+  hard: "Hard",
+  race: "Race",
+});
 
-export const CalculatorContext = createContext(null);
-
-export function CalculatorProvider({ children }) {
-  const calculatorState = useCalculator();
-  return (
-    <CalculatorContext.Provider value={calculatorState}>
-      {children}
-    </CalculatorContext.Provider>
-  );
-}
-
-// Helper hook to easily use the context in components
-export function useCalculatorContext() {
-  return useContext(CalculatorContext);
-}
+/** Heart-rate zones that go with each intensity, for the intensity picker. */
+export const INTENSITY_ZONES = Object.freeze({
+  easy: "Zone 1–2",
+  moderate: "Zone 3",
+  hard: "Zone 4",
+  race: "Zone 4–5",
+});

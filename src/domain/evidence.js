@@ -81,14 +81,14 @@ const RAW_CITATIONS = {
   hearris2022: {
     authors: 'Hearris MA et al.',
     year: 2022,
-    title: '120 g/h of carbohydrate intake during exercise in trained cyclists',
+    title: '13C-glucose-fructose labeling reveals comparable exogenous CHO oxidation during exercise when consuming 120 g/h in fluid, gel, jelly chew, or coingestion',
     journal: 'J Appl Physiol 132:1394–1406',
     doi: '10.1152/japplphysiol.00091.2022',
   },
   rowlands2015: {
     authors: 'Rowlands DS et al.',
     year: 2015,
-    title: 'Composite versus single transportable carbohydrate solution enhances race and laboratory cycling performance',
+    title: 'Fructose–glucose composite carbohydrates and endurance performance: critical review and future perspectives',
     journal: 'Sports Med 45:1561–1576',
     doi: '10.1007/s40279-015-0381-0',
   },
@@ -214,7 +214,7 @@ const RAW_CITATIONS = {
   efsa2011: {
     authors: 'EFSA NDA Panel',
     year: 2011,
-    title: 'Scientific opinion on carbohydrate-electrolyte solutions and claimed health effects',
+    title: 'Scientific opinion on the substantiation of health claims related to carbohydrate-electrolyte solutions',
     journal: 'EFSA J 9(6):2211',
     doi: '10.2903/j.efsa.2011.2211',
   },
@@ -235,7 +235,7 @@ const RAW_CITATIONS = {
   carvalho2022: {
     authors: 'Carvalho A et al.',
     year: 2022,
-    title: 'Habitual caffeine consumption and the ergogenic effects of caffeine: a meta-analysis',
+    title: 'Can I have my coffee and drink it? A systematic review and meta-analysis to determine whether habitual caffeine consumption affects the ergogenic effect of caffeine',
     journal: 'Sports Med 52:2209–2220',
     doi: '10.1007/s40279-022-01685-0',
   },
@@ -286,16 +286,15 @@ const ET_AL = /\s*,?\s*et al\.?\s*$/i;
 const TRAILING_INITIALS = /\s+[A-Z][A-Z.-]{0,5}$/;
 
 /**
- * Look up a citation in a registry, ignoring inherited keys such as
+ * Look up a citation id in `CITATIONS`, ignoring inherited keys such as
  * `toString` so a stray id never resolves to a prototype member.
  *
- * @param {string} id
- * @param {Record<string, Citation>} registry
- * @returns {Citation|null}
+ * @param {unknown} id
+ * @returns {Readonly<Citation>|null}
  */
-function lookup(id, registry) {
-  if (typeof id !== 'string' || registry == null) return null;
-  return Object.prototype.hasOwnProperty.call(registry, id) ? registry[id] : null;
+function lookup(id) {
+  if (typeof id !== 'string') return null;
+  return Object.prototype.hasOwnProperty.call(CITATIONS, id) ? CITATIONS[id] : null;
 }
 
 /**
@@ -323,38 +322,35 @@ function hasMultipleAuthors(authors) {
 }
 
 /**
- * Short in-text label for a citation: first author's surname and year.
- * One author → "Jeukendrup 2014"; two or more authors (listed or "et al.")
- * → "Podlogar et al. 2022", "Thomas et al. 2016". Group authors are kept
- * whole ("EFSA NDA Panel 2011").
+ * Short label for one citation entry ("Jeukendrup 2014",
+ * "Podlogar et al. 2022", "EFSA NDA Panel 2011").
  *
- * Unknown ids return the id itself (or `''` for a non-string id) so the UI
- * never shows a blank label.
+ * Internal helper behind `citationLabel`. It is exported as `_labelFor` only
+ * so tests can check author formats that no registry entry uses; app code
+ * calls `citationLabel(id)`.
  *
- * @param {string} id Citation id, e.g. `'jeukendrup2014'`.
- * @param {Record<string, Citation>} [registry=CITATIONS] Registry to look the id up in (tests only).
+ * @param {Citation} citation
  * @returns {string}
  */
-export function citationLabel(id, registry = CITATIONS) {
-  const citation = lookup(id, registry);
-  if (!citation) return typeof id === 'string' ? id : '';
-  const surname = firstSurname(String(citation.authors ?? ''));
-  const name = hasMultipleAuthors(String(citation.authors ?? '')) ? `${surname} et al.` : surname;
-  return `${name} ${citation.year}`.trim();
+function labelFor(citation) {
+  const authors = String(citation.authors ?? '');
+  const surname = firstSurname(authors);
+  const name = hasMultipleAuthors(authors) ? `${surname} et al.` : surname;
+  return `${name} ${citation.year ?? ''}`.trim();
 }
 
 /**
- * Link for a citation: the DOI resolver URL when the entry has a DOI
- * (`https://doi.org/<doi>`), otherwise its `url`, otherwise `null`.
- * Unknown ids return `null`.
+ * Link for one citation entry: `https://doi.org/<doi>` when it has a DOI,
+ * otherwise its `url`, otherwise `null`.
  *
- * @param {string} id Citation id, e.g. `'jeukendrup2014'`.
- * @param {Record<string, Citation>} [registry=CITATIONS] Registry to look the id up in (tests only).
+ * Internal helper behind `citationUrl`. It is exported as `_urlFor` only so
+ * tests can check the `url` and `null` fallbacks, which no registry entry
+ * uses; app code calls `citationUrl(id)`.
+ *
+ * @param {Citation} citation
  * @returns {string|null}
  */
-export function citationUrl(id, registry = CITATIONS) {
-  const citation = lookup(id, registry);
-  if (!citation) return null;
+function urlFor(citation) {
   if (typeof citation.doi === 'string' && citation.doi.trim() !== '') {
     return `https://doi.org/${citation.doi.trim()}`;
   }
@@ -363,3 +359,40 @@ export function citationUrl(id, registry = CITATIONS) {
   }
   return null;
 }
+
+/**
+ * Short in-text label for a citation: first author's surname and year.
+ * One author → "Jeukendrup 2014"; two or more authors (listed or "et al.")
+ * → "Podlogar et al. 2022", "Thomas et al. 2016". Group authors are kept
+ * whole ("EFSA NDA Panel 2011").
+ *
+ * Unknown ids return the id itself (or `''` for a non-string id) so the UI
+ * never shows a blank label. Takes exactly one argument, so it is safe to
+ * pass straight to `Array.prototype.map` (`ids.map(citationLabel)`).
+ *
+ * @param {string} id Citation id, e.g. `'jeukendrup2014'`.
+ * @returns {string}
+ */
+export function citationLabel(id) {
+  const citation = lookup(id);
+  if (!citation) return typeof id === 'string' ? id : '';
+  return labelFor(citation);
+}
+
+/**
+ * Link for a citation: the DOI resolver URL when the entry has a DOI
+ * (`https://doi.org/<doi>`), otherwise its `url`, otherwise `null`.
+ * Unknown ids return `null`. Takes exactly one argument, so it is safe to
+ * pass straight to `Array.prototype.map` (`ids.map(citationUrl)`).
+ *
+ * @param {string} id Citation id, e.g. `'jeukendrup2014'`.
+ * @returns {string|null}
+ */
+export function citationUrl(id) {
+  const citation = lookup(id);
+  return citation ? urlFor(citation) : null;
+}
+
+// Test-only exports. Not part of the module's public API; do not import them
+// from app code.
+export { labelFor as _labelFor, urlFor as _urlFor };

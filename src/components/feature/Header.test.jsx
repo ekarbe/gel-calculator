@@ -1,48 +1,75 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import Header from './Header';
-import { CalculatorContext } from '../../context/CalculatorContext';
+import { UiProvider, useUi } from '../../state/UiProvider';
 
-describe('Header Component', () => {
-  it('renders the title and buttons', () => {
-    const mockContextValue = {
-      onOpenTemplates: vi.fn(),
-      onOpenShare: vi.fn(),
-    };
+/** Shows the UI state the header changes, plus a control to move the share modal off its first view. */
+function UiProbe() {
+  const { modal, shareView, setShareView } = useUi();
+  return (
+    <div>
+      <output data-testid="modal">{modal ?? 'none'}</output>
+      <output data-testid="share-view">{shareView}</output>
+      <button type="button" onClick={() => setShareView('image')}>
+        Show image view
+      </button>
+    </div>
+  );
+}
 
-    render(
-      <CalculatorContext.Provider value={mockContextValue}>
-        <Header />
-      </CalculatorContext.Provider>
-    );
+function renderHeader() {
+  return render(
+    <UiProvider>
+      <Header />
+      <UiProbe />
+    </UiProvider>,
+  );
+}
 
-    // Title should be present
-    expect(screen.getByText('Gel-Calculator')).toBeInTheDocument();
-    
-    // Buttons should be present
-    expect(screen.getByText('Templates')).toBeInTheDocument();
-    expect(screen.getByText('Share Link')).toBeInTheDocument();
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('Header', () => {
+  it('renders the brand, the theme toggle and the two buttons', () => {
+    renderHeader();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Gel-Calculator' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle theme' })).toBeInTheDocument();
+    const templates = screen.getByRole('button', { name: 'Templates' });
+    const share = screen.getByRole('button', { name: 'Share Link' });
+    expect(templates).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(share).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(templates).toHaveAttribute('type', 'button');
+    expect(share).toHaveAttribute('type', 'button');
   });
 
-  it('calls context update functions on button click', () => {
-    const mockContextValue = {
-      onOpenTemplates: vi.fn(),
-      onOpenShare: vi.fn(),
-    };
+  it('opens the templates modal', () => {
+    renderHeader();
+    expect(screen.getByTestId('modal')).toHaveTextContent('none');
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    expect(screen.getByTestId('modal')).toHaveTextContent('templates');
+  });
 
-    render(
-      <CalculatorContext.Provider value={mockContextValue}>
-        <Header />
-      </CalculatorContext.Provider>
-    );
+  it('opens the share modal on its menu view', () => {
+    renderHeader();
+    fireEvent.click(screen.getByRole('button', { name: 'Show image view' }));
+    expect(screen.getByTestId('share-view')).toHaveTextContent('image');
 
-    const templatesBtn = screen.getByRole('button', { name: /Templates/i });
-    const shareBtn = screen.getByRole('button', { name: /Share Link/i });
+    fireEvent.click(screen.getByRole('button', { name: 'Share Link' }));
+    expect(screen.getByTestId('modal')).toHaveTextContent('share');
+    expect(screen.getByTestId('share-view')).toHaveTextContent('menu');
+  });
 
-    fireEvent.click(templatesBtn);
-    expect(mockContextValue.onOpenTemplates).toHaveBeenCalled();
+  it('switches from one modal to the other (only one is open at a time)', () => {
+    renderHeader();
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share Link' }));
+    expect(screen.getByTestId('modal')).toHaveTextContent('share');
+  });
 
-    fireEvent.click(shareBtn);
-    expect(mockContextValue.onOpenShare).toHaveBeenCalled();
+  it('needs a UiProvider', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => render(<Header />)).toThrow(/UiProvider/);
   });
 });

@@ -92,11 +92,30 @@ const PATHWAYS = ['glucose', 'fructose'];
 const SALT_IDS = new Set(electrolyteSourceOptions.map((option) => option.id));
 
 /**
+ * Smallest whole-activity amount that counts as a real ingredient: 1 µg.
+ * `solveCarbSources` can leave float noise (about 1e-14 g) on a source whose
+ * target is already met by a mixed source. That noise is a zero amount, so
+ * it must not become a "0 g" recipe line. Real amounts are many orders of
+ * magnitude above this floor.
+ */
+const MIN_AMOUNT_MG = 1e-3;
+const MIN_AMOUNT_G = MIN_AMOUNT_MG / 1000;
+
+/**
  * @param {unknown} value
  * @returns {boolean} True for a finite number above 0.
  */
 function isPositive(value) {
   return Number.isFinite(value) && value > 0;
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} floor  Amounts at or below this are zero (float noise).
+ * @returns {boolean} True for a finite number above `floor`.
+ */
+function isAbove(value, floor) {
+  return Number.isFinite(value) && value > floor;
 }
 
 /**
@@ -157,7 +176,8 @@ function keyMaker() {
 function carbItems(carbSources, pathway, divisor, makeKey) {
   const items = [];
   for (const source of carbSources) {
-    if (!source || source.pathway !== pathway || !isPositive(source.grams)) continue;
+    // Checked on the whole-activity amount so both views keep the same keys.
+    if (!source || source.pathway !== pathway || !isAbove(source.grams, MIN_AMOUNT_G)) continue;
     const data = sourceDataByIdMap.get(source.id);
     if (!data || !('carbsPerGram' in data)) continue;
     const amount = source.grams / divisor;
@@ -190,7 +210,7 @@ function carbItems(carbSources, pathway, divisor, makeKey) {
 function saltItems(salts, divisor, makeKey) {
   const items = [];
   for (const salt of salts) {
-    if (!salt || !SALT_IDS.has(salt.id) || !isPositive(salt.amountMg)) continue;
+    if (!salt || !SALT_IDS.has(salt.id) || !isAbove(salt.amountMg, MIN_AMOUNT_MG)) continue;
     const amount = salt.amountMg / divisor;
     items.push({
       key: makeKey(`salt:${salt.id}`),
@@ -212,17 +232,24 @@ function saltItems(salts, divisor, makeKey) {
  * Only `intra` doses with a gel and a tablet count qualify; doses that share a
  * gel are added together. These amounts already belong to one specific gel,
  * so they are the same in both views.
+ *
+ * When `gelCount` is a finite number ≥ 0, a dose must also have
+ * `gelIndex < gelCount`. This is the rule `buildSchedule` uses, which shows a
+ * dose for a gel that does not exist as a separate caffeine event, so the
+ * recipe and the schedule never disagree about where a dose goes.
  * @param {CaffeinePlan|null|undefined} caffeine
+ * @param {number|undefined} gelCount
  * @param {(base: string) => string} makeKey
  * @returns {RecipeItem[]}
  */
-function caffeineItems(caffeine, makeKey) {
+function caffeineItems(caffeine, gelCount, makeKey) {
   if (!caffeine || !caffeine.enabled || !Array.isArray(caffeine.doses)) return [];
+  const gelLimit = Number.isFinite(gelCount) && gelCount >= 0 ? gelCount : Infinity;
   /** @type {Map<number, { mg: number, tablets: number }>} */
   const byGel = new Map();
   for (const dose of caffeine.doses) {
     if (!dose || dose.kind !== 'intra') continue;
-    if (!Number.isInteger(dose.gelIndex) || dose.gelIndex < 0) continue;
+    if (!Number.isInteger(dose.gelIndex) || dose.gelIndex < 0 || dose.gelIndex >= gelLimit) continue;
     if (!isPositive(dose.mg) || !isPositive(dose.tablets)) continue;
     const sum = byGel.get(dose.gelIndex) ?? { mg: 0, tablets: 0 };
     byGel.set(dose.gelIndex, { mg: sum.mg + dose.mg, tablets: sum.tablets + dose.tablets });
@@ -254,19 +281,23 @@ function caffeineItems(caffeine, makeKey) {
  * Order: glucose-pathway carbs, fructose-pathway carbs, salts, caffeine. Carbs
  * and salts keep their input order inside each group. Items with a zero,
  * negative or non-finite amount and ids that are not in the matching constants
- * list are skipped.
+ * list are skipped. Whole-activity amounts of 1 µg or less count as zero, so
+ * float noise from the carb solver never shows up as a "0 g" line.
  *
  * View `'perGel'` divides carb amounts (including `detail`) and salt amounts
  * by `gelCount` (at least 1; non-finite counts count as 1). Any other view is
  * treated as `'total'`. Caffeine items list the tablets for one specific gel,
  * so they are not divided. Pre-race caffeine is not a recipe item (it is in
- * the schedule), and caffeine taken without a gel is not one either.
+ * the schedule), and caffeine taken without a gel is not one either. Neither
+ * is a dose whose `gelIndex` is not below a finite `gelCount` (the schedule
+ * shows it as a separate caffeine event).
  *
  * @param {Object} args
  * @param {CarbSourceItem[]} [args.carbSources]  `solveCarbSources(...).items`.
  * @param {SaltAmount[]} [args.salts]  Whole-activity salt amounts.
  * @param {CaffeinePlan|null} [args.caffeine]  `planCaffeine(...)`.
- * @param {number} [args.gelCount]  Number of gels over the activity.
+ * @param {number} [args.gelCount]  Number of gels over the activity
+ *   (`getGelCount`, the length of `getGelTimes`).
  * @param {RecipeView} [args.view]
  * @returns {RecipeItem[]}
  */
@@ -278,6 +309,6 @@ export function buildRecipeItems({ carbSources, salts, caffeine, gelCount, view 
   return [
     ...PATHWAYS.flatMap((pathway) => carbItems(carbs, pathway, divisor, makeKey)),
     ...saltItems(saltList, divisor, makeKey),
-    ...caffeineItems(caffeine, makeKey),
+    ...caffeineItems(caffeine, gelCount, makeKey),
   ];
 }

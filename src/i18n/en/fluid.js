@@ -22,7 +22,7 @@
 const fluid = {
   // recommendFluid
   'fluid.why.plan':
-    'Drink about {mlPerHour} ml/h. The plan replaces up to 80% of your sweat loss of {sweatMlPerHour} ml/h and stays at or below 800 ml/h. Drinking less than you sweat avoids weight gain.',
+    'Drink about {mlPerHour} ml/h. This replaces roughly {sharePct}% of your sweat loss of {sweatMlPerHour} ml/h, capped at {maxMlPerHour} ml/h. Drinking less than you sweat avoids weight gain.',
   'fluid.why.thirst':
     'For events under 90 min or in cool weather, drinking to thirst works well. Use the plan as a rough guide.',
 

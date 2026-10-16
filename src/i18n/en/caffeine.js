@@ -30,11 +30,14 @@ const caffeine = {
   'caffeine.why.medium':
     'Take {preMg} mg about 60 min before the start and {intraMg} mg about two thirds into the event. A late dose still improves performance when fatigue builds.',
   'caffeine.why.long':
-    'Take {preMg} mg about 60 min before the start. From halfway, top up every 2.5 h with {intraMg} mg in total. Caffeine has a half-life of about 5 h, so small top-ups keep the effect going.',
+    'Take {preMg} mg about 60 min before the start and {intraMg} mg more from about halfway. Caffeine has a half-life of about 5 h, so later top-ups keep the effect going.',
+  // planCaffeine: summary when the body-load cap removed every dose during the event
+  'caffeine.why.preOnly':
+    'Take {preMg} mg about 60 min before the start. A dose during the event would lift the caffeine in your body above {maxMgPerKg} mg/kg, so the plan leaves it out.',
 
   // planCaffeine: details
   'caffeine.why.dose':
-    'Your plan uses {mgPerKg} mg/kg for {massKg} kg, or {doseMg} mg in total. Doses of 3–6 mg/kg improve performance in most studies. Lower doses of 1–2 mg/kg can also help.',
+    'You chose {mgPerKg} mg/kg, which is {doseMg} mg for {massKg} kg. Your plan adds up to {totalMg} mg ({totalMgPerKg} mg/kg). Doses of 3–6 mg/kg improve performance in most studies. Lower doses of 1–2 mg/kg can also help.',
   'caffeine.why.habitual':
     'Regular coffee drinkers benefit as much as non-users, so your usual intake does not change the dose.',
 

@@ -26,6 +26,18 @@
  * Pure module: no React, no DOM, no clocks, no randomness. Functions never
  * return English text; they return message descriptors whose keys live in
  * `src/i18n/en/electrolytes.js`.
+ *
+ * Bad numbers:
+ * - Durations, sweat rates, sweat sodium and fluid intakes that are missing,
+ *   non-finite or negative count as 0 (the convention of the other domain
+ *   modules).
+ * - Electrolyte amounts (sodium intake, salt amounts, ion targets and
+ *   delivered ions) that are NaN, negative or not numbers count as 0, but
+ *   +Infinity counts as the largest finite number. An amount too big to count
+ *   is still too much, so it never reads as "none".
+ * - Every number the module returns is finite: results that would overflow
+ *   are capped at `Number.MAX_VALUE`.
+ * - A missing or `null` argument object counts as `{}`.
  */
 
 import { sourceDataByIdMap } from '../constants/constants';
@@ -148,6 +160,22 @@ const clamp = (x, lo, hi) => Math.min(Math.max(x, lo), hi);
 const nonNegative = (x) => (Number.isFinite(x) && x > 0 ? /** @type {number} */ (x) : 0);
 
 /**
+ * A usable electrolyte amount: +Infinity becomes `Number.MAX_VALUE` so a huge
+ * amount never reads as 0; NaN, negative and non-number values become 0.
+ * @param {unknown} x
+ * @returns {number}
+ */
+const amount = (x) => (x === Infinity ? Number.MAX_VALUE : nonNegative(x));
+
+/**
+ * Caps a non-negative result at `Number.MAX_VALUE` so overflow never returns
+ * Infinity.
+ * @param {number} x
+ * @returns {number}
+ */
+const finite = (x) => Math.min(x, Number.MAX_VALUE);
+
+/**
  * Mass fraction of `ion` in the salt with `id`, as sold. 0 when the salt or
  * ion is unknown. Any `absorptionRate` field is ignored.
  * @param {number} id
@@ -174,7 +202,10 @@ function ionRatio(id, ion) {
  * - `durationMin > 240` (long): range [300, 1000]; `clamp(base, 300, 1000)`.
  * - Rounded to 10 mg/h and never above {@link SODIUM_HARD_CAP_MG_PER_HOUR}.
  *
- * Non-finite or negative inputs count as 0. `why.summary` is
+ * Missing, non-finite or negative inputs count as 0 (a missing or `null`
+ * input object too), like the other domain modules; an infinite duration is
+ * therefore the short band, as in `recommendCarbs`. An estimated loss that
+ * overflows is capped at `Number.MAX_VALUE`. `why.summary` is
  * `electrolytes.why.sodium.<short|medium|long>` with params
  * `{ loss, mgPerHour, lo, hi }` (`loss` rounded to whole mg for display);
  * `why.details` is `electrolytes.why.partial`. `warnings` are
@@ -183,15 +214,16 @@ function ionRatio(id, ion) {
  *
  * Citations: sawka2007, mccubbin2023, hoffman2015, delcoso2016, baker2017.
  *
- * @param {{ durationMin?: number, sweatRateLph?: number, sweatSodiumMmolL?: number }} [input]
+ * @param {{ durationMin?: number, sweatRateLph?: number, sweatSodiumMmolL?: number } | null} [input]
  * @returns {SodiumRecommendation}
  */
-export function recommendSodium({ durationMin, sweatRateLph, sweatSodiumMmolL } = {}) {
+export function recommendSodium(input) {
+  const { durationMin, sweatRateLph, sweatSodiumMmolL } = input ?? {};
   const d = nonNegative(durationMin);
   const rate = nonNegative(sweatRateLph);
   const mmol = nonNegative(sweatSodiumMmolL);
 
-  const loss = rate * mmol * MG_PER_MMOL.Sodium;
+  const loss = finite(rate * mmol * MG_PER_MMOL.Sodium);
   const base = REPLACEMENT_SHARE * loss;
 
   let band;
@@ -245,22 +277,30 @@ export function recommendSodium({ durationMin, sweatRateLph, sweatSodiumMmolL } 
  *
  * - `mgPerHour > 1500` → danger `electrolytes.sodiumFarAbove`; otherwise
  *   `mgPerHour > 1000` → warning `electrolytes.sodiumHigh`. Params
- *   `{ mgPerHour, limitMgPerHour }`.
- * - When `fluidMlPerHour > 0`: the drink concentration
- *   `mgPerL = mgPerHour / (fluidMlPerHour / 1000)`; above 1725 mg/L
- *   (75 mmol/L) → warning `electrolytes.concentrationHigh` with params
- *   `{ mgPerL, limitMgPerL }` (`mgPerL` rounded to whole mg for display;
- *   efsa2011 range 460–1150 mg/L).
+ *   `{ mgPerHour, limitMgPerHour }`, with `mgPerHour` rounded to whole mg for
+ *   display (manual salts give any per-hour amount, e.g. 1684.29 mg/h). The
+ *   thresholds use the unrounded value.
+ * - When `fluidMlPerHour > 0`: the plan's sodium per litre of fluid drunk,
+ *   `mgPerL = mgPerHour / (fluidMlPerHour / 1000)`. This counts all the
+ *   sodium in the plan (gels and drinks) against all the fluid, so it is not
+ *   the concentration of any one drink. Above 1725 mg/L (75 mmol/L) → warning
+ *   `electrolytes.concentrationHigh` with params `{ mgPerL, limitMgPerL }`
+ *   (`mgPerL` rounded to whole mg for display; efsa2011 range 460–1150 mg/L).
  *
- * Non-finite or negative amounts count as 0.
+ * A NaN, negative or non-number intake counts as 0; +Infinity counts as the
+ * largest finite number, so it always gets the danger warning. A missing,
+ * non-finite or negative fluid intake skips the concentration check. A
+ * missing or `null` context counts as `{}`. Params are always finite.
  *
  * @param {number} mgPerHour
- * @param {{ fluidMlPerHour?: number }} [context]
+ * @param {{ fluidMlPerHour?: number } | null} [context]
  * @returns {Warning[]}
  */
-export function sodiumWarnings(mgPerHour, { fluidMlPerHour } = {}) {
-  const mg = nonNegative(mgPerHour);
+export function sodiumWarnings(mgPerHour, context) {
+  const { fluidMlPerHour } = context ?? {};
+  const mg = amount(mgPerHour);
   const fluid = nonNegative(fluidMlPerHour);
+  const shownMg = Math.round(mg);
   /** @type {Warning[]} */
   const warnings = [];
 
@@ -270,7 +310,7 @@ export function sodiumWarnings(mgPerHour, { fluidMlPerHour } = {}) {
       level: 'danger',
       message: {
         key: 'electrolytes.warn.sodiumFarAbove',
-        params: { mgPerHour: mg, limitMgPerHour: SODIUM_HARD_CAP_MG_PER_HOUR },
+        params: { mgPerHour: shownMg, limitMgPerHour: SODIUM_HARD_CAP_MG_PER_HOUR },
       },
       citations: ['mccubbin2023', 'hoffman2015'],
     });
@@ -280,14 +320,14 @@ export function sodiumWarnings(mgPerHour, { fluidMlPerHour } = {}) {
       level: 'warning',
       message: {
         key: 'electrolytes.warn.sodiumHigh',
-        params: { mgPerHour: mg, limitMgPerHour: SODIUM_HIGH_MG_PER_HOUR },
+        params: { mgPerHour: shownMg, limitMgPerHour: SODIUM_HIGH_MG_PER_HOUR },
       },
       citations: ['mccubbin2023', 'hoffman2015'],
     });
   }
 
-  if (fluid > 0) {
-    const mgPerL = mg / (fluid / 1000);
+  if (fluid > 0 && mg > 0) {
+    const mgPerL = finite(mg / (fluid / 1000));
     if (mgPerL > SODIUM_CONCENTRATION_HIGH_MG_PER_L) {
       warnings.push({
         id: 'electrolytes.concentrationHigh',
@@ -311,16 +351,18 @@ export function sodiumWarnings(mgPerHour, { fluidMlPerHour } = {}) {
  * Each enabled ion replaces half of a typical sweat loss:
  * `0.5 × sweatRateLph × SWEAT_EXTRAS_MMOL[ion] × MG_PER_MMOL[ion]`, capped at
  * K 300, Mg 50, Ca 100 mg/h. Potassium is rounded to 10 mg/h, magnesium and
- * calcium to whole mg/h. Disabled ions get 0. A non-finite or negative sweat
- * rate counts as 0.
+ * calcium to whole mg/h. Disabled ions get 0. A missing, non-finite or
+ * negative sweat rate counts as 0; a missing or `null` input object counts as
+ * `{}`.
  *
  * `why.summary` is `electrolytes.why.extras`: the ions are optional and there
  * is no evidence they prevent cramps. Citations: baker2017, montain2007.
  *
- * @param {{ sweatRateLph?: number, enabled?: { potassium?: boolean, magnesium?: boolean, calcium?: boolean } }} [input]
+ * @param {{ sweatRateLph?: number, enabled?: { potassium?: boolean, magnesium?: boolean, calcium?: boolean } } | null} [input]
  * @returns {ExtrasRecommendation}
  */
-export function recommendExtras({ sweatRateLph, enabled } = {}) {
+export function recommendExtras(input) {
+  const { sweatRateLph, enabled } = input ?? {};
   const rate = nonNegative(sweatRateLph);
   const on = {
     Potassium: enabled?.potassium === true,
@@ -350,9 +392,10 @@ export function recommendExtras({ sweatRateLph, enabled } = {}) {
  *
  * Uses each salt's component mass fractions as sold (`electrolyteSourceOptions`
  * via `sourceDataByIdMap`); no absorption factors. Unknown ids, carb sources
- * and non-finite or negative amounts contribute nothing. Anions other than
- * chloride (citrate, bicarbonate, sulfate) are not tracked. Results are
- * unrounded.
+ * and NaN, negative or non-number amounts contribute nothing; an amount of
+ * +Infinity counts as the largest finite number. Anions other than chloride
+ * (citrate, bicarbonate, sulfate) are not tracked. Results are unrounded and
+ * capped at `Number.MAX_VALUE`, so a huge overdose stays huge and finite.
  *
  * @param {SaltAmount[]} salts
  * @returns {IonAmounts}
@@ -363,10 +406,10 @@ export function deliveredIons(salts) {
   if (!Array.isArray(salts)) return totals;
 
   for (const salt of salts) {
-    const amount = nonNegative(salt?.amountMg);
-    if (amount === 0) continue;
+    const mg = amount(salt?.amountMg);
+    if (mg === 0) continue;
     for (const ion of IONS) {
-      totals[ion] += amount * ionRatio(salt.id, ion);
+      totals[ion] = finite(totals[ion] + mg * ionRatio(salt.id, ion));
     }
   }
   return totals;
@@ -381,23 +424,27 @@ export function deliveredIons(salts) {
  * - Potassium from potassium citrate (39), magnesium from magnesium citrate
  *   (34), calcium from calcium citrate (35).
  *
- * Amounts are rounded to whole mg and zero amounts are omitted. Non-finite or
- * negative targets count as 0. Order: sodium salts (31, 33), then 39, 34, 35.
+ * Amounts are rounded to whole mg, capped at `Number.MAX_VALUE` (so always
+ * finite), and zero amounts are omitted. NaN, negative or non-number targets
+ * count as 0; +Infinity counts as the largest finite number. A missing or
+ * `null` argument counts as `{}`. Order: sodium salts (31, 33), then 39, 34,
+ * 35.
  *
- * @param {{ sodiumMg?: number, potassiumMg?: number, magnesiumMg?: number, calciumMg?: number, sodiumSalt?: 'table'|'citrate'|'mix' }} [targets]
+ * @param {{ sodiumMg?: number, potassiumMg?: number, magnesiumMg?: number, calciumMg?: number, sodiumSalt?: 'table'|'citrate'|'mix' } | null} [targets]
  * @returns {SaltAmount[]}
  */
-export function saltsForTargets({ sodiumMg, potassiumMg, magnesiumMg, calciumMg, sodiumSalt } = {}) {
-  const sodium = nonNegative(sodiumMg);
+export function saltsForTargets(targets) {
+  const { sodiumMg, potassiumMg, magnesiumMg, calciumMg, sodiumSalt } = targets ?? {};
+  const sodium = amount(sodiumMg);
   const tableShare = sodiumSalt === 'citrate' ? 0 : sodiumSalt === 'mix' ? 0.5 : 1;
 
   /** @type {[number, number, string][]} [saltId, ion mg, ion] */
   const plan = [
     [SALT_IDS.table, sodium * tableShare, 'Sodium'],
     [SALT_IDS.citrate, sodium * (1 - tableShare), 'Sodium'],
-    [SALT_IDS.potassium, nonNegative(potassiumMg), 'Potassium'],
-    [SALT_IDS.magnesium, nonNegative(magnesiumMg), 'Magnesium'],
-    [SALT_IDS.calcium, nonNegative(calciumMg), 'Calcium'],
+    [SALT_IDS.potassium, amount(potassiumMg), 'Potassium'],
+    [SALT_IDS.magnesium, amount(magnesiumMg), 'Magnesium'],
+    [SALT_IDS.calcium, amount(calciumMg), 'Calcium'],
   ];
 
   /** @type {SaltAmount[]} */
@@ -405,7 +452,8 @@ export function saltsForTargets({ sodiumMg, potassiumMg, magnesiumMg, calciumMg,
   for (const [id, ionMg, ion] of plan) {
     const ratio = ionRatio(id, ion);
     if (ionMg <= 0 || ratio <= 0) continue;
-    const amountMg = Math.round(ionMg / ratio);
+    // Math.round(Infinity) is Infinity, so cap after rounding; MAX_VALUE is an integer.
+    const amountMg = finite(Math.round(ionMg / ratio));
     if (amountMg > 0) salts.push({ id, amountMg });
   }
   return salts;
@@ -416,19 +464,21 @@ export function saltsForTargets({ sodiumMg, potassiumMg, magnesiumMg, calciumMg,
  *
  * Returns one entry per tracked ion whose target or delivered amount is above
  * 0. `diff = delivered - target`. Status: `|diff| ≤ max(1, 2% of target)` →
- * `'met'`; otherwise negative → `'short'`, positive → `'over'`. Missing,
- * non-finite or negative amounts count as 0.
+ * `'met'`; otherwise negative → `'short'`, positive → `'over'`. Missing, NaN,
+ * negative or non-number amounts count as 0; +Infinity counts as the largest
+ * finite number, so an infinite delivered amount reads as `'over'`, never as
+ * missing. All returned numbers are finite.
  *
- * @param {Partial<IonAmounts>} delivered
- * @param {Partial<IonAmounts>} targets
+ * @param {Partial<IonAmounts> | null} [delivered]
+ * @param {Partial<IonAmounts> | null} [targets]
  * @returns {Partial<Record<Ion, IonComparison>>}
  */
 export function compareIons(delivered, targets) {
   /** @type {Partial<Record<Ion, IonComparison>>} */
   const result = {};
   for (const ion of IONS) {
-    const target = nonNegative(targets?.[ion]);
-    const got = nonNegative(delivered?.[ion]);
+    const target = amount(targets?.[ion]);
+    const got = amount(delivered?.[ion]);
     if (target <= 0 && got <= 0) continue;
     const diff = got - target;
     const tolerance = Math.max(1, 0.02 * target);

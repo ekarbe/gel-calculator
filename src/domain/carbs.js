@@ -39,6 +39,9 @@ import { sourceDataByIdMap } from '../constants/constants';
  * @property {[number, number]} range  Evidence range [lo, hi] in g/h for the band.
  * @property {CarbBand} band
  * @property {boolean} mouthRinse  True when a carbohydrate mouth rinse is a useful option.
+ * @property {{ summary: Message, citations: string[] }|null} mouthRinseHowTo  How to do the mouth
+ *   rinse (one message and its studies) when `mouthRinse` is true, else `null`. Every view that
+ *   mentions the rinse shows this one text.
  * @property {Explanation} why
  * @property {Warning[]} warnings
  */
@@ -96,13 +99,28 @@ const RATIO_TOLERANCE = 0.02;
 
 const STUDIED_MAX_G_PER_HOUR = 120;
 const GUT_TRAINING_ABOVE_G_PER_HOUR = 90;
-const HIGH_CARB_MIN_DURATION_MIN = 150;
+
+/**
+ * The high-carb (gut-trained) opt-in only applies to events longer than this,
+ * in minutes (the `veryHigh` band). Exported so the UI shows its switch on the
+ * same rule.
+ */
+export const HIGH_CARB_MIN_DURATION_MIN = 150;
+
+/** Studies behind the carbohydrate mouth rinse protocol. */
+const MOUTH_RINSE_CITATIONS = ['carter2004', 'brietzke2019'];
 
 const round5 = (x) => Math.round(x / 5) * 5;
 const round2 = (x) => Math.round(x * 100) / 100;
 
 /** Non-negative finite number or 0. */
 const nonNegative = (x) => (Number.isFinite(x) && x > 0 ? x : 0);
+
+/**
+ * Hourly intake for threshold checks: NaN, non-numbers and negatives → 0.
+ * +Infinity is kept, so a larger intake never produces fewer warnings.
+ */
+const intake = (x) => (typeof x === 'number' && x > 0 ? x : 0);
 
 const gutTrainingWarning = () => ({
   id: 'carbs.gutTraining',
@@ -134,6 +152,12 @@ function bandFor(durationMin, highCarb) {
  * easy → lo × 0.8, moderate → midpoint, hard and race → hi. The result is
  * rounded to the nearest 5 g/h.
  *
+ * Warnings: info `carbs.highCarbLongOnly` when `highCarb` is set for an event
+ * of 150 min or less (it is ignored); warning `carbs.gutTraining`
+ * (jeukendrup2017, cox2010) when the target is above 90 g/h. In the
+ * `veryHigh` band that is every intensity except easy, whose 80% of the low end
+ * (70 g/h) needs no gut training.
+ *
  * @param {Object} input
  * @param {number} input.durationMin  Event duration in minutes. Non-finite or negative → 0.
  * @param {Intensity|string} [input.intensity]  Unknown values are treated as `moderate`.
@@ -163,13 +187,19 @@ export function recommendCarbs({ durationMin, intensity, highCarb = false } = {}
       message: { key: 'carbs.warn.highCarbLongOnly' },
     });
   }
-  if (band === 'veryHigh') warnings.push(gutTrainingWarning());
+  // The warning is about the intake, not the band: easy intensity in the
+  // high-carb band stays at 70 g/h, where no gut training is needed.
+  if (gPerHour > GUT_TRAINING_ABOVE_G_PER_HOUR) warnings.push(gutTrainingWarning());
 
+  const mouthRinse = band === 'rinse';
   return {
     gPerHour,
     range: [lo, hi],
     band,
-    mouthRinse: band === 'rinse',
+    mouthRinse,
+    mouthRinseHowTo: mouthRinse
+      ? { summary: { key: 'carbs.mouthRinse.howTo' }, citations: [...MOUTH_RINSE_CITATIONS] }
+      : null,
     why: {
       summary: { key: `carbs.why.${band}`, params: { lo, hi, gPerHour } },
       details: [{ key: `carbs.why.intensity.${level}` }],
@@ -188,11 +218,12 @@ export function recommendCarbs({ durationMin, intensity, highCarb = false } = {}
  * minimum. Above 90 g/h the share rises linearly to 1:0.8 at 120 g/h. The
  * maximum share is always 0.5 (never more fructose than glucose).
  *
- * @param {number} gPerHour  Hourly carbohydrate intake. Non-finite or negative → 0.
+ * @param {number} gPerHour  Hourly carbohydrate intake. NaN, non-numbers or negative → 0.
+ *   +Infinity falls in the top tier, with the share capped at the 120 g/h value.
  * @returns {RatioRecommendation}
  */
 export function recommendRatio(gPerHour) {
-  const g = nonNegative(gPerHour);
+  const g = intake(gPerHour);
   let minShare;
   let recommendedShare;
   let tier;
@@ -241,7 +272,7 @@ export function ratioShare({ glucose, fructose } = {}) {
  * Checks a user-chosen glucose:fructose ratio against {@link recommendRatio}.
  * Allows 0.02 of slack on the fructose share at both ends.
  *
- * @param {number} gPerHour  Hourly carbohydrate intake.
+ * @param {number} gPerHour  Hourly carbohydrate intake. NaN, non-numbers or negative → 0.
  * @param {Ratio} ratio  Ratio in parts.
  * @returns {Warning[]}
  */
@@ -266,7 +297,7 @@ export function checkRatio(gPerHour, { glucose, fructose } = {}) {
       level: 'warning',
       message: {
         key: 'carbs.warn.tooLittleFructose',
-        params: { gPerHour: nonNegative(gPerHour), minRatio: `1:${round2(minShare / (1 - minShare))}` },
+        params: { gPerHour: intake(gPerHour), minRatio: `1:${round2(minShare / (1 - minShare))}` },
       },
       citations: [...RATIO_CITATIONS],
     });
@@ -291,13 +322,14 @@ export function checkRatio(gPerHour, { glucose, fructose } = {}) {
  *   returned even when {@link recommendCarbs} already raised it for the
  *   high-carb band; the plan de-duplicates warnings by id.
  *
- * @param {number} gPerHour  Hourly carbohydrate intake. Non-finite → no warnings.
+ * @param {number} gPerHour  Hourly carbohydrate intake. NaN or non-number → no
+ *   warnings. +Infinity gets both warnings.
  * @param {{ durationMin?: number, highCarb?: boolean }} [context]  Accepted for API
  *   symmetry with {@link recommendCarbs}; it does not change the result.
  * @returns {Warning[]}
  */
 export function carbIntakeWarnings(gPerHour, context = {}) {
-  if (!Number.isFinite(gPerHour)) return [];
+  if (typeof gPerHour !== 'number' || Number.isNaN(gPerHour)) return [];
   /** @type {Warning[]} */
   const warnings = [];
   if (gPerHour > STUDIED_MAX_G_PER_HOUR) {
@@ -327,7 +359,7 @@ function carbData(id) {
 /**
  * Splits a carbohydrate total across the user's glucose and fructose sources.
  *
- * Port of the algorithm in `useCarbCalculation` (`calculatedSourceGrams`),
+ * Port of the former `useCarbCalculation` hook (`calculatedSourceGrams`),
  * keyed by source id:
  * 1. Targets: glucose and fructose pathway carbs from the ratio parts.
  * 2. Mixed sources (glucose and fructose content both > 0) go first. Each
@@ -342,7 +374,8 @@ function carbData(id) {
  * ratio parts count as 0. Repeated ids are merged into one item.
  *
  * @param {Object} input
- * @param {number} input.totalCarbsG  Carbohydrate to deliver (g). <= 0 or non-finite → empty, feasible.
+ * @param {number} input.totalCarbsG  Carbohydrate to deliver (g). <= 0, NaN or a
+ *   non-number → empty, feasible. +Infinity → empty, infeasible.
  * @param {Ratio} input.ratio  Glucose:fructose ratio in parts.
  * @param {CarbSourceInput[]} [input.glucoseSources]
  * @param {CarbSourceInput[]} [input.fructoseSources]
@@ -351,9 +384,11 @@ function carbData(id) {
  *   the sources would supply.
  */
 export function solveCarbSources({ totalCarbsG, ratio, glucoseSources = [], fructoseSources = [] } = {}) {
-  const total = nonNegative(totalCarbsG);
-  if (total <= 0) {
-    return { items: [], totalPowderG: 0, deliveredGlucoseG: 0, deliveredFructoseG: 0, canAchieveRatio: true };
+  const total = intake(totalCarbsG);
+  if (total <= 0 || !Number.isFinite(total)) {
+    // An infinite total cannot be delivered, so it must not read as feasible.
+    const canAchieveRatio = total <= 0;
+    return { items: [], totalPowderG: 0, deliveredGlucoseG: 0, deliveredFructoseG: 0, canAchieveRatio };
   }
 
   const glucoseParts = nonNegative(ratio?.glucose);

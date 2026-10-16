@@ -25,7 +25,8 @@ describe('planBicarbonate: eligibility and visibility', () => {
     [91, false, false],
     [600, false, false],
   ])('%i min → eligible %s, visible %s', (durationMin, eligible, visibleByDefault) => {
-    // [grgic2021] benefit shown for high-intensity efforts up to about 1 h
+    // Product rule from the spec: eligible up to 60 min, shown by default up to 90 min. The cited
+    // evidence [grgic2021] is mostly for hard efforts of 30 s to 12 min (see the limitedEvidence test).
     for (const enabled of [true, false]) {
       const plan = planBicarbonate({ enabled, massKg: 70, durationMin });
       expect(plan.eligible).toBe(eligible);
@@ -71,10 +72,23 @@ describe('planBicarbonate: dose', () => {
     expect(plan.eligible).toBe(true); // duration treated as 0
   });
 
-  it('treats negative duration as 0', () => {
-    const plan = planBicarbonate({ enabled: true, massKg: 70, durationMin: -30 });
-    expect(plan.eligible).toBe(true);
-    expect(ids(plan)).not.toContain('bicarb.longEvent');
+  it('treats negative, -Infinity, null or non-number duration as 0', () => {
+    for (const durationMin of [-30, -Infinity, null, '120']) {
+      const plan = planBicarbonate({ enabled: true, massKg: 70, durationMin });
+      expect(plan.eligible).toBe(true);
+      expect(ids(plan)).not.toContain('bicarb.longEvent');
+    }
+  });
+
+  it('treats an infinite duration like any huge one: not eligible, long-event warning', () => {
+    for (const enabled of [true, false]) {
+      const huge = planBicarbonate({ enabled, massKg: 70, durationMin: 1e9 });
+      const infinite = planBicarbonate({ enabled, massKg: 70, durationMin: Infinity });
+      expect(infinite).toEqual(huge);
+      expect(infinite).toMatchObject({ eligible: false, visibleByDefault: false });
+      expect(infinite.why.summary.key).toBe('bicarb.why.long');
+    }
+    expect(ids(planBicarbonate({ enabled: true, massKg: 70, durationMin: Infinity }))).toContain('bicarb.longEvent');
   });
 
   it('times the dose 60–180 min before the start, 90 min recommended', () => {
@@ -188,6 +202,14 @@ describe('bicarb i18n catalog', () => {
   it('uses message keys namespaced like the warning ids', () => {
     for (const w of plans.flatMap((p) => p.warnings)) {
       expect(w.message.key).toBe(w.id.replace('bicarb.', 'bicarb.warn.'));
+    }
+  });
+
+  it('does not present the 60 min cutoff as evidence', () => {
+    // [grgic2021] effects are mostly shown for hard efforts of 30 s to 12 min
+    for (const key of ['bicarb.why.short', 'bicarb.why.medium', 'bicarb.why.long']) {
+      expect(bicarbCatalog[key]).toContain('30 s to 12 min');
+      expect(bicarbCatalog[key]).not.toMatch(/(improve performance|help) in (high-intensity )?events of up to about 1 h/);
     }
   });
 

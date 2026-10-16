@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import {
+  HIGH_CARB_MIN_DURATION_MIN,
   INTENSITIES,
   recommendCarbs,
   recommendRatio,
@@ -100,6 +101,34 @@ describe('recommendCarbs', () => {
       message: { key: 'carbs.warn.gutTraining' },
       citations: ['jeukendrup2017', 'cox2010'],
     });
+  });
+
+  // [jeukendrup2017] [cox2010] gut training is about intakes above 90 g/h, not the band
+  it('gives no gut-training warning when easy intensity keeps the high-carb target at 70 g/h', () => {
+    const easy = rec(180, 'easy', true);
+    expect(easy.band).toBe('veryHigh');
+    expect(easy.gPerHour).toBe(70); // round5(90 × 0.8 = 72)
+    expect(easy.warnings).toEqual([]);
+    expect(easy.why.details).toEqual([{ key: 'carbs.why.intensity.easy' }]);
+    // Every other intensity in the band is above 90 g/h and keeps the warning.
+    for (const intensity of ['moderate', 'hard', 'race']) {
+      expect(ids(rec(180, intensity, true).warnings)).toEqual(['carbs.gutTraining']);
+    }
+  });
+
+  it('exports the high-carb duration threshold the UI uses', () => {
+    expect(HIGH_CARB_MIN_DURATION_MIN).toBe(150);
+    expect(rec(HIGH_CARB_MIN_DURATION_MIN, 'race', true).band).toBe('medium');
+    expect(rec(HIGH_CARB_MIN_DURATION_MIN + 1, 'race', true).band).toBe('veryHigh');
+  });
+
+  // [carter2004] [brietzke2019] mouth rinse for 45–75 min
+  it('gives the mouth rinse protocol only in the rinse band', () => {
+    expect(rec(60).mouthRinseHowTo).toEqual({
+      summary: { key: 'carbs.mouthRinse.howTo' },
+      citations: ['carter2004', 'brietzke2019'],
+    });
+    for (const d of [30, 90, 180]) expect(rec(d).mouthRinseHowTo).toBeNull();
   });
 
   it('ignores high-carb mode at or below 150 min and adds an info warning', () => {
@@ -223,13 +252,20 @@ describe('recommendRatio', () => {
     expect(recommendRatio(1e9).recommendedShare).toBeCloseTo(0.8 / 1.8, 10);
   });
 
-  it('treats non-finite or negative intake as 0', () => {
-    for (const g of [NaN, -10, undefined, Infinity]) {
+  it('treats NaN, non-numbers or negative intake as 0', () => {
+    for (const g of [NaN, -10, -Infinity, undefined, null, '120']) {
       const r = recommendRatio(g);
       expect(r.why.summary.key).toBe('carbs.ratio.why.low');
       expect(r.why.summary.params.gPerHour).toBe(0);
       expect(r.minShare).toBe(0);
     }
+  });
+
+  it('treats +Infinity as above 120 g/h, not as 0', () => {
+    const r = recommendRatio(Infinity);
+    expect(r.why.summary.key).toBe('carbs.ratio.why.high');
+    expect(r.minShare).toBeCloseTo(0.8 / 1.8, 10);
+    expect(r.ratio).toEqual({ glucose: 1, fructose: 0.8 });
   });
 
   it('keeps the share between minShare and maxShare', () => {
@@ -322,6 +358,13 @@ describe('checkRatio', () => {
     expect(checkRatio(NaN, { glucose: 1, fructose: 0 })).toEqual([]);
     expect(ids(checkRatio(Infinity, { glucose: 1, fructose: 2 }))).toEqual(['carbs.tooMuchFructose']);
   });
+
+  it('keeps warning about too little fructose for huge or infinite intakes', () => {
+    expect(ids(checkRatio(1e9, { glucose: 1, fructose: 0 }))).toEqual(['carbs.tooLittleFructose']);
+    const [w] = checkRatio(Infinity, { glucose: 1, fructose: 0 });
+    expect(w.id).toBe('carbs.tooLittleFructose');
+    expect(w.message.params.minRatio).toBe('1:0.8');
+  });
 });
 
 describe('carbIntakeWarnings', () => {
@@ -364,8 +407,30 @@ describe('carbIntakeWarnings', () => {
   it('handles invalid intake without throwing', () => {
     expect(carbIntakeWarnings(NaN, {})).toEqual([]);
     expect(carbIntakeWarnings(-50, {})).toEqual([]);
-    expect(carbIntakeWarnings(Infinity)).toEqual([]);
+    expect(carbIntakeWarnings(-Infinity)).toEqual([]);
+    expect(carbIntakeWarnings('130')).toEqual([]);
+    expect(carbIntakeWarnings(undefined)).toEqual([]);
     expect(ids(carbIntakeWarnings(1e9))).toEqual(['carbs.aboveStudied', 'carbs.gutTraining']);
+  });
+
+  it('keeps both warnings for an infinite intake', () => {
+    expect(ids(carbIntakeWarnings(Infinity))).toEqual(['carbs.aboveStudied', 'carbs.gutTraining']);
+  });
+
+  it('never returns fewer warnings for a larger intake', () => {
+    const intake = fc.oneof(
+      fc.double({ min: 0, max: 1000, noNaN: true }),
+      fc.constantFrom(Infinity, Number.MAX_VALUE, 90, 120),
+    );
+    fc.assert(
+      fc.property(intake, intake, (a, b) => {
+        const [lo, hi] = a <= b ? [a, b] : [b, a];
+        const higher = new Set(ids(carbIntakeWarnings(hi)));
+        for (const id of ids(carbIntakeWarnings(lo))) expect(higher.has(id)).toBe(true);
+        const higherRatio = new Set(ids(checkRatio(hi, { glucose: 1, fructose: 0 })));
+        for (const id of ids(checkRatio(lo, { glucose: 1, fructose: 0 }))) expect(higherRatio.has(id)).toBe(true);
+      }),
+    );
   });
 });
 
@@ -431,6 +496,49 @@ describe('solveCarbSources', () => {
     expect(items[3].grams).toBeCloseTo(40 / 0.95, 6); // 42.11 g maltodextrin
     expect(r.deliveredGlucoseG).toBeCloseTo(120 / 1.8, 6);
     expect(r.deliveredFructoseG).toBeCloseTo(120 / 1.8 * 0.8, 6);
+  });
+
+  it('sizes an uneven mixed source in the fructose list by its fructose content (agave)', () => {
+    // 90 g at 1:0.8 → 50 g glucose, 40 g fructose.
+    // Agave (0.18 glucose / 0.82 fructose, 0.76 g carbs per g) covers 100% of the 40 g fructose
+    // target and brings 40 × 0.18 / 0.82 = 8.78 g glucose. Maltodextrin covers the remaining 41.22 g.
+    const r = solveCarbSources({
+      totalCarbsG: 90,
+      ratio: { glucose: 1, fructose: 0.8 },
+      glucoseSources: [{ id: 3, percentage: 100 }],
+      fructoseSources: [{ id: 13, percentage: 100 }],
+    });
+    expect(r.canAchieveRatio).toBe(true);
+    expect(r.items.map((i) => i.id)).toEqual([3, 13]);
+    const items = byId(r);
+    const agaveGlucose = (40 / 0.82) * 0.18;
+    expect(items[13].pathway).toBe('fructose');
+    expect(items[13].grams).toBeCloseTo(40 / (0.82 * 0.76), 6); // 64.185 g agave
+    expect(items[13].fructoseG).toBeCloseTo(40, 6);
+    expect(items[13].glucoseG).toBeCloseTo(agaveGlucose, 6); // 8.780 g
+    expect(items[3].grams).toBeCloseTo((50 - agaveGlucose) / 0.95, 6); // 43.389 g maltodextrin
+    expect(r.deliveredGlucoseG).toBeCloseTo(50, 6);
+    expect(r.deliveredFructoseG).toBeCloseTo(40, 6);
+  });
+
+  it('sizes every uneven mixed fructose-list source by its fructose content', () => {
+    // HFCS (12) 0.45/0.55, agave (13) 0.18/0.82, apple juice concentrate (20) 0.30/0.70.
+    for (const id of [12, 13, 20]) {
+      const data = fructoseSourceOptions.find((o) => o.id === id);
+      const r = solveCarbSources({
+        totalCarbsG: 90,
+        ratio: { glucose: 1, fructose: 0.8 },
+        glucoseSources: [{ id: 3, percentage: 100 }],
+        fructoseSources: [{ id, percentage: 100 }],
+      });
+      expect(r.canAchieveRatio, `source ${id}`).toBe(true);
+      const item = byId(r)[id];
+      expect(item.grams).toBeCloseTo(40 / (data.fructoseContent * data.carbsPerGram), 6);
+      expect(item.fructoseG).toBeCloseTo(40, 6);
+      expect(item.glucoseG).toBeCloseTo((40 / data.fructoseContent) * data.glucoseContent, 6);
+      expect(r.deliveredGlucoseG).toBeCloseTo(50, 6);
+      expect(r.deliveredFructoseG).toBeCloseTo(40, 6);
+    }
   });
 
   it('splits pure sources in proportion to their percentages', () => {
@@ -500,7 +608,7 @@ describe('solveCarbSources', () => {
 
   it('returns an empty feasible result for zero or invalid totals', () => {
     const empty = { items: [], totalPowderG: 0, deliveredGlucoseG: 0, deliveredFructoseG: 0, canAchieveRatio: true };
-    for (const totalCarbsG of [0, -10, NaN, undefined, Infinity]) {
+    for (const totalCarbsG of [0, -10, -Infinity, NaN, undefined, '90']) {
       expect(
         solveCarbSources({
           totalCarbsG,
@@ -511,6 +619,17 @@ describe('solveCarbSources', () => {
       ).toEqual(empty);
     }
     expect(solveCarbSources()).toEqual(empty);
+  });
+
+  it('reports an infinite total as infeasible', () => {
+    expect(
+      solveCarbSources({
+        totalCarbsG: Infinity,
+        ratio: { glucose: 1, fructose: 0.8 },
+        glucoseSources: [{ id: 3, percentage: 100 }],
+        fructoseSources: [{ id: 11, percentage: 100 }],
+      }),
+    ).toEqual({ items: [], totalPowderG: 0, deliveredGlucoseG: 0, deliveredFructoseG: 0, canAchieveRatio: false });
   });
 
   it('uses a tolerance of max(0.5 g, 1% of the total)', () => {
@@ -526,6 +645,29 @@ describe('solveCarbSources', () => {
     });
     expect(exact.canAchieveRatio).toBe(true);
     expect(exact.items[0].grams).toBeCloseTo(97 / (0.97 * 0.72), 6);
+  });
+
+  it('accepts an error above 0.5 g when it is within 1% of the total', () => {
+    const barley = (totalCarbsG, glucose, fructose) =>
+      solveCarbSources({
+        totalCarbsG,
+        ratio: { glucose, fructose },
+        glucoseSources: [{ id: 7, percentage: 100 }],
+        fructoseSources: [],
+      });
+    // 100 g at 0.975:0.025 → barley covers 97.5 g glucose and brings 97.5 × 0.03 / 0.97 = 3.015 g
+    // fructose: 0.515 g over the 2.5 g target. Over the 0.5 g floor, within 1% (1 g).
+    const within = barley(100, 0.975, 0.025);
+    expect(within.deliveredFructoseG - 2.5).toBeCloseTo(0.5155, 4);
+    expect(within.canAchieveRatio).toBe(true);
+    expect(within.items.map((i) => i.id)).toEqual([7]);
+    // 100 g at 0.98:0.02 → 3.031 g fructose against a 2 g target: 1.031 g over, beyond 1%.
+    const beyond = barley(100, 0.98, 0.02);
+    expect(beyond.deliveredFructoseG - 2).toBeCloseTo(1.0309, 4);
+    expect(beyond.canAchieveRatio).toBe(false);
+    // The 1% part scales with the total: 5.15 g over at 1000 g is within 10 g, 10.3 g is not.
+    expect(barley(1000, 0.975, 0.025).canAchieveRatio).toBe(true);
+    expect(barley(1000, 0.98, 0.02).canAchieveRatio).toBe(false);
   });
 
   it('ignores unknown ids, electrolyte ids and sources that cannot supply their list', () => {
@@ -605,51 +747,124 @@ describe('solveCarbSources', () => {
         { selector: (s) => s.id, maxLength: options.length },
       );
 
-    const validInput = fc.record({
-      totalCarbsG: fc.double({ min: 0, max: 5000, noNaN: true }),
-      ratio: fc.record({
-        glucose: fc.double({ min: 0, max: 5, noNaN: true }),
-        fructose: fc.double({ min: 0, max: 5, noNaN: true }),
-      }),
-      glucoseSources: sourceList(glucoseSourceOptions),
-      fructoseSources: sourceList(fructoseSourceOptions),
+    const ratioParts = fc.record({
+      glucose: fc.double({ min: 0, max: 5, noNaN: true }),
+      fructose: fc.double({ min: 0, max: 5, noNaN: true }),
     });
 
-    it('returns finite non-negative grams and meets targets within tolerance when feasible', () => {
-      fc.assert(
-        fc.property(validInput, (input) => {
-          const r = solveCarbSources(input);
-          for (const item of r.items) {
-            expect(Number.isFinite(item.grams)).toBe(true);
-            expect(item.grams).toBeGreaterThanOrEqual(0);
-            for (const key of ['carbsG', 'glucoseG', 'fructoseG']) {
-              expect(Number.isFinite(item[key])).toBe(true);
-              expect(item[key]).toBeGreaterThanOrEqual(0);
-            }
-            expect(Math.abs(item.glucoseG + item.fructoseG - item.carbsG)).toBeLessThan(1e-6 * Math.max(1, item.carbsG));
-          }
-          expect(Number.isFinite(r.totalPowderG)).toBe(true);
-          expect(r.totalPowderG).toBeGreaterThanOrEqual(0);
-          expect(Number.isFinite(r.deliveredGlucoseG)).toBe(true);
-          expect(Number.isFinite(r.deliveredFructoseG)).toBe(true);
+    // Realistic totals. fc.double alone over [0, 5000] mostly yields values below 0.5 g,
+    // where the 0.5 g tolerance floor makes any result feasible.
+    const realisticTotal = fc.oneof(
+      fc.integer({ min: 1, max: 5000 }),
+      fc.double({ min: 1, max: 5000, noNaN: true }),
+    );
 
-          if (r.canAchieveRatio && input.totalCarbsG > 0) {
+    const targetsFor = ({ totalCarbsG: total, ratio }) => {
+      const parts = ratio.glucose + ratio.fructose;
+      const validParts = parts > 0 ? parts : 1;
+      return {
+        targetGlucose: (ratio.glucose / validParts) * total,
+        targetFructose: (ratio.fructose / validParts) * total,
+      };
+    };
+
+    const checkShape = (r) => {
+      for (const item of r.items) {
+        expect(Number.isFinite(item.grams)).toBe(true);
+        expect(item.grams).toBeGreaterThanOrEqual(0);
+        for (const key of ['carbsG', 'glucoseG', 'fructoseG']) {
+          expect(Number.isFinite(item[key])).toBe(true);
+          expect(item[key]).toBeGreaterThanOrEqual(0);
+        }
+        expect(Math.abs(item.glucoseG + item.fructoseG - item.carbsG)).toBeLessThan(1e-6 * Math.max(1, item.carbsG));
+      }
+      expect(Number.isFinite(r.totalPowderG)).toBe(true);
+      expect(r.totalPowderG).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(r.deliveredGlucoseG)).toBe(true);
+      expect(Number.isFinite(r.deliveredFructoseG)).toBe(true);
+      if (!r.canAchieveRatio) {
+        expect(r.items).toEqual([]);
+        expect(r.totalPowderG).toBe(0);
+      }
+    };
+
+    it('returns finite non-negative grams and meets targets within tolerance when feasible', () => {
+      const input = fc.record({
+        totalCarbsG: realisticTotal,
+        ratio: ratioParts,
+        glucoseSources: sourceList(glucoseSourceOptions),
+        fructoseSources: sourceList(fructoseSourceOptions),
+      });
+      fc.assert(
+        fc.property(input, (input) => {
+          const r = solveCarbSources(input);
+          checkShape(r);
+          if (r.canAchieveRatio) {
             const total = input.totalCarbsG;
-            const parts = input.ratio.glucose + input.ratio.fructose;
-            const validParts = parts > 0 ? parts : 1;
-            const targetGlucose = (input.ratio.glucose / validParts) * total;
-            const targetFructose = (input.ratio.fructose / validParts) * total;
+            const { targetGlucose, targetFructose } = targetsFor(input);
             // tiny epsilon for float error at the tolerance boundary
             const tolerance = Math.max(0.5, total * 0.01) + 1e-9 * Math.max(1, total);
             expect(Math.abs(r.deliveredGlucoseG - targetGlucose)).toBeLessThanOrEqual(tolerance);
             expect(Math.abs(r.deliveredFructoseG - targetFructose)).toBeLessThanOrEqual(tolerance);
             expect(Math.abs(r.deliveredGlucoseG + r.deliveredFructoseG - total)).toBeLessThanOrEqual(tolerance);
             const itemGlucose = r.items.reduce((acc, i) => acc + i.glucoseG, 0);
+            const itemFructose = r.items.reduce((acc, i) => acc + i.fructoseG, 0);
             expect(itemGlucose).toBeCloseTo(r.deliveredGlucoseG, 6);
+            expect(itemFructose).toBeCloseTo(r.deliveredFructoseG, 6);
           }
-          if (!r.canAchieveRatio) {
-            expect(r.items).toEqual([]);
-            expect(r.totalPowderG).toBe(0);
+        }),
+        { numRuns: 500 },
+      );
+    });
+
+    it('returns well-formed results for totals below 1 g', () => {
+      const input = fc.record({
+        totalCarbsG: fc.double({ min: 0, max: 1, noNaN: true }),
+        ratio: ratioParts,
+        glucoseSources: sourceList(glucoseSourceOptions),
+        fructoseSources: sourceList(fructoseSourceOptions),
+      });
+      fc.assert(fc.property(input, (input) => checkShape(solveCarbSources(input))), { numRuns: 200 });
+    });
+
+    it('is always feasible and exact for pure sources that cover both pathways', () => {
+      // Pure glucose sources (ids 1–6 and 8) and crystalline fructose (11), each list with at least
+      // one positive percentage, and a ratio with a positive sum: the solver must hit the targets.
+      const pureGlucoseIds = glucoseSourceOptions.filter((o) => o.fructoseContent === 0).map((o) => o.id);
+      const pureFructoseIds = fructoseSourceOptions.filter((o) => o.glucoseContent === 0).map((o) => o.id);
+      expect([...pureGlucoseIds].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 8]);
+      expect(pureFructoseIds).toEqual([11]);
+
+      const pureList = (pureIds) =>
+        fc
+          .uniqueArray(
+            fc.record({ id: fc.constantFrom(...pureIds), percentage: fc.integer({ min: 0, max: 200 }) }),
+            { selector: (s) => s.id, minLength: 1, maxLength: pureIds.length },
+          )
+          .filter((list) => list.some((s) => s.percentage > 0));
+
+      const input = fc.record({
+        totalCarbsG: realisticTotal,
+        ratio: ratioParts.filter((r) => r.glucose + r.fructose > 0),
+        glucoseSources: pureList(pureGlucoseIds),
+        fructoseSources: pureList(pureFructoseIds),
+      });
+
+      fc.assert(
+        fc.property(input, (input) => {
+          const r = solveCarbSources(input);
+          checkShape(r);
+          const total = input.totalCarbsG;
+          const { targetGlucose, targetFructose } = targetsFor(input);
+          const eps = 1e-6 * Math.max(1, total);
+          expect(r.canAchieveRatio).toBe(true);
+          expect(Math.abs(r.items.reduce((acc, i) => acc + i.carbsG, 0) - total)).toBeLessThanOrEqual(eps);
+          expect(Math.abs(r.deliveredGlucoseG - targetGlucose)).toBeLessThanOrEqual(eps);
+          expect(Math.abs(r.deliveredFructoseG - targetFructose)).toBeLessThanOrEqual(eps);
+          for (const pathway of ['glucose', 'fructose']) {
+            const carbs = r.items.filter((i) => i.pathway === pathway).reduce((acc, i) => acc + i.carbsG, 0);
+            const target = pathway === 'glucose' ? targetGlucose : targetFructose;
+            expect(Math.abs(carbs - target)).toBeLessThanOrEqual(eps);
           }
         }),
         { numRuns: 500 },
@@ -686,6 +901,7 @@ describe('i18n catalog (en/carbs)', () => {
           const r = recommendCarbs({ durationMin: d, intensity, highCarb });
           addWhy(r.why);
           addWarnings(r.warnings);
+          if (r.mouthRinseHowTo) messages.push(r.mouthRinseHowTo.summary);
         }
       }
     }

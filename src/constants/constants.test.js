@@ -4,12 +4,11 @@ import {
   fructoseSourceOptions,
   electrolyteSourceOptions,
   SWEAT_RATES, 
-  sourceDataMap,
   sourceDataByIdMap,
   allSourcesOptions,
   ELECTROLYTE_CONCENTRATIONS,
-  TEMPLATES
 } from './constants';
+import * as constants from './constants';
 
 describe('constants', () => {
   it('exports glucoseSourceOptions as an array of objects', () => {
@@ -33,15 +32,17 @@ describe('constants', () => {
     expect(SWEAT_RATES).toEqual([0.25, 0.75, 1.25, 1.75, 2.25, 2.75]);
   });
 
-  it('sourceDataMap maps labels to data accurately', () => {
+  it('sourceDataByIdMap maps ids to data accurately', () => {
     const item = glucoseSourceOptions[0];
-    expect(sourceDataMap.get(item.label)).toEqual(item);
+    expect(sourceDataByIdMap.get(item.id)).toEqual(item);
   });
 
-  it('exports TEMPLATES array', () => {
-    expect(Array.isArray(TEMPLATES)).toBe(true);
-    expect(TEMPLATES.length).toBeGreaterThan(0);
-    expect(TEMPLATES[0]).toHaveProperty('name');
+  it('drops the unused label-keyed source map', () => {
+    expect(constants).not.toHaveProperty('sourceDataMap');
+  });
+
+  it('no longer exports TEMPLATES (they live in templates.js)', () => {
+    expect(constants).not.toHaveProperty('TEMPLATES');
   });
 
   it('splits every carb source fully between the glucose and fructose pathways', () => {
@@ -70,12 +71,16 @@ describe('constants', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('only references existing sources in templates', () => {
-    for (const tpl of TEMPLATES) {
-      for (const s of [...tpl.glucoseSources, ...tpl.fructoseSources, ...tpl.electrolyteSources]) {
-        expect(sourceDataByIdMap.has(s.id), `${tpl.name} -> ${s.id}`).toBe(true);
+  it('has no absorption factors on salt components (guidance is in ingested amounts)', () => {
+    for (const opt of electrolyteSourceOptions) {
+      for (const component of opt.components) {
+        expect(Object.keys(component).sort(), `${opt.label} ${component.name}`).toEqual(['name', 'ratio']);
       }
     }
+  });
+
+  it('keeps only the sweat sodium presets (the other ions live in electrolytes.js)', () => {
+    expect(Object.keys(ELECTROLYTE_CONCENTRATIONS)).toEqual(['Sodium']);
   });
 
   it('keeps sweat sodium within the measured 10-90 mmol/L range', () => {

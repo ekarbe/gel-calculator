@@ -34,6 +34,10 @@
   --color-apple-amber: #FF9500;
   --color-apple-purple: #AF52DE;
   --color-apple-teal: #2dd4bf;
+  /* Text in amber or green on light backgrounds: the bright tones above are
+     about 2:1 on white, so text uses these (at least 6:1 in both themes). */
+  --color-apple-amber-ink: var(--amber-ink);
+  --color-apple-green-ink: var(--green-ink);
   
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   
@@ -51,6 +55,8 @@
     --modal-bg: rgba(255, 255, 255, 0.90);
     --card-border: rgba(0, 0, 0, 0.04);
     --card-border-hover: rgba(0, 0, 0, 0.1);
+    --amber-ink: #92400e;
+    --green-ink: #166534;
   }
 
   .dark {
@@ -62,6 +68,8 @@
     --modal-bg: rgba(28, 28, 30, 0.90);
     --card-border: rgba(255, 255, 255, 0.1);
     --card-border-hover: rgba(255, 255, 255, 0.2);
+    --amber-ink: #FF9500;
+    --green-ink: #34C759;
   }
 
   body {
