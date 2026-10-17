@@ -997,6 +997,21 @@ describe('computePlan', () => {
     expect(unknown).toEqual([]);
   });
 
+  it('keeps the drink finite for a near-zero event with manual salts', () => {
+    // A 1e-306 min event holds about 4e-306 ml of fluid: the 1000 mg of salt
+    // used to give an infinite sodium per litre. Under 0.5 ml is no drink.
+    const salts = { mode: 'manual', manual: [{ ref: 31, amountMg: 1000 }] };
+    for (const durationMin of [1e-306, 1e-315, 4e-321]) {
+      for (const type of ['drink', 'both', 'gel']) {
+        const plan = computePlan({ event: { durationMin }, salts, format: { type } });
+        expect(plan.fluid.totalMl).toBeGreaterThan(0);
+        expect(badNumbers(plan), `${durationMin} min, ${type}`).toEqual([]);
+        expect(plan.concentration.drink.bottles).toBe(0);
+        expect(ids(plan.warnings)).toContain('concentration.noFluidForDrink');
+      }
+    }
+  });
+
   it('never throws and never returns NaN, or Infinity outside the documented fields (property)', () => {
     fc.assert(
       fc.property(partialInputsArb, (partial) => {

@@ -126,6 +126,12 @@ export const EFSA_SODIUM_MG_PER_L = Object.freeze([460, 1150]);
 /** Bottle size used when the input has none (or not above 0), ml. */
 export const DEFAULT_BOTTLE_ML = 750;
 
+/**
+ * Least fluid that makes a drink, ml: less rounds to 0 ml where the plan shows
+ * it, and a near-zero fill would make the per-litre values overflow.
+ */
+export const MIN_DRINK_FLUID_ML = 0.5;
+
 const DRINK_CITATIONS = ['vist1995', 'shi1995'];
 
 /** Grams below which a shortfall of added water is float noise, not syrup water. */
@@ -413,9 +419,10 @@ export function gelBatch(input) {
  * Splits the drink's carbs and salts into equal bottles that together hold
  * the plan's fluid.
  *
- * - `bottles = max(1, ceil(totalFluidMl / bottleMl))` when `totalFluidMl > 0`;
- *   otherwise 0 bottles, zero per-bottle values and warning
- *   `concentration.noFluidForDrink`.
+ * - `bottles = max(1, ceil(totalFluidMl / bottleMl))` when `totalFluidMl` is
+ *   at least {@link MIN_DRINK_FLUID_ML} (0.5 ml); otherwise (no fluid, or so
+ *   little that it rounds to 0 ml) 0 bottles, zero per-bottle values and
+ *   warning `concentration.noFluidForDrink`.
  * - Each bottle is filled to `fillMl = totalFluidMl / bottles` (at most
  *   `bottleMl`), so the plan's fluid finishes every bottle and delivers all
  *   the carbs and sodium. When the fluid is a multiple of the bottle size this
@@ -456,7 +463,7 @@ export function drinkBottles(input) {
   const bottle = Number.isFinite(bottleMl) && bottleMl > 0 ? bottleMl : DEFAULT_BOTTLE_ML;
   const fluidMl = nonNegative(totalFluidMl);
 
-  if (fluidMl <= 0) {
+  if (fluidMl < MIN_DRINK_FLUID_ML) {
     return {
       bottles: 0,
       bottleMl: bottle,

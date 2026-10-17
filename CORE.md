@@ -718,8 +718,8 @@ explanation says there is no evidence they prevent cramps.
 - **Drink bottles** (`drinkBottles`): `bottles = max(1, ceil(fluid ÷ bottle
   size))`; each bottle is filled to `fluid ÷ bottles` (at most the bottle
   size), so drinking the plan's fluid finishes every bottle and delivers all
-  of its carbs and salts. No fluid → 0 bottles and warning
-  `concentration.noFluidForDrink`. Added water per bottle = `fill − 0.625 ×
+  of its carbs and salts. No fluid (under 0.5 ml, which shows as 0 ml) → 0
+  bottles and warning `concentration.noFluidForDrink`. Added water per bottle = `fill − 0.625 ×
   dry solids − ingredient water`; when the ingredients alone take up the whole
   fill, warning `concentration.drinkDoesNotFit`. Then: carbs above 12 % w/v →
   warning `concentration.drinkTooStrong`, above 8 % → info

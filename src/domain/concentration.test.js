@@ -5,6 +5,7 @@ import {
   TONICITY_BANDS,
   EFSA_SODIUM_MG_PER_L,
   DEFAULT_BOTTLE_ML,
+  MIN_DRINK_FLUID_ML,
   solutionDensity,
   tonicityOf,
   roundOsmolality,
@@ -672,7 +673,8 @@ describe('drinkBottles', () => {
   });
 
   it('has no bottles and warns when the plan has no fluid', () => {
-    for (const totalFluidMl of [0, -100, NaN, undefined]) {
+    // Under half a millilitre shows as 0 ml and would overflow the per-litre values (1000 mg in 1e-306 ml).
+    for (const totalFluidMl of [0, -100, NaN, undefined, 5e-324, 4.2e-320, 1e-306, 0.4999]) {
       const drink = defaultDrink({ totalFluidMl });
       expect(drink.bottles).toBe(0);
       expect(drink.perBottle).toEqual({
@@ -690,6 +692,17 @@ describe('drinkBottles', () => {
     }
     expect(drinkBottles().bottles).toBe(0);
     expect(drinkBottles(null).warnings.map((w) => w.id)).toEqual(['concentration.noFluidForDrink']);
+  });
+
+  it('makes a drink from half a millilitre of fluid on, with finite values', () => {
+    expect(MIN_DRINK_FLUID_ML).toBe(0.5);
+    const drink = defaultDrink({ totalFluidMl: MIN_DRINK_FLUID_ML });
+    expect(drink.bottles).toBe(1);
+    expect(drink.perBottle.fillMl).toBe(0.5);
+    // 1000 mg of sodium in 0.5 ml: 2,000,000 mg/L, and the powders do not fit
+    expect(drink.perBottle.sodiumMgPerL).toBeCloseTo(2e6, 6);
+    for (const value of Object.values(drink.perBottle).filter((v) => typeof v === 'number')) expect(Number.isFinite(value)).toBe(true);
+    expect(drink.warnings.map((w) => w.id)).toEqual(['concentration.drinkDoesNotFit']);
   });
 
   /** A drink of HBCD only (near-zero osmolality) so the strength warnings can be tested alone. */
