@@ -103,24 +103,52 @@ for (const { name, open, footer } of DIALOGS) {
   });
 }
 
-// TEMPORARY diagnostic (removed after one CI run): the old dialog layout
-// against the fixed one, measured in each engine.
-test('diagnostic: dialog body height with flex-basis 0% and auto @phone @webkit', async ({ page, browserName }) => {
+// TEMPORARY diagnostic (removed once CI has run it): the old dialog body
+// (flex-1) against the fixed one (flex-auto), with the dialog's own classes,
+// in the order the app uses (an empty dialog is opened and laid out, then the
+// content is put in), and with the class swapped on the real Share dialog.
+test('diagnostic: dialog body height with flex-1 and flex-auto @phone @webkit', async ({ page, browserName }) => {
   await openExpert(page);
-  const heights = await page.evaluate(() => {
-    const measure = (flex) => {
+  const results = await page.evaluate(async () => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const DIALOG = 'm-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-hidden rounded-panel border border-line bg-surface p-0 text-ink shadow-dialog open:flex open:flex-col open:animate-rise-in max-w-sm';
+    const content = (flex) =>
+      `<div class="flex items-start justify-between gap-3 border-b border-line py-2 pl-4 pr-2"><h2 class="display-section min-w-0 py-2 text-ink">Title</h2><button type="button">Close</button></div>` +
+      `<div data-b class="min-h-0 ${flex} overflow-y-auto px-4 py-4"><p class="mb-3 text-body-sm text-ink-2">Send this plan as a link, or save a picture of the recipe.</p><div style="height:120px">x</div></div>` +
+      `<div class="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3"><button type="button">Done</button></div>`;
+    const measure = async (flex, order) => {
       const dialog = document.createElement('dialog');
-      dialog.style.cssText = 'display:flex;flex-direction:column;max-height:calc(100dvh - 2rem);width:calc(100% - 2rem);padding:0;margin:auto';
-      dialog.innerHTML = `<div style="padding:8px">Title</div><div data-b style="flex:${flex};min-height:0;overflow-y:auto;padding:16px"><p>Line</p><p>Line</p><p>Line</p></div><div style="padding:8px">Footer</div>`;
+      dialog.className = DIALOG;
       document.body.append(dialog);
+      if (order === 'before') dialog.innerHTML = content(flex);
       dialog.showModal();
-      const h = dialog.querySelector('[data-b]').getBoundingClientRect().height;
+      if (order === 'after') {
+        dialog.getBoundingClientRect();
+        dialog.innerHTML = content(flex);
+      }
+      const now = Math.round(dialog.querySelector('[data-b]').getBoundingClientRect().height);
+      await frame();
+      const later = Math.round(dialog.querySelector('[data-b]').getBoundingClientRect().height);
       dialog.close();
       dialog.remove();
-      return Math.round(h);
+      return `${now}/${later}`;
     };
-    return { basis0: measure('1 1 0%'), basisAuto: measure('1 1 auto') };
+    const out = {};
+    for (const flex of ['flex-1', 'flex-auto']) for (const order of ['before', 'after']) out[`${flex} ${order}`] = await measure(flex, order);
+    return out;
   });
-  console.log(`[diagnostic] ${browserName}: body height with flex 1 1 0% = ${heights.basis0} px, with 1 1 auto = ${heights.basisAuto} px`);
-  expect(heights.basisAuto).toBeGreaterThan(60);
+  // The real Share dialog, its body switched back to flex-1.
+  await header(page).getByRole('button', { name: 'Share', exact: true }).click();
+  const body = page.getByRole('dialog', { name: 'Share' }).locator('[data-dialog-body]');
+  await expect(body).toBeVisible();
+  const swapped = await body.evaluate(async (el) => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const before = Math.round(el.getBoundingClientRect().height);
+    el.classList.replace('flex-auto', 'flex-1');
+    const now = Math.round(el.getBoundingClientRect().height);
+    await frame();
+    return `${before} -> ${now}/${Math.round(el.getBoundingClientRect().height)}`;
+  });
+  console.log(`[diagnostic] ${browserName}: ${JSON.stringify(results)}; real Share body flex-auto -> flex-1: ${swapped} px`);
+  expect(results['flex-auto after']).not.toMatch(/^(\d|[1-5]\d)\//);
 });
