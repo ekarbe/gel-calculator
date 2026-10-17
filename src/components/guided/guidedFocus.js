@@ -70,7 +70,8 @@ export function scrollToTop(element) {
 
 /**
  * Moves the focus into an open form (an unsaved draft the user is asked to
- * finish): its first enabled field, or, when the form sits in a closed
+ * finish): its heading when the form made it focusable (`tabindex="-1"`),
+ * else its first enabled field; or, when the form sits in a closed
  * disclosure inside `root` (an element with `hidden` and an id, such as a
  * collapsed setup panel's body), the button that opens it
  * (`aria-controls`). A guided screen's own slot (`data-guided-slot`) is not
@@ -87,6 +88,9 @@ export function focusIntoForm(form, root) {
       return;
     }
   }
-  const field = form.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])');
+  // A form heading made focusable (tabindex -1) comes first: a date field would open the iOS date picker at once.
+  const field =
+    form.querySelector(':is(h2, h3, h4, h5, h6)[tabindex="-1"]') ??
+    form.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])');
   if (field instanceof HTMLElement) field.focus();
 }

@@ -985,7 +985,12 @@ and never throw. Stored JSON that cannot be parsed counts as empty.
   return `{ number, integer, mass, height, temp, speed, pace, volume,
   volumeL, percent, currency, date, ratio, duration }` plus `toDisplay` /
   `fromDisplay` for number fields and `parseNumber` (reads "72,5" in
-  German). Missing or
+  German; a lone thousands separator in a valid grouping reads as one,
+  "1,250" is 1250 in English). Number fields read through `parseInRange`:
+  when the grouped reading is outside the field's range but the decimal one
+  is inside, the decimal one wins, because the iOS decimal keypad offers the
+  separator of the phone's region, not the page's language ("1,250" L is
+  1.25 L in a 0–20 L field, still 1250 in a 0–5000 mg field). Missing or
   non-finite numbers count as 0; values are rounded before the sign, so a
   zero never shows as "−0". Imperial values are rounded per kind (154.3 lb,
   68.9 in, 68 °F, 18.6 mph, 25.4 fl oz); metric values show as stored (up to
@@ -1078,8 +1083,11 @@ components use the tokens only. Fonts load with `next/font/google`
   typed text while focused, `toInput`/`fromInput`), `Select`, `Switch`
   (`role="switch"`), `Chip` (wraps its text unless told to truncate; an
   interactive chip keeps a 36 px hit area, 44 px on touch), `Dialog`
-  (native `<dialog>` with
-  `showModal()`), `Disclosure`, `Tabs` (roving tab index), `Toast`
+  (native `<dialog>` with `showModal()`, height fit-content up to the
+  screen; the body is `flex: 1 1 auto` with `min-height: 0`, sized by its
+  content and scrolling when the dialog reaches the screen height; no
+  percentage heights inside a dialog, which iOS Safari 26 resolved to 0 and
+  so collapsed every dialog body), `Disclosure`, `Tabs` (roving tab index), `Toast`
   (`role="status"`, polite), `WarningList`, `Why`, `SkipLink`, `Icon`
   (lucide icons, decorative unless named) and `icons/` (logo, Strava and
   GitHub). Hooks: `useFocusAfterRender` (focus an element once React has
@@ -1205,12 +1213,25 @@ components use the tokens only. Fonts load with `next/font/google`
 - Every control has a visible label (or an accessible name for icon
   buttons), hints and errors through `aria-describedby`, and a visible 2 px
   focus ring in `--focus` with a 2 px offset (number fields draw it around
-  the whole stepper group). Touch targets are at least 44 px on touch
-  screens.
+  the whole stepper group). After a tap or a click no ring shows where
+  script moved the focus (a dialog's close button, a guided step's
+  heading), as Chromium already does and iOS Safari did not:
+  `ui/inputModality.js` marks `<html data-input="pointer|keyboard">` from
+  the last pointer or key press and globals.css hides the ring in pointer
+  mode except on text fields; any key press brings the rings back, and so
+  does leaving the window (focus that returns from the address bar is the
+  browser's to mark). Touch
+  targets are at least 44 px on touch screens.
 - Dialogs are native modal `<dialog>`s with a labelled title: the page
   behind is inert, the focus starts inside, Escape and the backdrop close
-  them, and the focus returns to the opener. Openers say
-  `aria-haspopup="dialog"`.
+  them, and the focus returns to the opener (in Safari, where a tapped
+  button takes no focus and the focus stays on `<body>` or goes to
+  `<main tabindex="-1">`, to the control the tap activated). Their body does
+  not pass its scroll on to the page (`overscroll-behavior: contain`).
+  Openers say `aria-haspopup="dialog"`.
+- A sweat-test form puts the focus on its heading when it opens, not on the
+  date field, which would open the iOS date picker at once; the guided flow
+  and the setup do the same when they point the user to an unsaved form.
 - "Why?" and the other explanations are disclosures (`aria-expanded`,
   `aria-controls`), not hover tooltips. The toast and the board's warning
   count are announced politely; the warnings under a setup field are not a
@@ -1286,9 +1307,10 @@ return exists in the registry.
   amounts, the bottle fill and the mixing steps in both languages and unit
   systems) that the board, the dialogs and the print view use.
 - **End-to-end tests** (Playwright against the static export, desktop
-  Chrome and a 390 × 844 phone; `e2e/`, helpers in `e2e/helpers.js`; every
-  context starts as an `en-GB` visitor; tags `@phone` and `@desktop` limit a
-  test to one project):
+  Chrome, a 390 × 844 Chrome phone and an iPhone 17 in WebKit; `e2e/`,
+  helpers in `e2e/helpers.js`; every context starts as an `en-GB` visitor;
+  tags `@phone` and `@desktop` limit a test to one Chrome project, and the
+  iPhone runs only the tests tagged `@webkit`):
   - `smoke.spec.js`: no console errors in either mode; the `h1`; the default
     plan (75 g/h, the recipe lines); a duration change to 1 h giving
     15 g/h; a "Why?" revealing its citation; a v4 link restoring 240 min in
@@ -1329,6 +1351,14 @@ return exists in the registry.
     every expert view and every dialog, on both projects, and in the print
     view; in forced colours a switch and a segmented choice still show their
     state.
+  - `ios.spec.js` (`@phone @webkit`, also on the iPhone): every dialog
+    (mixing steps, share, recipe image, settings, my recipes, templates)
+    shows its body's content on a phone, fits the screen with its title,
+    close button and footer, and a body taller than the screen scrolls to its
+    end. Playwright's WebKit is newer than iOS Safari 26, which collapsed
+    the dialog bodies while they had a 0 % flex basis (see `Dialog`); it
+    renders that layout correctly, so the iPhone project guards WebKit
+    layout in general rather than that one bug.
   - `layout.spec.js`: no horizontal overflow at 360, 390, 768, 1024 and
     1440 px (phone emulation below 1024) on every guided screen, every
     expert view and two dialogs, in English and German; two columns from
@@ -1345,6 +1375,17 @@ return exists in the registry.
   to point at another one).
 
 ## 13. Known limitations
+
+- **Safari specifics.** iOS Safari prints a block heading alone at the foot
+  of a page when the next block does not fit (WebKit ignores `break-after:
+  avoid`) and can split a schedule row across pages (it ignores
+  `break-inside: avoid` on table rows); Chromium keeps both together. With a
+  dialog open, a drag on the backdrop can still scroll the page behind on
+  iOS (`overflow: hidden` on the root does not stop it; the dialog body
+  itself does not pass its scroll on). Safari deletes the site's
+  `localStorage` (autosave, saved recipes, settings) after about seven days
+  of Safari use without a visit; My recipes says so and a recipe's link
+  keeps it.
 
 - **Little fluid in the default plan.** The spec defaults (a 30 km/h ride in
   20 °C shade) give a heat-balance estimate of 0.33 L/h, so the plan asks

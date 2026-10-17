@@ -228,6 +228,9 @@ function toDate(value) {
  *   ASCII "-" (default up to 3 decimals; non-finite → `''`).
  * @property {(text: string) => number} parseNumber
  *   Reads a number typed in this locale (see {@link parseLocaleNumber}); `NaN` when it is not one.
+ * @property {(text: string, accepts: (n: number) => boolean) => number} parseInRange
+ *   The same for a field with a range: falls back to the decimal reading of a lone separator when only
+ *   that one is accepted (see {@link parseInRange}).
  */
 
 /**
@@ -239,12 +242,15 @@ function toDate(value) {
  * of 1–3 digits that does not start with 0); otherwise it is the decimal
  * separator, so "1,5" and "0,750" are 1.5 and 0.75 in English, and "1.5"
  * and "0.750" are 1.5 and 0.75 in German. Anything else (empty, letters, "1e3", two signs) gives `NaN`.
+ * With `grouping: false` the lone separator is always the decimal one ("1,250" is 1.25 in English):
+ * the reading for a field whose range excludes the grouped one (see {@link parseInRange}).
  *
  * @param {unknown} text
  * @param {'en'|'de'} [locale='en']
+ * @param {{ grouping?: boolean }} [options]
  * @returns {number}
  */
-export function parseLocaleNumber(text, locale = 'en') {
+export function parseLocaleNumber(text, locale = 'en', { grouping: allowGrouping = true } = {}) {
   if (typeof text === 'number') return Number.isFinite(text) ? text : NaN;
   if (typeof text !== 'string') return NaN;
   let s = text.replace(/[\s\u00a0\u202f]/g, '').replace(/\u2212/g, '-');
@@ -261,11 +267,31 @@ export function parseLocaleNumber(text, locale = 'en') {
     const sep = lastDot !== -1 ? '.' : ',';
     // A grouped number never starts with a 0 group: "0,750" is 0.75, not 750.
     const grouping = new RegExp(`^[-+]?[1-9]\\d{0,2}(\\${sep}\\d{3})+$`);
-    if (sep === group && grouping.test(s)) s = s.split(sep).join('');
+    if (allowGrouping && sep === group && grouping.test(s)) s = s.split(sep).join('');
     else if (sep === ',') s = s.replace(',', '.');
   }
   // Number() rejects what is left over: a second "." or a stray ",".
   return (s.match(/\./g) ?? []).length > 1 ? NaN : Number(s);
+}
+
+/**
+ * Reads a typed number for a field that accepts only some numbers (its
+ * range): the usual reading when the field accepts it, else the reading with
+ * the lone separator as the decimal one when the field accepts that. The iOS
+ * decimal keypad offers the separator of the phone's region, not of the page's
+ * language, so an English page on a French iPhone gets "1,250" for 1.25 L:
+ * read as 1250 it would be clamped to the field's 20 L maximum.
+ * Otherwise the usual reading (even when out of range or `NaN`).
+ * @param {unknown} text
+ * @param {'en'|'de'} locale
+ * @param {(n: number) => boolean} accepts
+ * @returns {number}
+ */
+export function parseInRange(text, locale, accepts) {
+  const n = parseLocaleNumber(text, locale);
+  if (accepts(n)) return n;
+  const decimal = parseLocaleNumber(text, locale, { grouping: false });
+  return accepts(decimal) ? decimal : n;
 }
 
 /** Formatter sets by locale, unit system and currency. */
@@ -381,6 +407,7 @@ export function createFormat(locale, { unitSystem, currency, browserLanguage } =
       return rounded < 0 ? `-${text}` : text;
     },
     parseNumber: (text) => parseLocaleNumber(text, lang),
+    parseInRange: (text, accepts) => parseInRange(text, lang, accepts),
   };
   Object.freeze(formatters);
   cache.set(key, formatters);

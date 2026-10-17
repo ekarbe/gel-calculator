@@ -18,17 +18,22 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
 const isCI = !!process.env.CI;
+/** Launch options of the two Chromium projects (the iPhone project runs WebKit). */
+const chromiumLaunch = { executablePath: process.env.PW_CHROMIUM_EXECUTABLE || undefined };
 
 /**
  * Playwright end-to-end tests against the static export in ./out.
  * Build first (`npm run build`), then `npm run test:e2e`.
  * Set PW_CHROMIUM_EXECUTABLE to use a preinstalled Chromium instead of the
- * one downloaded by `npx playwright install chromium`.
+ * one downloaded by `npx playwright install chromium webkit`.
  *
- * Two projects: a desktop Chrome window and a 390 × 844 phone (Pixel 7,
- * touch). A test tagged `@phone` runs only on the phone, one tagged
- * `@desktop` only on the desktop (for example a test that sets its own
- * viewport sizes); untagged tests run on both.
+ * Three projects: a desktop Chrome window, a 390 × 844 phone (Pixel 7,
+ * touch) and an iPhone 17 in WebKit, Safari's engine. A test tagged `@phone`
+ * runs only on the Chrome phone, one tagged `@desktop` only on the desktop
+ * (for example a test that sets its own viewport sizes); untagged tests run
+ * on both. The iPhone runs only the tests tagged `@webkit` (layout that
+ * Safari computes differently; run `--project chromium --project mobile` where
+ * WebKit is not installed).
  *
  * Every context starts as a British English visitor (`en-GB`: English,
  * metric units, GBP), so the default prefs do not depend on the machine.
@@ -49,15 +54,12 @@ export default defineConfig({
     locale: 'en-GB',
     timezoneId: 'Europe/London',
     trace: isCI ? 'on-first-retry' : 'retain-on-failure',
-    launchOptions: {
-      executablePath: process.env.PW_CHROMIUM_EXECUTABLE || undefined,
-    },
   },
   projects: [
     {
       name: 'chromium',
       grepInvert: /@phone/,
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], launchOptions: chromiumLaunch },
     },
     {
       name: 'mobile',
@@ -65,7 +67,13 @@ export default defineConfig({
       use: {
         ...devices['Pixel 7'],
         viewport: { width: 390, height: 844 },
+        launchOptions: chromiumLaunch,
       },
+    },
+    {
+      name: 'iphone',
+      grep: /@webkit/,
+      use: { ...devices['iPhone 17'] },
     },
   ],
   webServer: {
