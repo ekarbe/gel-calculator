@@ -258,9 +258,9 @@ describe('BodyWeatherSection: body', () => {
 
   it('marks heat acclimatisation with a switch that raises the heat strain limit', async () => {
     const user = userEvent.setup();
-    // Cycling at 30 km/h indoors without a fan, 21 °C and 40 %: skin wettedness
-    // about 0.93, above the 0.85 limit but below 1.0 when acclimatised (ISO 7933).
-    renderBody({ event: { setting: 'indoorNoFan' }, environment: { tempC: 21, humidity: 40 } });
+    // Cycling at 30 km/h indoors without a fan (0.5 m/s), 29 °C and 60 %: skin wettedness
+    // about 0.90, above the 0.85 limit but below 1.0 when acclimatised (ISO 7933).
+    renderBody({ event: { setting: 'indoorNoFan' }, environment: { tempC: 29, humidity: 60 } });
     const estimate = latest.plan.sweat.estimate;
     expect(estimate.wettedness).toBeGreaterThan(0.85);
     expect(estimate.wettedness).toBeLessThanOrEqual(1);

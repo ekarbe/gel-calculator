@@ -116,7 +116,7 @@ describe('TargetsSection: layout', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(body).not.toBeVisible();
     expect(within(body).getByTestId('carbs-target')).toBeInTheDocument();
-    expect(screen.getByTestId('targets-summary')).toHaveTextContent('Carbs 75 g/h · 1:0.5 · Sodium 300 mg/h · Fluid 100 ml/h');
+    expect(screen.getByTestId('targets-summary')).toHaveTextContent('Carbs 75 g/h · 1:0.5 · Sodium 300 mg/h · Fluid 250 ml/h');
 
     await user.click(toggle);
     expect(body).toBeVisible();
@@ -155,7 +155,7 @@ describe('TargetsSection: layout', () => {
     });
     expect(screen.getByRole('heading', { level: 2, name: 'Carbohydrates' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Sodium' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('summary')).toHaveTextContent('Carbs 75 g/h · 1:0.5 · Sodium 300 mg/h · Fluid 100 ml/h');
+    expect(screen.getByTestId('summary')).toHaveTextContent('Carbs 75 g/h · 1:0.5 · Sodium 300 mg/h · Fluid 250 ml/h');
   });
 });
 
@@ -553,17 +553,21 @@ describe('TargetsSection: ratio in Adjust mode', () => {
 });
 
 describe('TargetsSection: sodium', () => {
-  it('shows the default target from the real plan, with the concentration warning', () => {
+  it('shows the default target from the real plan, with the concentration warning when little fluid is planned', () => {
     renderTargets();
     const sodium = sodiumBlock();
-    // The 300 mg/h floor of 2–4 h events; little fluid makes it concentrated.
+    // The 300 mg/h floor of 2–4 h events (half of a 300 mg/h loss is 150 mg/h).
     expect(within(sodium).getByTestId('sodium-value')).toHaveTextContent('300 mg/h');
     expect(within(sodium).getByTestId('sodium-total')).toHaveTextContent('900 mg in total');
     expect(fact(sodium, 'Recommended')).toHaveTextContent('300 mg/h');
     expect(fact(sodium, 'Range')).toHaveTextContent('300–600 mg/h');
-    expect(fact(sodium, 'Estimated sweat loss')).toHaveTextContent('about 138 mg/h');
+    expect(fact(sodium, 'Estimated sweat loss')).toHaveTextContent('about 300 mg/h');
     expect(within(sodium).queryByText('Optional')).not.toBeInTheDocument();
-    // [efsa2011] 900 mg in 300 ml of fluid
+    // [efsa2011] 900 mg in the default 750 ml of fluid is 1,200 mg/L: below the 1,725 mg/L limit.
+    expect(warningsIn(sodium)).not.toBeInTheDocument();
+    // Little fluid makes the same target concentrated: 900 mg in 300 ml of fluid.
+    setInput('fluid', { ...latest.inputs.fluid, mode: 'manual', manualMlPerHour: 100 });
+    expect(within(sodium).getByTestId('sodium-value')).toHaveTextContent('300 mg/h');
     expect(within(warningsIn(sodium)).getByText(/about 3,000 mg of sodium per litre/)).toBeInTheDocument();
   });
 
@@ -660,7 +664,8 @@ describe('TargetsSection: sodium', () => {
     const sodium = sodiumBlock();
     expect(within(sodium).getByText('Optional')).toBeInTheDocument();
     expect(fact(sodium, 'Range')).toHaveTextContent('0–300 mg/h');
-    expect(within(sodium).getByTestId('sodium-value')).toHaveTextContent('70 mg/h');
+    // Half of the 300 mg/h estimated loss.
+    expect(within(sodium).getByTestId('sodium-value')).toHaveTextContent('150 mg/h');
     // The badge is not part of the block's name.
     expect(within(sodium).getByRole('heading', { name: 'Sodium' })).toBeInTheDocument();
   });
@@ -670,14 +675,14 @@ describe('TargetsSection: fluid', () => {
   it('shows the default target from the real plan, with the projected scale change', () => {
     renderTargets();
     const fluid = fluidBlock();
-    // 80% of 0.15 L/h, rounded to 100 ml/h.
-    expect(within(fluid).getByTestId('fluid-value')).toHaveTextContent('100 ml/h');
-    expect(within(fluid).getByTestId('fluid-total')).toHaveTextContent('300 ml in total');
-    expect(fact(fluid, 'Recommended')).toHaveTextContent('100 ml/h');
+    // 80% of 0.33 L/h, rounded to 250 ml/h.
+    expect(within(fluid).getByTestId('fluid-value')).toHaveTextContent('250 ml/h');
+    expect(within(fluid).getByTestId('fluid-total')).toHaveTextContent('750 ml in total');
+    expect(fact(fluid, 'Recommended')).toHaveTextContent('250 ml/h');
     expect(fact(fluid, 'Guideline range')).toHaveTextContent('400–800 ml/h');
-    expect(fact(fluid, 'Sweat loss')).toHaveTextContent('about 150 ml/h');
+    expect(fact(fluid, 'Sweat loss')).toHaveTextContent('about 327 ml/h');
     expect(within(fluid).queryByTestId('drink-to-thirst')).not.toBeInTheDocument();
-    // 0.15 L water deficit plus 0.2 g/kcal of 678 kcal/h over 3 h.
+    // 0.23 L water deficit plus 0.2 g/kcal of 678 kcal/h over 3 h.
     expect(within(fluid).getByTestId('fluid-body-mass')).toHaveTextContent('−0.6 kg');
     const level = within(fluid).getByTestId('fluid-body-mass-level');
     expect(level).toHaveTextContent('Up to 2% loss');

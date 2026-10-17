@@ -16,6 +16,7 @@
 
 import { test, expect } from '@playwright/test';
 import { computePlan } from '../src/domain/plan.js';
+import { encodeShareState } from '../src/state/shareCodec.js';
 import { board, kpiValue, openExpert, showTab } from './helpers.js';
 
 // The race board in expert mode (design doc "Race board"): title row and
@@ -119,8 +120,11 @@ test('the recipe switches between the whole batch and one gel', async ({ page })
 });
 
 test('the board lists the next schedule events and every plan warning', async ({ page }) => {
-  const errors = await openExpert(page);
-  const plan = computePlan({});
+  // 100 ml/h of fluid gives a warning and a note (900 mg sodium in 300 ml; take each gel with water),
+  // so the panel has more than one level to order. The default plan has only the note.
+  const inputs = { fluid: { mode: 'manual', manualMlPerHour: 100 } };
+  const errors = await openExpert(page, { path: `./?s=${encodeShareState(inputs)}` });
+  const plan = computePlan(inputs);
   const nextUp = page.getByRole('list', { name: 'Next up' }).getByRole('listitem');
   await expect(nextUp).toHaveCount(4);
   await expect(nextUp.first()).toContainText('At the start');

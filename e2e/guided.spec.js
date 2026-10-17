@@ -166,7 +166,8 @@ test('the dock counts the warnings and opens their list', async ({ page }) => {
   const errors = await openApp(page);
   const dockRegion = page.getByRole('region', { name: 'Your plan so far' });
   const count = computePlan({}).warnings.length;
-  const toggle = dockRegion.getByRole('button', { name: `${count} warnings` });
+  // The default plan has one note (take each gel with water): "1 warning", else "{count} warnings".
+  const toggle = dockRegion.getByRole('button', { name: count === 1 ? '1 warning' : `${count} warnings`, exact: true });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');

@@ -134,7 +134,7 @@ describe('ShareDialog', () => {
       'Carbs per hour': '75 g/h',
       Ratio: '1:0.5',
       Sodium: '300 mg/h',
-      Fluid: '100 ml/h',
+      Fluid: '250 ml/h',
     });
     expect(within(img).getByTestId('share-event')).toHaveTextContent('3:00 h · Cycling · Moderate');
     expect(within(img).getByTestId('share-view-caption')).toHaveTextContent('Total · 3 h');
@@ -253,7 +253,7 @@ describe('ShareDialog', () => {
   it('shows per-gel amounts and caffeine lines on the image', () => {
     renderShare({ format: { view: 'perServing' }, caffeine: { enabled: true, asIngredient: true } });
     const img = openImage();
-    expect(stats(img)).toMatchObject({ Sodium: '300 mg/h', Fluid: '100 ml/h', Caffeine: '200 mg' });
+    expect(stats(img)).toMatchObject({ Sodium: '300 mg/h', Fluid: '250 ml/h', Caffeine: '200 mg' });
     const lines = imageLines(img, 'gel');
     expect(lines[0]).toEqual(['Maltodextrin', '18 g']);
     expect(lines).toContainEqual(['Caffeine for gel 7 (100 mg tablets)', '0.5 tablets']);

@@ -140,10 +140,10 @@ describe('airSpeed', () => {
     expect(airSpeed({ sport: 'cycling', speedKmh: 30, setting: 'outdoor' })).toBeCloseTo(30 / 3.6, 12);
   });
 
-  it('uses 1.0 m/s for other sports outdoors, 1.5 with a fan and 0.2 without', () => {
+  it('uses 1.0 m/s for other sports outdoors, 1.5 with a fan and 0.5 without (moving limbs)', () => {
     expect(airSpeed({ sport: 'other', speedKmh: 30, setting: 'outdoor' })).toBe(1.0);
     expect(airSpeed({ sport: 'running', speedKmh: 12, setting: 'indoorFan' })).toBe(1.5);
-    expect(airSpeed({ sport: 'cycling', speedKmh: 40, setting: 'indoorNoFan' })).toBe(0.2);
+    expect(airSpeed({ sport: 'cycling', speedKmh: 40, setting: 'indoorNoFan' })).toBe(0.5);
     expect(airSpeed({ sport: 'other', setting: 'indoorFan' })).toBe(1.5);
   });
 
@@ -204,11 +204,12 @@ describe('estimateSweatRate: golden values', () => {
     expect(Math.abs(e.rateLph - 2.11)).toBeLessThanOrEqual(TOL);
   });
 
-  it('cycle 75 kg/180 cm, 200 W at 30 km/h, 25 °C/50 %, shade → 0.60 L/h', () => {
-    // [cramer2019] M = 200/0.20 = 1000 W, W = 200 W; Ereq 403 W
+  it('cycle 75 kg/180 cm, 200 W at 30 km/h, 25 °C/50 %, shade → 0.73 L/h (regression value of the dry-path cap)', () => {
+    // [cramer2019] M = 200/0.20 = 1000 W, W = 200 W; Ereq 485 W with the dry heat loss at 3 m/s.
+    // Not a research-script golden: final_model.py, without the cycling dry-path cap, gives 0.60 L/h and Ereq 403 W.
     const e = estimateSweatRate({ ...CYCLIST, tempC: 25, humidity: 50 });
-    expect(Math.abs(e.rateLph - 0.6)).toBeLessThanOrEqual(TOL);
-    expect(e.ereqW).toBeCloseTo(403.21, 1);
+    expect(Math.abs(e.rateLph - 0.73)).toBeLessThanOrEqual(TOL);
+    expect(e.ereqW).toBeCloseTo(484.82, 1);
     expect(e.heatProductionW).toBe(800);
     expect(e.externalWorkW).toBe(200);
   });
@@ -230,6 +231,156 @@ describe('estimateSweatRate: golden values', () => {
     expect(e.energyKcalPerHour).toBeCloseTo((1060.675 * 3600) / 4184, 9);
     expect(e.energyKcalPerHour).toBeCloseTo(912.6, 1);
     expect(e.uncertaintyLph).toBe(0.5);
+  });
+});
+
+describe('estimateSweatRate: cycling dry-path cap and indoor air flow (regression)', () => {
+  /** Goldens of the cycling fix: ±0.005 L/h. */
+  const FIX_TOL = 0.005;
+  const RIDE = { ...MODEL_DEFAULTS };
+  const psat = (t) => 0.6108 * Math.exp((17.27 * t) / (t + 237.3));
+  const FCL = 1 + 0.28 * 0.15;
+  const RCL = 0.155 * 0.15;
+
+  it('caps the dry heat loss of a 30 km/h ride at 3 m/s, while evaporation keeps the full 8.33 m/s', () => {
+    // ISO 7933 validity limit (evidence and limits: AIR_SPEED_ISO_MAX in heatBalance.js)
+    const e = estimateSweatRate(RIDE);
+    expect(e.airSpeedMs).toBeCloseTo(30 / 3.6, 12);
+    expect(e.dryAirSpeedMs).toBe(3);
+    const pa = 0.5 * psat(20);
+    const tsk = 30.78 + 0.125 * 20 + 0.198 * pa - 0.348 * 3;
+    expect(e.skinTempC).toBeCloseTo(tsk, 9);
+    // Emax with hc at the full riding speed: A (psat(Tsk) − pa) × 16.5 hc fcl (race kit, no clothing term)
+    const hcFull = 8.3 * (30 / 3.6) ** 0.6;
+    const emaxFull = e.bsaM2 * (psat(tsk) - pa) * 16.5 * hcFull * FCL;
+    expect(e.emaxW).toBeCloseTo(emaxFull, 6);
+    const emaxCapped = e.bsaM2 * (psat(tsk) - pa) * 16.5 * 8.3 * 3 ** 0.6 * FCL;
+    expect(e.emaxW).toBeGreaterThan(emaxCapped * 1.5);
+    // Dry heat loss with Ra at 3 m/s, not at 8.33 m/s
+    const dryAt = (v) => (e.bsaM2 * (tsk - 20)) / (RCL + 1 / (FCL * (8.3 * v ** 0.6 + 4.7)));
+    expect(e.dryHeatLossW).toBeCloseTo(dryAt(3), 6);
+    expect(e.dryHeatLossW).toBeLessThan(dryAt(30 / 3.6) - 100);
+  });
+
+  it('gives a ride at a fixed power the same dry heat loss and sun gain at 30 km/h as at 3 m/s, and more Emax', () => {
+    const at = (speedKmh) => estimateSweatRate({ ...CYCLIST, speedKmh, tempC: 25, humidity: 50, sun: 'full' });
+    const fast = at(30);
+    const slow = at(3 * 3.6);
+    expect(slow.airSpeedMs).toBeCloseTo(3, 12);
+    expect(fast.dryAirSpeedMs).toBe(3);
+    expect(fast.skinTempC).toBeCloseTo(slow.skinTempC, 12);
+    expect(fast.dryHeatLossW).toBeCloseTo(slow.dryHeatLossW, 9);
+    expect(fast.solarGainW).toBeCloseTo(slow.solarGainW, 9);
+    expect(fast.ereqW).toBeCloseTo(slow.ereqW, 9);
+    expect(fast.emaxW).toBeGreaterThan(slow.emaxW);
+  });
+
+  it('keeps the full air speed for heat gained from air hotter than the skin (the cap never lowers a hot estimate)', () => {
+    // 70 kg/175 cm, 200 W at 35 km/h, 40 °C/20 %: Tsk 35.0 °C < Ta, the dry term is a gain. Capping it would
+    // drop the estimate from 1.397 to 1.310 L/h in the most dangerous conditions, outside the evidence of the cap.
+    const hot = { sport: 'cycling', powerW: 200, speedKmh: 35, setting: 'outdoor', tempC: 40, humidity: 20 };
+    const e = estimateSweatRate(hot);
+    expect(e.skinTempC).toBeLessThan(40);
+    expect(e.dryHeatLossW).toBeLessThan(0);
+    expect(e.dryAirSpeedMs).toBe(e.airSpeedMs);
+    const dryAt = (v) => (e.bsaM2 * (e.skinTempC - 40)) / (RCL + 1 / (FCL * (8.3 * v ** 0.6 + 4.7)));
+    expect(e.dryHeatLossW).toBeCloseTo(dryAt(35 / 3.6), 6);
+    // Unchanged from the model before the cap (shade)
+    expect(Math.abs(e.rateLph - 1.397)).toBeLessThanOrEqual(FIX_TOL);
+    // The sun gain keeps the capped speed at every temperature: more heat reaches the skin, never less
+    const sunny = estimateSweatRate({ ...hot, sun: 'full' });
+    const raAt = (v) => 1 / (FCL * (8.3 * v ** 0.6 + 4.7));
+    const sunAt = (v) => (150 * sunny.bsaM2 * raAt(v)) / (raAt(v) + RCL);
+    expect(sunny.solarGainW).toBeCloseTo(sunAt(3), 6);
+    expect(sunny.solarGainW).toBeGreaterThan(sunAt(35 / 3.6));
+  });
+
+  it('is continuous where the air temperature crosses the skin temperature', () => {
+    // 200 W at 35 km/h, 30 % humidity, full sun: Tsk = Ta near 34.4 °C, where the dry path switches speed
+    const at = (tempC) => estimateSweatRate({ ...CYCLIST, speedKmh: 35, humidity: 30, sun: 'full', tempC });
+    let lo = 30;
+    let hi = 38;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (at(mid).skinTempC > mid) lo = mid;
+      else hi = mid;
+    }
+    const below = at(lo - 1e-6);
+    const above = at(hi + 1e-6);
+    expect(below.dryAirSpeedMs).toBe(3);
+    expect(above.dryAirSpeedMs).toBeCloseTo(35 / 3.6, 12);
+    expect(Math.abs(above.rateLph - below.rateLph)).toBeLessThan(1e-4);
+    expect(above.rateLph).toBeGreaterThanOrEqual(below.rateLph);
+  });
+
+  it('does not cap the dry path for running or other sports', () => {
+    // 12 km/h = 3.33 m/s, above the cap: running keeps it for dry heat loss too
+    const run = estimateSweatRate({ ...RUNNER, tempC: 20, humidity: 50 });
+    expect(run.airSpeedMs).toBeCloseTo(12 / 3.6, 12);
+    expect(run.dryAirSpeedMs).toBe(run.airSpeedMs);
+    const other = estimateSweatRate({ sport: 'other', mets: 8, setting: 'outdoor' });
+    expect(other.dryAirSpeedMs).toBe(other.airSpeedMs);
+  });
+
+  it('uses 0.5 m/s indoors without a fan, for evaporation and dry heat loss', () => {
+    // Regression value at 200 W, 20 °C/50 %, 70 kg/175 cm: 0.97 L/h (0.2 m/s gave the 2.77 L/h ceiling).
+    const e = estimateSweatRate({ sport: 'cycling', powerW: 200, setting: 'indoorNoFan', tempC: 20, humidity: 50 });
+    expect(e.airSpeedMs).toBe(0.5);
+    expect(e.dryAirSpeedMs).toBe(0.5);
+    expect(Math.abs(e.rateLph - 0.972)).toBeLessThanOrEqual(FIX_TOL);
+    expect(e.capped).toBe(false);
+    expect(e.rateLph).toBeLessThan(e.maxRateLph);
+  });
+
+  it('compares the no-fan floor with Brown & Banister 1985 on the corrected basis', () => {
+    // Trainer without a fan, about 216 W, 20–23 °C, 70 kg/178 cm: measured 1.2–1.3 L/h of body-mass loss,
+    // about 1.0–1.1 L/h after the 0.2 g/kcal correction (0.19 L/h here). The model now over-predicts slightly.
+    const trainer = { sport: 'cycling', powerW: 216, setting: 'indoorNoFan', massKg: 70, heightCm: 178, humidity: 50 };
+    const e = estimateSweatRate({ ...trainer, tempC: 21.5 });
+    expect(0.0002 * e.energyKcalPerHour).toBeCloseTo(0.186, 3);
+    expect(Math.abs(e.rateLph - 1.277)).toBeLessThanOrEqual(FIX_TOL);
+    expect(estimateSweatRate({ ...trainer, tempC: 20 }).rateLph).toBeGreaterThan(1.1);
+    expect(estimateSweatRate({ ...trainer, tempC: 23 }).rateLph).toBeLessThan(1.5);
+  });
+
+  it('applies the no-fan floor to every sport (evidence: cycling only)', () => {
+    // Other sport at 8 METs, 20 °C/50 %: 1.40 L/h and uncompensable at 0.2 m/s; now compensable
+    const other = estimateSweatRate({ sport: 'other', mets: 8, setting: 'indoorNoFan', tempC: 20, humidity: 50 });
+    expect(other.airSpeedMs).toBe(0.5);
+    expect(other.dryAirSpeedMs).toBe(0.5);
+    expect(Math.abs(other.rateLph - 0.717)).toBeLessThanOrEqual(FIX_TOL);
+    expect(other.uncompensable).toBe(false);
+    // Treadmill run at 12 km/h, 20 °C/50 %: the 2.77 L/h ceiling at 0.2 m/s, now 2.61 L/h, still uncompensable
+    const run = estimateSweatRate({ ...RUNNER, setting: 'indoorNoFan', tempC: 20, humidity: 50 });
+    expect(run.airSpeedMs).toBe(0.5);
+    expect(Math.abs(run.rateLph - 2.612)).toBeLessThanOrEqual(FIX_TOL);
+    expect(run.capped).toBe(false);
+    expect(run.uncompensable).toBe(true);
+  });
+
+  it.each([
+    ['the default ride (30 km/h, power from the speed), 20 °C', RIDE, 0.327],
+    ['the default ride at 12.2 °C', { ...RIDE, tempC: 12.2 }, 0.038],
+    ['the default ride at 15 °C', { ...RIDE, tempC: 15 }, 0.141],
+    ['cycling 75 kg/180 cm, 200 W at 30 km/h, 25 °C', { ...CYCLIST, tempC: 25, humidity: 50 }, 0.7266],
+    ['running 12 km/h, 20 °C (unchanged)', { ...RUNNER, tempC: 20, humidity: 50 }, 0.951],
+    ['indoors with a fan, 200 W, 20 °C (unchanged)', { sport: 'cycling', powerW: 200, setting: 'indoorFan', tempC: 20, humidity: 50 }, 0.658],
+    ['indoors without a fan, 200 W, 20 °C', { sport: 'cycling', powerW: 200, setting: 'indoorNoFan', tempC: 20, humidity: 50 }, 0.972],
+  ])('golden: %s → %s L/h (±0.005)', (_, input, rateLph) => {
+    expect(Math.abs(estimateSweatRate(input).rateLph - rateLph)).toBeLessThanOrEqual(FIX_TOL);
+  });
+
+  it('keeps the 200 W golden Ereq at 484.82 W (403.21 W before the cap)', () => {
+    expect(estimateSweatRate({ ...CYCLIST, tempC: 25, humidity: 50 }).ereqW).toBeCloseTo(484.82, 2);
+  });
+
+  it('predicts no sweat for the default ride from about 11 °C down, and under 0.1 L/h below about 14 °C', () => {
+    const rate = (tempC) => estimateSweatRate({ ...RIDE, tempC }).rateLph;
+    expect(estimateSweatRate({ ...RIDE, tempC: 11 }).ereqW).toBeLessThanOrEqual(0);
+    expect(rate(11)).toBe(0);
+    expect(rate(11.5)).toBeGreaterThan(0);
+    expect(rate(13.5)).toBeLessThan(0.1);
+    expect(rate(14.5)).toBeGreaterThan(0.1);
   });
 });
 
@@ -403,6 +554,24 @@ describe('estimateSweatRate: properties', () => {
     expect(e.wettedness).toBe(Infinity);
     expect(e.uncompensable).toBe(true);
     expect(e.rateLph).toBe(e.maxRateLph);
+  });
+
+  it('never needs less evaporation with the cycling dry-path cap than without it (property)', () => {
+    // The uncapped heat balance from the result's own terms: Ra at the full air speed for CR and S
+    fc.assert(
+      fc.property(inputArb, (input) => {
+        const e = estimateSweatRate({ ...input, sport: 'cycling' });
+        const fcl = 1 + 0.28 * 0.15;
+        const rcl = 0.155 * 0.15;
+        const ra = 1 / (fcl * (8.3 * e.airSpeedMs ** 0.6 + 4.7));
+        const erf = input.setting === 'outdoor' ? SUN_ERF_W_M2[input.sun] : 0;
+        const dry = (e.bsaM2 * (e.skinTempC - input.tempC)) / (rcl + ra);
+        const sun = (erf * e.bsaM2 * ra) / (ra + rcl);
+        const ereqUncapped = e.heatProductionW - dry - e.respiratoryHeatLossW + sun;
+        expect(e.ereqW).toBeGreaterThanOrEqual(ereqUncapped - 1e-9);
+        expect(e.dryAirSpeedMs).toBeLessThanOrEqual(e.airSpeedMs);
+      }),
+    );
   });
 
   it('never falls when the temperature rises (10–40 °C, others fixed)', () => {

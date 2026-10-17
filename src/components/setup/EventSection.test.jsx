@@ -347,8 +347,9 @@ describe('EventSection: sport and effort', () => {
     expect(speed()).toHaveValue('70');
   });
 
-  it('matches the cycling reference: 200 W at 30 km/h, 25 °C, 50 %, 75 kg, 180 cm → 0.60 L/h', () => {
-    // [jay2024] [gagnon2013] research notes scenario table (final_model.py)
+  it('matches the cycling reference: 200 W at 30 km/h, 25 °C, 50 %, 75 kg, 180 cm → 0.73 L/h', () => {
+    // [jay2024] [gagnon2013] research notes scenario table (final_model.py), with the cycling
+    // dry-path cap at 3 m/s (0.60 L/h before it)
     renderEvent({ athlete: { massKg: 75, heightCm: 180 }, environment: { tempC: 25 } });
     enter(power(), 200);
     expect(latest.inputs).toMatchObject({
@@ -356,7 +357,7 @@ describe('EventSection: sport and effort', () => {
       athlete: { massKg: 75, heightCm: 180 },
       environment: { tempC: 25, humidity: 50, sun: 'none' },
     });
-    expect(Math.abs(latest.plan.sweat.estimate.rateLph - 0.6)).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(latest.plan.sweat.estimate.rateLph - 0.73)).toBeLessThanOrEqual(TOL);
   });
 
   it('shows the running pace for the speed and drops the power field', () => {

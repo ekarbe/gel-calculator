@@ -316,21 +316,25 @@ How the parts connect:
 **Golden default plan** (tested in `plan.test.js`):
 
 - Sweat: cycling at 30 km/h on the flat needs about 158 W (derived from the
-  speed), 678 kcal/h. In 20 °C shade the air flow carries most of the heat
-  away, so the estimate is **0.15 L/h** (± 0.5; `final_model.py` gives the
-  same 0.1504).
+  speed), 678 kcal/h. In 20 °C shade the air flow carries much of the heat
+  away (dry heat loss at the 3 m/s cap, evaporation at the full 8.33 m/s;
+  section 5.5), so the estimate is **0.33 L/h** (0.3267 ± 0.5; Ereq 220 W).
+  Before the cycling dry-path cap it was 0.15 L/h (`final_model.py`: 0.1504).
 - Carbs 75 g/h at 1:0.5: 225 g (157.9 g maltodextrin, 75 g fructose).
-- Fluid 100 ml/h (300 ml). Sodium 300 mg/h (900 mg) from 2,290 mg table salt.
-  Projected scale change −0.56 kg (water deficit 0.15 L, 0.2 % of body mass).
-- 9 gels at 0, 20, …, 160 min; the schedule lists 30, 30, 40, … ml with them.
+- Fluid 250 ml/h (750 ml: 80 % of 327 ml/h, rounded to 50). Sodium 300 mg/h
+  (900 mg) from 2,290 mg table salt (half of the 300 mg/h estimated loss is
+  below the 300 mg/h floor). Projected scale change −0.64 kg (water deficit
+  0.23 L, 0.3 % of body mass).
+- 9 gels at 0, 20, …, 160 min; the schedule lists 80, 80, 90, … ml with them.
 - Gel batch: 375 g at 60 % carbohydrate with 139.8 ml warm water, 290 ml,
   about 4,330 mOsm/kg (shown "≈ 4,300 mOsm/kg, likely higher"); each gel
   42 g with 25 g carbs.
 - Energy 900 kcal from carbs; expenditure 2,035 kcal (shown rounded to 10:
   "about 2,040 kcal").
-- Warnings: `electrolytes.concentrationHigh` (900 mg sodium in 300 ml of
-  fluid is 3,000 mg/L) and info `concentration.gelTakeWithWater` (about 210 ml
-  of water with each gel). See section 13.
+- Warnings: info `concentration.gelTakeWithWater` only (about 210 ml of water
+  with each gel). 900 mg of sodium in 750 ml of fluid is 1,200 mg/L, under the
+  1,725 mg/L limit of `electrolytes.concentrationHigh` (at 0.15 L/h the plan
+  had 300 ml and 3,000 mg/L, and that warning). See section 13.
 - The defaults encode to the share payload `{"v":4}`.
 
 With the preset sweat source (`sweat.source: 'preset'`, 1.25 L/h) the plan
@@ -457,13 +461,16 @@ pa   = rh/100 × psat(Ta);  psat(T) = 0.6108 × exp(17.27 T / (T + 237.3))    kP
 M, W running: M = kg × (3.5 + 3.333 × km/h) × 20.9 / 60, W = 0          ACSM gross running cost
      cycling: M = P / 0.20, W = P;  P = 0 → 0.5 × 1.2 × 0.36 × v³ + 0.005 × (kg + 10) × 9.81 × v
      other:   M = 1.163 × METs × kg, W = 0                               Compendium METs
-v    = run/cycle outdoors: km/h ÷ 3.6; other outdoors 1.0; indoors with a fan 1.5, without 0.2; at least 0.2 m/s
+v    = run/cycle outdoors: km/h ÷ 3.6; other outdoors 1.0; indoors with a fan 1.5, without 0.5; at least 0.2 m/s
 clo  = 0.15 (race kit) for running and cycling, 0.3 otherwise
 Tsk  = clamp(30.78 + 0.125 Ta + 0.198 pa − 0.348 min(v, 3), 30, 36)
-hc   = 8.3 v^0.6;  Rcl = 0.155 clo;  fcl = 1 + 0.28 clo;  Ra = 1 / (fcl (hc + 4.7))
-CR   = A (Tsk − Ta) / (Rcl + Ra)                                         dry heat loss, W
+hc   = 8.3 v^0.6;  Rcl = 0.155 clo;  fcl = 1 + 0.28 clo                  hc at v: evaporation (Emax)
+Ra(u) = 1 / (fcl (8.3 u^0.6 + 4.7))                                      air layer at air speed u
+vCap = cycling: min(v, 3); otherwise v                                    ISO 7933 limit
+vDry = Tsk > Ta: vCap; otherwise v                                        dryAirSpeedMs (cap on a loss only)
+CR   = A (Tsk − Ta) / (Rcl + Ra(vDry))                                   dry heat loss, W
 Resp = 0.0173 M (5.87 − pa) + 0.0014 M (34 − Ta)                         breathing, W
-S    = ERF × A × Ra / (Ra + Rcl);  ERF 0 shade/indoors, 75 partly sunny, 150 full sun (W/m²)
+S    = ERF × A × Ra(vCap) / (Ra(vCap) + Rcl);  ERF 0 shade/indoors, 75 partly sunny, 150 full sun (W/m²)
 Ereq = (M − W) − CR − Resp + S
 Emax = A (psat(Tsk) − pa) / (1 / (16.5 hc fcl))                          (clo ≤ 0.3)
 SR   = Ereq ≤ 0 → 0;  Emax ≤ 0 → SR_MAX;  else w = Ereq / Emax,
@@ -472,6 +479,77 @@ SR   = Ereq ≤ 0 → 0;  Emax ≤ 0 → SR_MAX;  else w = Ereq / Emax,
 SR_MAX = min(3.0, 1.5 A) L/h
 ```
 
+- **Cycling dry-path cap.** For cycling the dry (convective and radiative)
+  heat loss and the sun gain use the air speed capped at 3 m/s, the ISO 7933
+  validity limit, which the skin-temperature regression already applies to
+  its wind term; evaporation (`Emax`) keeps the full riding speed. Without
+  the cap a 30 km/h ride (8.33 m/s) lost so much dry heat that the model sat
+  far below outdoor field data. The result reports both speeds
+  (`airSpeedMs`, `dryAirSpeedMs`), and the heat balance details of the
+  estimate say when heat lost to the air uses the lower one.
+  - Evidence from the lab, hot only. Measured dry heat loss did not rise with
+    the air flow in two hot trials: Otani et al. 2018 (Appl Physiol Nutr
+    Metab 43:131–138, doi 10.1139/apnm-2017-0448) found it similar across
+    0–30 km/h of headwind at 30 °C while skin temperature fell as the air
+    flow rose; Saunders et al. 2005 (Acta Physiol Scand 183:241–255, doi
+    10.1111/j.1365-201X.2004.01400.x) found no thermal difference between
+    100 % and 150 % of road speed at 33 °C and credited the benefit of air
+    flow to evaporation. At 30–33 °C the air is close to skin temperature and
+    the dry exchange is small. Where the cap matters most, at 15–20 °C (the
+    default ride: 0.15 → 0.33 L/h), these studies say nothing, and the cap
+    rests on the outdoor field comparisons below.
+  - Comparisons (measured rates after the 0.2 g/kcal correction of the sweat
+    test, raw body-mass loss in brackets; model without → with the cap, for
+    the inputs given). Outdoors the model reads low, in the lab with strong
+    air flow high:
+    - Jay et al. 2024 [jay2024], outdoors, about 0.93 L/h (1.08) at 179 W and
+      24 °C / 66 %. Model with 75 kg / 180 cm, 31 km/h (the speed that needs
+      179 W) and a sun load of 60 W/m²: 0.54 → 0.70 L/h. The app's sun
+      options bracket it: shade 0.58, partly sunny 0.73 (with the cap).
+    - Brown & Banister 1985 (Eur J Appl Physiol 54:125–130, doi
+      10.1007/BF00426312), outdoors, about 0.71 L/h (0.90) at 15 °C. Model
+      with 70 kg / 178 cm, 220 W, 33 km/h, 60 % humidity, shade: 0.19 →
+      0.46 L/h.
+    - Brown & Banister 1985, simulated outdoor ride in the lab, about
+      0.70–0.75 L/h (0.87–0.94) at about 216 W and 20–23 °C. Model as an
+      outdoor ride at 30 km/h, partly sunny, 21.5 °C: 0.64 → 0.83 L/h.
+    - Jenkins et al. 2023, lab, 0.26, 0.55 and 0.92 L/h (0.41, 0.70, 1.07)
+      at about 180 W, 4.5 m/s of air flow, 18, 27 and 36 °C and a vapour
+      pressure of 1.96 kPa. Model with 68 kg / 174 cm, 180 W at 16.2 km/h,
+      shade: 0.32 → 0.39, 0.70 → 0.73 and 1.09 → 1.09 L/h. The capped model
+      over-predicts by about 0.14, 0.19 and 0.18 L/h, and the cap made the
+      18 °C and 27 °C errors worse (+0.06 and +0.15 without it). At 36 °C
+      the air is hotter than the skin, so the cap does not apply.
+  - Loss only. The cap applies only while the skin loses heat to the air
+    (Tsk > Ta). Air hotter than the skin (from about 34 °C on a fast ride)
+    keeps the full speed for its convective heat gain. Capping the gain too
+    would lower estimates where no data support the cap and the danger is
+    greatest: 200 W at 35 km/h in the shade, 40 °C / 20 % from 1.40 to
+    1.31 L/h, 45 °C / 10 % from 1.65 to 1.49 L/h. The sun gain keeps the
+    capped speed at every temperature, which only raises it and keeps the
+    rate continuous where Ta crosses Tsk. So the cap never lowers a cycling
+    estimate; a property test checks that Ereq is never below the uncapped
+    heat balance.
+  - Cycling only, because the cap was checked only against cycling sweat
+    data. Running faster than 10.8 km/h (3 m/s; the 12 km/h reference run is
+    3.33 m/s) is also outside ISO 7933's validity range and keeps the
+    uncapped dry heat loss, not yet checked against running field data.
+    Other sports use 1.0 m/s outdoors. Their reference values are unchanged.
+- **No-fan floor.** Indoors without a fan the working body still moves the
+  air: 0.5 m/s, for every sport (cycling on a trainer, treadmill running and
+  other sports). The reason is not cycling-specific: ISO 7933, when no
+  walking speed is given, also lowers the air-layer insulation of a worker
+  with a movement speed from the metabolic rate (0.0052 (M − 58) m/s, M in
+  W/m², at most 0.7 m/s). The measured check is cycling only. Still air
+  (0.2 m/s, `hc` 3.16 W/m²K) put a trainer ride at the ceiling: Brown &
+  Banister 1985 measured about 1.0–1.1 L/h after the 0.2 g/kcal correction
+  (1.2–1.3 raw) on a trainer without a fan at about 216 W and 20–23 °C
+  (70 kg / 178 cm), where the model gave the 2.8 L/h ceiling at 0.2 m/s and
+  now gives 1.28 L/h at 21.5 °C (1.16–1.43 over 20–23 °C), slightly high.
+  Other sports change too: 8 METs at 20 °C / 50 % goes from 1.40 L/h and
+  uncompensable (danger `sweat.uncompensable`) to 0.72 L/h, compensable; a
+  12 km/h treadmill run from the 2.77 L/h ceiling to 2.61 L/h, still
+  uncompensable. 0.2 m/s stays the floor for every setting.
 - `uncompensable` when `w > 0.85` (`> 1.0` when acclimatised): danger
   `sweat.uncompensable` for every sweat source, because heat stress does not
   depend on how the rate was found. Acclimatisation changes only this limit,
@@ -480,9 +558,22 @@ SR_MAX = min(3.0, 1.5 A) L/h
   of agreement about ±0.4 L/h).
 - Reference values (tested to ±0.03 L/h against `final_model.py`): run 70 kg /
   175 cm at 12 km/h, 20 °C / 50 % shade → 0.95 L/h (full sun 1.27); 30 °C /
-  60 % → 1.59; cycling 75 kg / 180 cm at 200 W and 30 km/h, 25 °C / 50 % →
-  0.60; other sport at 8 METs, 25 °C / 50 % → 0.75 (the research table's 0.70
-  used race-kit clothing; the spec's 0.3 clo for other sports gives 0.751).
+  60 % → 1.59; other sport at 8 METs, 25 °C / 50 % → 0.75 (the research
+  table's 0.70 used race-kit clothing; the spec's 0.3 clo for other sports
+  gives 0.751). Its cycling value, 75 kg / 180 cm at 200 W and 30 km/h,
+  25 °C / 50 % → 0.60 L/h (Ereq 403 W), predates the cycling dry-path cap
+  and is no longer a test value; the capped model gives 0.73 (below).
+- Regression values of the capped model and the no-fan floor (not
+  research-script goldens; tested to ±0.005 L/h): that 200 W ride → 0.727
+  L/h (Ereq 485 W); the default ride (70 kg / 175 cm, 30 km/h, power from
+  the speed, 20 °C / 50 % shade) → 0.327 L/h (0.038 at 12.2 °C, 0.141 at
+  15 °C, 0 from about 11 °C down); 200 W at 35 km/h, 40 °C / 20 % shade →
+  1.397 (unchanged, air hotter than the skin); the run above → 0.951
+  (unchanged); 200 W at 20 °C / 50 %
+  indoors with a fan → 0.658 (unchanged), without a fan → 0.972 (was the
+  2.77 L/h ceiling); the Brown & Banister trainer (216 W, 70 kg / 178 cm,
+  21.5 °C) → 1.277; without a fan, other sport at 8 METs → 0.717 and the
+  12 km/h run → 2.612 (20 °C / 50 %).
 - Property tests: the rate is finite, ≥ 0 and ≤ SR_MAX, and never falls as the
   temperature rises from 10 to 40 °C.
 
@@ -513,7 +604,7 @@ intensity, weigh bottles, record urine, repeat 2–3 times).
   conditions, never how far the athlete may differ from the model, so a test
   in the event's own conditions gives exactly the measured rate. (Deviation
   from spec section 2, which clamped `testRate ÷ model(test)`: on the default
-  ride the model says 0.15 L/h, so a measured 1.36 L/h was cut to 0.3 L/h.)
+  ride the model says 0.33 L/h, so a measured 1.36 L/h was cut to 0.65 L/h.)
   When the factor hits a limit: warning `sweat.calibrationLimited`, a note,
   and the uncertainty widens to the model's ±0.5 L/h. A note also says when
   the ceiling applied. Without `calibrate`: `rateLph = testRate`.
@@ -1255,24 +1346,52 @@ return exists in the registry.
 
 ## 13. Known limitations
 
-- **The default plan warns.** The spec defaults (a 30 km/h ride in 20 °C
-  shade) give a heat-balance estimate of 0.15 L/h, so the plan asks for only
-  100 ml/h of fluid. The 900 mg of sodium in 300 ml then triggers
-  `electrolytes.concentrationHigh` (3,000 mg/L), and the gel note asks for
-  about 210 ml of water with each gel while the schedule lists 30–40 ml per
-  gel. Both are correct for their own rule; choosing other defaults (for
-  example the preset sweat source) is an open product decision.
+- **Little fluid in the default plan.** The spec defaults (a 30 km/h ride in
+  20 °C shade) give a heat-balance estimate of 0.33 L/h, so the plan asks
+  for 250 ml/h of fluid, below the 400–800 ml/h guideline range. The gel
+  note asks for about 210 ml of water with each gel while the schedule lists
+  80–90 ml per gel. Both are correct for their own rule; choosing other
+  defaults (for example the preset sweat source) is an open product
+  decision. (At the 0.15 L/h of the model before the cycling dry-path cap
+  the plan asked for 100 ml/h, and the 900 mg of sodium in 300 ml also
+  triggered `electrolytes.concentrationHigh`; with 750 ml it no longer
+  does.)
 - **Reload after a share link.** On mount the `?s=` link wins over the
   autosave. After opening a link and editing it, a reload restores the link
   again (the edits are in the autosave but not shown) until `s` is removed
   from the address bar. Opening a saved recipe removes it.
 - **Sweat rate.** The estimate's typical error is ±0.5 L/h, a sweat test's
   ±0.15 L/h. The uncertainty is shown, not propagated into the targets.
+- **Cycling estimate: mixed evidence.** With the dry-path cap at 3 m/s
+  (section 5.5; all rates after the 0.2 g/kcal correction), outdoor field
+  data run about 0.2–0.3 L/h above the model: Jay et al. 2024 [jay2024]
+  measured about 0.93 L/h at 179 W and 24 °C / 66 % where the model gives
+  0.70 (75 kg / 180 cm, 31 km/h, sun load 60 W/m²), Brown & Banister 1985
+  about 0.71 L/h outdoors at 15 °C where it gives 0.46 (70 kg / 178 cm,
+  220 W, 33 km/h, 60 %). Lab trials with strong air flow run below it: the
+  capped model over-predicts Jenkins et al. 2023 (about 180 W, 4.5 m/s) by
+  about 0.15–0.2 L/h at 18, 27 and 36 °C, and the cap made the 18 °C and
+  27 °C errors worse than without it (+0.14 and +0.19 against +0.06 and
+  +0.15 L/h);
+  Brown & Banister's simulated outdoor lab ride measured about 0.70–0.75 L/h
+  at 20–23 °C, where the model gives about 0.83. All of this is within the
+  model's ±0.5 L/h, but in both directions, so the default ride's 0.33 L/h
+  may be too low outdoors or too high for a ride like the lab trials. Above
+  skin temperature (from about 34 °C on a fast ride) the cap does not apply
+  to the heat gained from the air, and no cycling data cover that range. A
+  sweat test is the way to personalise the plan; with "Scale the test to
+  this event" it carries to other conditions.
+- **Indoors without a fan** every sport uses 0.5 m/s of air speed, but only
+  one cycling trainer study checks it (section 5.5): there the model reads
+  about 0.2 L/h high. For other sports it lifts the still-air estimates off
+  the ceiling (8 METs at 20 °C: 1.40 → 0.72 L/h, no longer uncompensable)
+  without data of their own.
 - **No sweat in cool weather.** The heat-balance model is steady state with
   race-kit clothing (0.15 clo) for running and cycling. At speed the air flow
   then carries all the heat away in cool conditions (`Ereq ≤ 0`), so the
-  estimate is 0 L/h: the default 3 h ride at 30 km/h gives 0.003 L/h at
-  17 °C and 0 L/h from about 16.9 °C down (0.15 L/h at 20 °C). The plan then
+  estimate is 0 L/h: the default 3 h ride at 30 km/h gives under 0.1 L/h
+  below about 14 °C (0.04 L/h at 12.2 °C) and 0 L/h from about 11 °C down
+  (0.14 L/h at 15 °C, 0.33 L/h at 20 °C). The plan then
   asks for 0 ml/h of fluid for the whole ride, a drink format reports
   `concentration.noFluidForDrink`, and the gel note still asks for water
   with each gel. Real athletes still sweat a little, so below 0.1 L/h the
@@ -1304,6 +1423,11 @@ return exists in the registry.
 
 ## 14. Open work
 
-- **Cycling sweat estimate.** The heat-balance estimate for the default ride
-  (0.15 L/h at 30 km/h and 20 °C) is low for cycling (section 13); an
-  evidence-based correction is the next planned change.
+- **Cycling sweat estimate.** The dry-path cap at 3 m/s and the 0.5 m/s
+  no-fan floor (section 5.5) raised the default ride from 0.15 to 0.33 L/h
+  and brought a no-fan trainer ride off the ceiling. The evidence is mixed
+  (section 13): outdoor field data run about 0.2–0.3 L/h above the capped
+  model, lab trials with strong air flow about 0.15–0.2 L/h below it.
+  Settling it needs more outdoor data (and running and non-cycling indoor
+  data before the cap or the no-fan floor is judged for those sports); until
+  then a sweat test is the way to personalise.

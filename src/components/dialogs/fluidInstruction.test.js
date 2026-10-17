@@ -9,7 +9,7 @@ const tImperial = createT('en', { unitSystem: 'imperial' });
 describe('fluidInstruction', () => {
   it('takes the fluid with each gel from the schedule', () => {
     expect(fluidInstruction(t, computePlan({}))).toBe(
-      'Drink about 100 ml/h: about 30 ml with each gel. The schedule lists the amount for every gel.',
+      'Drink about 250 ml/h: about 80 ml with each gel. The schedule lists the amount for every gel.',
     );
   });
 

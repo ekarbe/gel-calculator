@@ -105,19 +105,19 @@ describe('SweatSection', () => {
     expect(within(section).getByRole('heading', { level: 2, name: 'Sweat' })).toBeInTheDocument();
     // One h2 (the shell lists the setup sections by their h2 text); every inner heading is h3.
     expect(within(section).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Sweat']);
-    expect(within(section).getByTestId('sweat-header-rate')).toHaveTextContent('0.15 L/h');
+    expect(within(section).getByTestId('sweat-header-rate')).toHaveTextContent('0.33 L/h');
 
-    // Sweat: 30 km/h ride in 20 °C shade for 70 kg/175 cm → 0.15 L/h (final_model.py).
+    // Sweat: 30 km/h ride in 20 °C shade for 70 kg/175 cm → 0.33 L/h (dry heat loss at 3 m/s).
     expect(within(section).getByRole('tablist', { name: 'Sweat source' })).toBeInTheDocument();
     expect(tab('Estimate')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Test')).toHaveAttribute('aria-selected', 'false');
     expect(tab('Presets')).toHaveAttribute('aria-selected', 'false');
     const panel = within(section).getByRole('tabpanel', { name: 'Estimate' });
     const estimate = within(panel).getByTestId('sweat-estimate-panel');
-    expect(within(estimate).getByTestId('sweat-estimate')).toHaveTextContent('0.15 L/h ± 0.5 L/h');
+    expect(within(estimate).getByTestId('sweat-estimate')).toHaveTextContent('0.33 L/h ± 0.5 L/h');
     expect(fact(estimate, 'Heat production')).toHaveTextContent('631 W');
     expect(fact(estimate, 'Energy use')).toHaveTextContent('678 kcal/h');
-    expect(fact(estimate, 'Heat to lose by sweating')).toHaveTextContent('101 W');
+    expect(fact(estimate, 'Heat to lose by sweating')).toHaveTextContent('220 W');
     expect(within(estimate).getByTestId('sweat-estimate-conditions')).toHaveTextContent(
       'Uses: Cycling at 30 km/h (about 158 W), outdoors, 20 °C, 50% humidity, shade or overcast. Change these under Event and Body & weather.',
     );
@@ -133,16 +133,16 @@ describe('SweatSection', () => {
 
     // What the plan uses.
     expect(summary()).toHaveAttribute('data-source', 'estimate');
-    expect(within(summary()).getByTestId('sweat-rate-used')).toHaveTextContent('0.15 L/h');
-    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('likely 0–0.65 L/h');
+    expect(within(summary()).getByTestId('sweat-rate-used')).toHaveTextContent('0.33 L/h');
+    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('likely 0–0.83 L/h');
     expect(within(summary()).getByTestId('sweat-sodium')).toHaveTextContent('920 mg/L');
     expect(within(summary()).getByTestId('sweat-summary-source')).toHaveTextContent('From the estimate');
     expect(within(section).queryByRole('list', { name: 'Warnings' })).not.toBeInTheDocument();
 
-    // Projected body mass: 0.15 L water deficit plus 0.2 g/kcal of 678 kcal/h over 3 h.
+    // Projected body mass: 0.23 L water deficit plus 0.2 g/kcal of 678 kcal/h over 3 h.
     expect(within(projection()).getByRole('heading', { level: 3 })).toHaveTextContent('Projected body-mass change');
     expect(within(projection()).getByTestId('body-mass-scale')).toHaveTextContent('−0.6 kg');
-    expect(fact(projection(), 'Water lost')).toHaveTextContent('0.15 L (0.2% of body mass)');
+    expect(fact(projection(), 'Water lost')).toHaveTextContent('0.23 L (0.3% of body mass)');
     const level = within(projection()).getByTestId('body-mass-level');
     expect(level).toHaveTextContent('Up to 2% loss');
     expect(level).toHaveAttribute('data-level', 'ok');
@@ -283,6 +283,10 @@ describe('SweatSection', () => {
     expect(air).toBeVisible();
     // Riding at 30 km/h outdoors: the air moves at the riding speed.
     expect(air).toHaveTextContent('30 km/h');
+    // ... but heat lost to the air is counted at the ISO 7933 limit of 3 m/s, and the panel says so.
+    expect(screen.getByTestId('sweat-estimate-dry-air')).toHaveTextContent(
+      'Heat lost to the air and heat from the sun are counted at an air speed of at most 10.8 km/h, the limit of the ISO 7933 heat-stress standard. Evaporation of sweat uses the full air speed.',
+    );
     for (const term of ['Skin temperature', 'Heat lost to the air', 'Heat lost by breathing', 'Heat from the sun']) {
       expect(fact(screen.getByTestId('sweat-estimate-panel'), term)).toBeVisible();
     }
@@ -303,6 +307,8 @@ describe('SweatSection', () => {
     expect(fact(panel, 'Heat gained from the air')).toHaveTextContent(new RegExp(`^${-dryW} W$`));
     expect(within(panel).queryByText('Heat lost to the air')).not.toBeInTheDocument();
     expect(screen.getByTestId('sweat-estimate-dry').textContent).not.toMatch(/[−-]/);
+    // Running is not capped: no note about a lower air speed for the dry heat flow.
+    expect(screen.queryByTestId('sweat-estimate-dry-air')).not.toBeInTheDocument();
   });
 
   it('explains the sweat rate with citations', () => {
@@ -315,7 +321,7 @@ describe('SweatSection', () => {
     expect(within(summary()).getByRole('link', { name: /Baker/ })).toHaveAttribute('href', expect.stringContaining('https://doi.org/'));
 
     fireEvent.click(tab('Estimate'));
-    expect(within(summary()).getByText(/Your estimated sweat rate is 0.15 L\/h/)).toBeVisible();
+    expect(within(summary()).getByText(/Your estimated sweat rate is 0.33 L\/h/)).toBeVisible();
     expect(within(summary()).getByRole('link', { name: /Gagnon/ })).toBeInTheDocument();
   });
 
@@ -398,7 +404,7 @@ describe('SweatSection', () => {
     expect(item).toHaveTextContent('Oct 1, 2026 · 60 min · Cycling at 30 km/h, outdoors, 20 °C, 50% humidity, shade or overcast');
 
     // [baker2017] The test was done in the event's own conditions (the form's default), so scaling
-    // to the event keeps the measured 1.36 L/h, although the model predicts only 0.15 L/h.
+    // to the event keeps the measured 1.36 L/h, although the model predicts only 0.33 L/h.
     expect(summary()).toHaveAttribute('data-source', 'test');
     expect(within(summary()).getByTestId('sweat-rate-used')).toHaveTextContent('1.36 L/h');
     expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('likely 1.21–1.51 L/h');
@@ -724,10 +730,10 @@ describe('SweatSection', () => {
 
   it('shows the projected scale change in pounds and the water in fl oz', () => {
     renderSection(undefined, { prefs: IMPERIAL });
-    // −0.558 kg = −1.23 lb; 0.15 L = 5.1 fl oz.
-    expect(within(projection()).getByTestId('body-mass-scale')).toHaveTextContent('−1.2 lb');
-    expect(within(projection()).getByTestId('body-mass-water')).toHaveTextContent('5.1 fl oz (0.2% of body mass)');
-    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('likely 0–22 fl oz/h');
+    // −0.637 kg = −1.40 lb; 0.23 L = 7.8 fl oz; 0.83 L/h = 28 fl oz/h.
+    expect(within(projection()).getByTestId('body-mass-scale')).toHaveTextContent('−1.4 lb');
+    expect(within(projection()).getByTestId('body-mass-water')).toHaveTextContent('7.8 fl oz (0.3% of body mass)');
+    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('likely 0–28 fl oz/h');
   });
 
   it('shows a projected weight gain without a negative loss', () => {
@@ -754,10 +760,10 @@ describe('SweatSection', () => {
     // German text (every key has a German twin, so nothing falls back) and German numbers.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     renderSection({ sweat: { source: 'test' } }, { prefs: { ...METRIC, locale: 'de' } });
-    expect(within(summary()).getByTestId('sweat-rate-used')).toHaveTextContent('0,15 L/h');
-    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('0–0,65 L/h');
+    expect(within(summary()).getByTestId('sweat-rate-used')).toHaveTextContent('0,33 L/h');
+    expect(within(summary()).getByTestId('sweat-rate-range')).toHaveTextContent('0–0,83 L/h');
     const projectionDe = screen.getByRole('group', { name: 'Erwartete Gewichtsänderung' });
-    expect(within(projectionDe).getByTestId('body-mass-water')).toHaveTextContent('0,15 L (0,2 % des Körpergewichts)');
+    expect(within(projectionDe).getByTestId('body-mass-water')).toHaveTextContent('0,23 L (0,3 % des Körpergewichts)');
 
     const panel = screen.getByTestId('sweat-test-panel');
     fireEvent.click(within(panel).getByRole('button', { name: 'Schweißtest hinzufügen' }));

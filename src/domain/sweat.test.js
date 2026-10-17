@@ -371,7 +371,7 @@ describe('resolveSweat: sweat test', () => {
 
   it('returns the measured rate when the test conditions equal the event (golden)', () => {
     // [baker2017] a test in the event's own conditions needs no scaling, however far it is from the model.
-    // Default ride (cycling 30 km/h, 20 °C shade): the model says 0.15 L/h, the athlete measured 1.36 L/h.
+    // Default ride (cycling 30 km/h, 20 °C shade): the model says 0.33 L/h, the athlete measured 1.36 L/h.
     const ride = {
       event: { sport: 'cycling', speedKmh: 30, powerW: 0, mets: 8, setting: 'outdoor' },
       athlete: ATHLETE,
@@ -380,7 +380,7 @@ describe('resolveSweat: sweat test', () => {
     const conditions = { ...ride.event, ...ride.environment };
     const test = { id: 't1', date: '', label: '', preKg: 70.5, postKg: 69.5, fluidL: 0.5, urineL: 0, durationMin: 60, conditions };
     const r = resolveSweat(sweat({ tests: [test] }), ride);
-    expect(r.estimate.rateLph).toBeCloseTo(0.1504, 4);
+    expect(r.estimate.rateLph).toBeCloseTo(0.3267, 4);
     expect(r.test.rateLph).toBeCloseTo(1.364, 3);
     expect(r.calibration).toMatchObject({ factor: 1, ratio: 1, applied: true, clamped: false, capped: false });
     expect(r.calibration.testRatio).toBeCloseTo(r.test.rateLph / r.estimate.rateLph, 12);
@@ -710,8 +710,8 @@ describe('resolveSweat: low estimate', () => {
   });
 
   it('notes when the model predicts very little sweat (a cool ride in race kit)', () => {
-    // [gagnon2013] [jay2024] 30 km/h in race kit at 15 °C: the air carries all the heat away (Ereq ≤ 0)
-    const r = resolveSweat({ source: 'estimate' }, ride(15));
+    // [gagnon2013] [jay2024] 30 km/h in race kit at 10 °C: the air carries all the heat away (Ereq ≤ 0)
+    const r = resolveSweat({ source: 'estimate' }, ride(10));
     expect(r.rateLph).toBe(0);
     expect(r.warnings).toEqual([
       {
@@ -721,13 +721,14 @@ describe('resolveSweat: low estimate', () => {
         citations: ['jay2024', 'kenefick2018'],
       },
     ]);
-    // 17.7 °C: 0.04 L/h, still low
-    expect(resolveSweat({ source: 'estimate' }, ride(17.7)).warnings.map((w) => w.id)).toEqual(['sweat.estimateLow']);
+    // 12.2 °C: 0.04 L/h, still low
+    expect(resolveSweat({ source: 'estimate' }, ride(12.2)).warnings.map((w) => w.id)).toEqual(['sweat.estimateLow']);
   });
 
-  it('has no low-estimate note at 20 °C (0.15 L/h) or for a preset', () => {
+  it('has no low-estimate note at 20 °C (0.33 L/h) or for a preset', () => {
     expect(resolveSweat({ source: 'estimate' }, ride(20)).warnings).toEqual([]);
-    expect(resolveSweat({ source: 'preset' }, ride(15)).warnings).toEqual([]);
+    // 10 °C, where the estimate would be 0 L/h: a preset is not an estimate
+    expect(resolveSweat({ source: 'preset' }, ride(10)).warnings).toEqual([]);
   });
 });
 

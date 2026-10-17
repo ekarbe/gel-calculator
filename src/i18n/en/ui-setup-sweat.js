@@ -97,6 +97,9 @@ const uiSetupSweat = {
   'ui-setup-sweat.estimate.dryHeatGain': 'Heat gained from the air',
   'ui-setup-sweat.estimate.breathing': 'Heat lost by breathing',
   'ui-setup-sweat.estimate.sun': 'Heat from the sun',
+  // Cycling faster than 10.8 km/h: the dry heat flows use the capped air speed (ISO 7933 limit)
+  'ui-setup-sweat.estimate.dryAirSpeedCapped':
+    'Heat lost to the air and heat from the sun are counted at an air speed of at most {speed:speed}, the limit of the ISO 7933 heat-stress standard. Evaporation of sweat uses the full air speed.',
 
   // Exercise conditions as one line (estimate and test list)
   'ui-setup-sweat.conditions.running': 'Running at {speedKmh:speed}',

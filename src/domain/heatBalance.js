@@ -81,6 +81,8 @@
  * @property {boolean} powerFromSpeed  Cycling power was derived from the speed.
  * @property {number} bsaM2  Body surface area in m².
  * @property {number} airSpeedMs  Relative air speed in m/s.
+ * @property {number} dryAirSpeedMs  Air speed used for the dry heat exchange in m/s: for cycling at most 3 while
+ *   the skin loses heat to the air (Tsk > Ta), else `airSpeedMs`.
  * @property {number} skinTempC  Mean skin temperature in °C.
  * @property {number} dryHeatLossW  Convection and radiation from the skin in W (negative when the air is hotter than the skin).
  * @property {number} respiratoryHeatLossW  Heat lost by breathing in W.
@@ -155,6 +157,51 @@ const G = 9.81;
 const AIR_SPEED_OTHER_OUTDOOR = 1.0;
 const AIR_SPEED_FAN = 1.5;
 const AIR_SPEED_MIN = 0.2;
+/**
+ * Air speed indoors without a fan (m/s), for every sport (trainer, treadmill,
+ * other sports): the working body still moves the air around it. The reason
+ * is not sport-specific (ISO 7933, when no walking speed is given, likewise
+ * lowers the air-layer insulation of any worker with a movement speed of
+ * 0.0052 (M − 58) m/s, M in W/m², at most 0.7 m/s), but the measured check is
+ * cycling only: Brown & Banister 1985 (Eur J Appl Physiol 54:125) measured
+ * about 1.0–1.1 L/h after the 0.2 g/kcal correction (1.2–1.3 raw) on a
+ * trainer without a fan at about 216 W and 20–23 °C (70 kg/178 cm), where the
+ * model gives 1.28 L/h at 21.5 °C with 0.5 m/s (slightly high) and the 2.8 L/h
+ * ceiling with 0.2 m/s (still air). Other sports change too: 8 METs at
+ * 20 °C/50 % goes from 1.40 L/h (uncompensable) at 0.2 m/s to 0.72 L/h
+ * (compensable), a 12 km/h treadmill run from the 2.77 L/h ceiling to
+ * 2.61 L/h (still uncompensable).
+ */
+const AIR_SPEED_NO_FAN = 0.5;
+/**
+ * ISO 7933 validity limit for air speed (m/s). The skin-temperature regression
+ * caps its wind term here. For cycling the dry (convective + radiative) heat
+ * loss and the sun gain use the air speed capped at the same limit;
+ * evaporation keeps the full riding speed.
+ *
+ * - Evidence: in hot lab trials measured dry heat loss did not rise with air
+ *   flow (Otani et al. 2018, Appl Physiol Nutr Metab, doi
+ *   10.1139/apnm-2017-0448: similar across 0–30 km/h of headwind at 30 °C
+ *   while skin temperature fell; Saunders et al. 2005, Acta Physiol Scand
+ *   183:241: no thermal difference between 100 % and 150 % of road speed at
+ *   33 °C). At cooler temperatures, where the cap matters most, it rests on
+ *   two outdoor field comparisons that run above the model even with the cap
+ *   (Jay et al. 2024; Brown & Banister 1985). Lab trials with strong air flow
+ *   point the other way: on the same 0.2 g/kcal basis the capped model
+ *   over-predicts Jenkins et al. 2023 (about 180 W, 4.5 m/s, 18–36 °C) by
+ *   about 0.15–0.2 L/h, and the cap made the 18 °C and 27 °C fit worse than
+ *   without it (CORE.md sections 5.5 and 13).
+ * - Loss only: the cap applies only while the skin loses heat to the air
+ *   (Tsk > Ta). Air hotter than the skin keeps the full speed for its
+ *   convective heat gain, so the cap never lowers a hot-weather estimate. The
+ *   sun gain uses the capped speed at every temperature, which only raises
+ *   it and keeps the rate continuous where Ta crosses Tsk.
+ * - Cycling only, because the cap was checked only against cycling sweat
+ *   data. Running faster than 10.8 km/h (e.g. the 12 km/h reference run) is
+ *   also outside ISO 7933's range and keeps the uncapped dry heat loss, not
+ *   yet checked against running field data.
+ */
+const AIR_SPEED_ISO_MAX = 3;
 /** Clothing insulation in clo: race kit for running and cycling, light sportswear otherwise. */
 const CLO_RACE_KIT = 0.15;
 const CLO_OTHER = 0.3;
@@ -268,7 +315,7 @@ export function metabolicRate(input) {
  * Relative air speed over the body in m/s.
  *
  * - Outdoors, running and cycling: the speed (`km/h ÷ 3.6`); other sports 1.0.
- * - Indoors with a fan 1.5; indoors without a fan 0.2.
+ * - Indoors with a fan 1.5; indoors without a fan 0.5 (moving limbs).
  * - Never below 0.2 (free convection from a moving body).
  *
  * An unknown setting is treated as outdoors, an unknown sport as cycling.
@@ -282,7 +329,7 @@ export function airSpeed(input) {
   const where = oneOf(setting, SETTINGS, MODEL_DEFAULTS.setting);
   let v;
   if (where === 'indoorFan') v = AIR_SPEED_FAN;
-  else if (where === 'indoorNoFan') v = AIR_SPEED_MIN;
+  else if (where === 'indoorNoFan') v = AIR_SPEED_NO_FAN;
   else if (s === 'other') v = AIR_SPEED_OTHER_OUTDOOR;
   else v = num(speedKmh, 'speedKmh') / 3.6;
   return Math.max(AIR_SPEED_MIN, v);
@@ -307,10 +354,11 @@ function sweatEfficiency(w) {
  * ```
  * A    = DuBois BSA;  pa = rh/100 × psat(Ta);  v = airSpeed (≥ 0.2)
  * Tsk  = clamp(30.78 + 0.125 Ta + 0.198 pa − 0.348 min(v, 3), 30, 36)
- * hc   = 8.3 v^0.6;  Rcl = 0.155 clo;  fcl = 1 + 0.28 clo;  Ra = 1/(fcl (hc + 4.7))
- * CR   = A (Tsk − Ta)/(Rcl + Ra)
+ * hc   = 8.3 v^0.6;  Rcl = 0.155 clo;  fcl = 1 + 0.28 clo;  Ra(u) = 1/(fcl (8.3 u^0.6 + 4.7))
+ * vCap = cycling ? min(v, 3) : v;  vDry = Tsk > Ta ? vCap : v     (see AIR_SPEED_ISO_MAX)
+ * CR   = A (Tsk − Ta)/(Rcl + Ra(vDry))
  * Resp = 0.0173 M (5.87 − pa) + 0.0014 M (34 − Ta)
- * S    = ERF A Ra/(Ra + Rcl)          (ERF from SUN_ERF_W_M2, outdoors only)
+ * S    = ERF A Ra(vCap)/(Ra(vCap) + Rcl)   (ERF from SUN_ERF_W_M2, outdoors only)
  * Ereq = (M − W) − CR − Resp + S
  * Emax = A (psat(Tsk) − pa) / (1/(16.5 hc fcl) + (clo > 0.3 ? Rcl/(16.5 × 0.38) : 0))
  * Ereq ≤ 0 → 0;  Emax ≤ 0 → SR_MAX;  else w = Ereq/Emax, r = ISO 7933 efficiency,
@@ -323,14 +371,16 @@ function sweatEfficiency(w) {
  *
  * Reference values (research notes, `final_model.py`): run 70 kg/175 cm at
  * 12 km/h, 20 °C/50 % in the shade → 0.95 L/h (full sun 1.27); 30 °C/60 % →
- * 1.59; cycling 75 kg/180 cm at 200 W and 30 km/h, 25 °C/50 % → 0.60; other
- * sport at 8 METs, 25 °C/50 % → 0.75 (0.3 clo; the research table's 0.70
- * used race kit).
+ * 1.59; other sport at 8 METs, 25 °C/50 % → 0.75 (0.3 clo; the research
+ * table's 0.70 used race kit); cycling 75 kg/180 cm at 200 W and 30 km/h,
+ * 25 °C/50 % → 0.60, before the cycling dry-path cap. Regression value of
+ * the capped model (not a research-script golden): that ride → 0.73 L/h.
  *
  * In cool conditions the air flow of race kit at speed can carry all the heat
  * away (`ereqW ≤ 0`), so the model predicts no sweat at all: the default
- * 30 km/h ride gives 0 L/h from about 17 °C down. Real athletes still sweat a
- * little; `resolveSweat` notes low estimates (`sweat.estimateLow`).
+ * 30 km/h ride gives 0 L/h from about 11 °C down (under 0.1 L/h below about
+ * 14 °C). Real athletes still sweat a little; `resolveSweat` notes low
+ * estimates (`sweat.estimateLow`).
  *
  * A missing or `null` input uses the plan defaults.
  *
@@ -360,14 +410,21 @@ export function estimateSweatRate(input) {
   const erf = setting === 'outdoor' ? SUN_ERF_W_M2[sun] : 0;
 
   const pa = (rh / 100) * psat(ta);
-  const tsk = clamp(30.78 + 0.125 * ta + 0.198 * pa - 0.348 * Math.min(v, 3), 30, 36);
+  const tsk = clamp(30.78 + 0.125 * ta + 0.198 * pa - 0.348 * Math.min(v, AIR_SPEED_ISO_MAX), 30, 36);
   const hc = 8.3 * v ** 0.6;
   const rcl = 0.155 * clo;
   const fcl = 1 + 0.28 * clo;
-  const ra = 1 / (fcl * (hc + HR));
-  const dryHeatLossW = (A * (tsk - ta)) / (rcl + ra);
+  /** Air-layer resistance Ra at air speed `u` (convection 8.3 u^0.6 + radiation). */
+  const airResistance = (u) => 1 / (fcl * (8.3 * u ** 0.6 + HR));
+  // Cycling: dry heat loss and sun gain at most at the ISO 7933 limit; heat gained
+  // from air hotter than the skin keeps the full speed (AIR_SPEED_ISO_MAX).
+  const cappedAirSpeedMs = sport === 'cycling' ? Math.min(v, AIR_SPEED_ISO_MAX) : v;
+  const dryAirSpeedMs = tsk > ta ? cappedAirSpeedMs : v;
+  const raDry = airResistance(dryAirSpeedMs);
+  const raSun = airResistance(cappedAirSpeedMs);
+  const dryHeatLossW = (A * (tsk - ta)) / (rcl + raDry);
   const respiratoryHeatLossW = 0.0173 * M * (5.87 - pa) + 0.0014 * M * (34 - ta);
-  const solarGainW = (erf * A * ra) / (ra + rcl);
+  const solarGainW = (erf * A * raSun) / (raSun + rcl);
   const ereqW = M - W - dryHeatLossW - respiratoryHeatLossW + solarGainW;
   const evapResistance = 1 / (LEWIS * hc * fcl) + (clo > 0.3 ? rcl / (LEWIS * 0.38) : 0);
   const emaxW = (A * (psat(tsk) - pa)) / evapResistance;
@@ -403,6 +460,7 @@ export function estimateSweatRate(input) {
     powerFromSpeed,
     bsaM2: A,
     airSpeedMs: v,
+    dryAirSpeedMs,
     skinTempC: tsk,
     dryHeatLossW,
     respiratoryHeatLossW,

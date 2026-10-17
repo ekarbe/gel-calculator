@@ -144,10 +144,10 @@ describe('PrintRecipe: plan summary', () => {
     // 75 g/h × 3 h = 225 g at 1:0.5; 300 mg/h sodium, all of it in 2,290 mg table salt.
     expect(summary('Carbohydrate')).toBe('75 g/h · 225 g in the recipe · glucose:fructose 1:0.5');
     expect(summary('Sodium')).toBe('300 mg/h · 900 mg in the recipe');
-    expect(summary('Fluid')).toBe('100 ml/h · 300 ml in total');
-    expect(summary('Sweat rate')).toBe('0.15 L/h ± 0.5 (heat-balance estimate)');
+    expect(summary('Fluid')).toBe('250 ml/h · 750 ml in total');
+    expect(summary('Sweat rate')).toBe('0.33 L/h ± 0.5 (heat-balance estimate)');
     expect(summary('Body mass')).toBe(
-      'About −0.6 kg on the scale after the activity · Water lost 0.15 L (0.2% of body mass) · Up to 2% loss',
+      'About −0.6 kg on the scale after the activity · Water lost 0.23 L (0.3% of body mass) · Up to 2% loss',
     );
     expect(summary('Format')).toBe('Gels: 9 gels (3 per hour)');
     // The burn is an estimate: rounded to 10 kcal, as the activity summary shows it.
@@ -212,12 +212,12 @@ describe('PrintRecipe: plan summary', () => {
     renderPrint();
     fireEvent.click(screen.getByRole('button', { name: 'Use imperial units' }));
     expect(summary('Conditions')).toBe('Outdoors · 68 °F · 50% humidity · shade or overcast');
-    // −0.558 kg × 2.20462 = −1.23 lb.
-    expect(summary('Body mass')).toMatch(/^About −1\.2 lb on the scale/);
-    expect(summary('Body mass')).toContain('Water lost 5.1 fl oz (0.2% of body mass)');
-    // 100 ml/h for 3 h: 3.4 fl oz/h, 10 fl oz in total. Nutrients stay g and mg.
-    expect(summary('Fluid')).toBe('3.4 fl oz/h · 10 fl oz in total');
-    expect(summary('Sweat rate')).toBe('5.1 fl oz/h ± 17 (heat-balance estimate)');
+    // −0.637 kg × 2.20462 = −1.40 lb; 0.23 L = 7.8 fl oz.
+    expect(summary('Body mass')).toMatch(/^About −1\.4 lb on the scale/);
+    expect(summary('Body mass')).toContain('Water lost 7.8 fl oz (0.3% of body mass)');
+    // 250 ml/h for 3 h: 8.5 fl oz/h, 25 fl oz in total. Nutrients stay g and mg.
+    expect(summary('Fluid')).toBe('8.5 fl oz/h · 25 fl oz in total');
+    expect(summary('Sweat rate')).toBe('11 fl oz/h ± 17 (heat-balance estimate)');
     expect(summary('Carbohydrate')).toBe('75 g/h · 225 g in the recipe · glucose:fructose 1:0.5');
   });
 
@@ -386,7 +386,7 @@ describe('PrintRecipe: mixing steps', () => {
     expect(within(region('Mixing')).queryByRole('list', { name: 'Gel batch steps' })).not.toBeInTheDocument();
     expect(steps('Drink steps')[0]).toEqual([
       'Add the Powders. Make 1 bottle. Put this in each bottle:',
-      ['89 mg Sodium Chloride (Table Salt)'],
+      ['0.19 g Sodium Chloride (Table Salt)'],
     ]);
     unmount();
     renderPrint({ format: { type: 'drink' }, fluid: { mode: 'manual', manualMlPerHour: 0 } });
@@ -446,8 +446,10 @@ describe('PrintRecipe: schedule, warnings and sources', () => {
   });
 
   it('prints every warning with its level written out and its sources', () => {
-    renderPrint();
-    const plan = computePlan({});
+    // 100 ml/h of fluid adds a warning to the note: 900 mg sodium in 300 ml.
+    const inputs = { fluid: { mode: 'manual', manualMlPerHour: 100 } };
+    renderPrint(inputs);
+    const plan = computePlan(inputs);
     const items = within(region('Warnings and notes')).getAllByRole('listitem');
     expect(items).toHaveLength(plan.warnings.length);
     plan.warnings.forEach((warning, i) => {

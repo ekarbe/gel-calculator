@@ -672,10 +672,12 @@ describe('computePlan', () => {
     expect(plan.durationMin).toBe(180);
     expect(plan.durationH).toBe(3);
     // [gagnon2013] [cramer2019] [jay2024] cycling 30 km/h (157.7 W from the speed), 70 kg/175 cm,
-    // 20 °C/50 % shade: the strong air flow carries most heat away, so the model predicts 0.15 L/h
-    // (final_model.py gives the same 0.1504 L/h).
+    // 20 °C/50 % shade: the air flow carries much of the heat away (dry heat loss at the 3 m/s
+    // ISO 7933 limit, evaporation at 8.33 m/s), so the model predicts 0.33 L/h (0.1504 L/h before
+    // the cycling dry-path cap).
     expect(plan.sweat).toMatchObject({ source: 'estimate', uncertaintyLph: 0.5, sodiumMmolL: 40, test: null, calibration: null });
-    expect(plan.sweat.rateLph).toBeCloseTo(0.1504, 4);
+    expect(plan.sweat.rateLph).toBeCloseTo(0.3267, 4);
+    expect(plan.sweat.estimate.dryAirSpeedMs).toBe(3);
     expect(plan.sweat.estimate.powerW).toBeCloseTo(157.7, 6);
     expect(plan.sweat.estimate.energyKcalPerHour).toBeCloseTo(678.44, 2);
     // [jeukendrup2014] [burke2011] > 2.5 h, moderate: middle of 60–90 g/h → 75 g/h
@@ -688,16 +690,17 @@ describe('computePlan', () => {
     expect(plan.carbs.ingredients).toMatchObject({ feasibleRange: [0, 1], adjusted: false, warnings: [] });
     expect(plan.carbs.ingredients.achievedShare).toBeCloseTo(1 / 3, 9);
     expect(plan.carbs.deliveredG).toBeCloseTo(225, 9);
-    // [sawka2007] 80 % of 150 ml/h sweat → 120 → rounded to 100 ml/h
-    expect(plan.fluid.mlPerHour).toBe(100);
-    expect(plan.fluid.totalMl).toBe(300);
-    // [sawka2007] [mccubbin2023] 3 h: at least 300 mg/h (half of a 138 mg/h loss is below the floor)
+    // [sawka2007] 80 % of 327 ml/h sweat → 261 → rounded to 250 ml/h
+    expect(plan.fluid.mlPerHour).toBe(250);
+    expect(plan.fluid.totalMl).toBe(750);
+    // [sawka2007] [mccubbin2023] 3 h: at least 300 mg/h (half of a 300 mg/h loss is below the floor)
     expect(plan.sodium.mgPerHour).toBe(300);
     expect(plan.sodium.totalMg).toBe(900);
-    // [cheuvront2017] 0.15 L deficit (0.2 % of 70 kg); the scale also drops 0.2 g per kcal
+    expect(plan.sodium.recommended.estimatedLossMgPerHour).toBeCloseTo(300.45, 2);
+    // [cheuvront2017] 0.23 L deficit (0.3 % of 70 kg); the scale also drops 0.2 g per kcal
     expect(plan.hydration.level).toBe('ok');
-    expect(plan.hydration.waterDeficitL).toBeCloseTo(0.1512, 4);
-    expect(plan.hydration.scaleChangeKg).toBeCloseTo(-0.558, 3);
+    expect(plan.hydration.waterDeficitL).toBeCloseTo(0.2302, 4);
+    expect(plan.hydration.scaleChangeKg).toBeCloseTo(-0.637, 3);
     expect(plan.gels).toEqual({ perHour: 3, count: 9, times: [0, 20, 40, 60, 80, 100, 120, 140, 160] });
     expect(plan.energy.kcal).toBe(900);
     expect(plan.energy.deliveredKcal).toBeCloseTo(900, 9);
@@ -710,11 +713,9 @@ describe('computePlan', () => {
     expect(plan.concentration.drink).toBeNull();
     expect(plan.caffeine.enabled).toBe(false);
     expect(plan.bicarb.enabled).toBe(false);
-    // [efsa2011] 900 mg sodium in 300 ml fluid = 3000 mg/L; [vist1995] [pfeiffer2010] a 60 % gel
-    expect(plan.warnings.map((w) => [w.id, w.level])).toEqual([
-      ['electrolytes.concentrationHigh', 'warning'],
-      ['concentration.gelTakeWithWater', 'info'],
-    ]);
+    // [efsa2011] 900 mg sodium in 750 ml fluid = 1200 mg/L, under the 1725 mg/L limit;
+    // [vist1995] [pfeiffer2010] a 60 % gel
+    expect(plan.warnings.map((w) => [w.id, w.level])).toEqual([['concentration.gelTakeWithWater', 'info']]);
     expect(plan.inputs).toEqual(DEFAULT_INPUTS);
   });
 
@@ -766,8 +767,8 @@ describe('computePlan', () => {
     expect(types[0]).toBe('start');
     expect(types.at(-1)).toBe('finish');
     expect(types.filter((x) => x === 'fuel')).toHaveLength(8);
-    // 100 ml/h over 20 min gel intervals: 33.3 ml each, rounded on the running total.
-    expect(plan.schedule.map((e) => e.fluidMl ?? 0)).toEqual([30, 30, 40, 30, 30, 40, 30, 30, 40, 0]);
+    // 250 ml/h over 20 min gel intervals: 83.3 ml each, rounded on the running total.
+    expect(plan.schedule.map((e) => e.fluidMl ?? 0)).toEqual([80, 80, 90, 80, 80, 90, 80, 80, 90, 0]);
   });
 
   it('keeps the Phase 1 numbers with the preset sweat source', () => {
@@ -1031,10 +1032,11 @@ describe('computePlan: sweat sources', () => {
   });
 
   it('scales a sweat test to the event conditions with the model', () => {
-    // The test ran at 25 °C; the event is at 20 °C, where the model predicts under half the sweat:
-    // the plan scales the measured rate down by at most half, and says the rate is less certain.
+    // The test ran at 30 °C; the event is at 20 °C, where the model predicts under half the sweat
+    // (0.33 vs 0.71 L/h): the plan scales the measured rate down by at most half, and says the rate
+    // is less certain.
     const plan = computePlan({
-      sweat: { source: 'test', tests: [{ ...test, conditions: { tempC: 25 } }] },
+      sweat: { source: 'test', tests: [{ ...test, conditions: { tempC: 30 } }] },
     });
     expect(plan.sweat.calibration).toMatchObject({ applied: true, clamped: true, factor: 0.5 });
     expect(plan.sweat.rateLph).toBeCloseTo(0.5 * plan.sweat.test.rateLph, 12);
@@ -1044,11 +1046,11 @@ describe('computePlan: sweat sources', () => {
   });
 
   it('keeps a measured rate far above the model when the test matches the event (default ride)', () => {
-    // [baker2017] The add form fills in the event conditions; the model says 0.15 L/h for them.
+    // [baker2017] The add form fills in the event conditions; the model says 0.33 L/h for them.
     const event = { sport: 'cycling', speedKmh: 30, powerW: 0, mets: 8, setting: 'outdoor', tempC: 20, humidity: 50, sun: 'none' };
     const measured = { id: 'a', preKg: 70.5, postKg: 69.5, fluidL: 0.5, urineL: 0, durationMin: 60, conditions: event };
     const plan = computePlan({ sweat: { source: 'test', tests: [measured] } });
-    expect(plan.sweat.estimate.rateLph).toBeCloseTo(0.15, 2);
+    expect(plan.sweat.estimate.rateLph).toBeCloseTo(0.33, 2);
     expect(plan.sweat.test.rateLph).toBeCloseTo(1.364, 3);
     expect(plan.sweat.rateLph).toBe(plan.sweat.test.rateLph);
     expect(plan.sweat.calibration).toMatchObject({ factor: 1, clamped: false });
@@ -1308,8 +1310,8 @@ describe('computePlan: formats', () => {
     expect(plan.carbs.deliveredG).toBeCloseTo(225, 6);
     const { drink } = plan.concentration;
     expect(drink.perBottle.carbsG).toBeCloseTo(225, 6);
-    // [vist1995] [shi1995] 225 g in the plan's 300 ml is 75 % w/v: the checks see all of it.
-    expect(drink.perBottle.carbPctWv).toBeCloseTo(75, 6);
+    // [vist1995] [shi1995] 225 g in the plan's 750 ml is 30 % w/v: the checks see all of it.
+    expect(drink.perBottle.carbPctWv).toBeCloseTo(30, 6);
     expect(ids(plan.warnings)).toEqual(
       expect.arrayContaining(['concentration.drinkTooStrong', 'concentration.veryHypertonic', 'plan.noGels']),
     );
@@ -1387,7 +1389,8 @@ describe('computePlan: review regressions', () => {
   });
 
   // [hewbutler2015] [sawka2007] an all-auto plan never asks for more fluid than the sweat loss
-  it.each([17.6, 17.7, 17.9, 18.9])('an all-auto plan at %s °C never plans to drink more than it sweats', (tempC) => {
+  // Sweat 35, 38, 46 and 97 ml/h: 80 % rounded to 50 ml/h (50 or 100) would be more than the sweat.
+  it.each([12.1, 12.2, 12.4, 13.8])('an all-auto plan at %s °C never plans to drink more than it sweats', (tempC) => {
     const plan = computePlan({ environment: { tempC } });
     expect(plan.fluid.mode).toBe('auto');
     expect(plan.fluid.mlPerHour).toBeLessThanOrEqual(Math.round(plan.sweat.rateLph * 1000));

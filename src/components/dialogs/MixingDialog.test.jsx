@@ -77,9 +77,9 @@ describe('MixingDialog', () => {
     );
     expect(sectionWarnings('gel')).toHaveTextContent('Take each gel with about 210 ml of water.');
 
-    // The fluid comes from the plan and the schedule (100 ml/h; gel 1 lists 30 ml).
+    // The fluid comes from the plan and the schedule (250 ml/h; gel 1 lists 80 ml).
     expect(duringText()).toBe(
-      'Drink about 100 ml/h: about 30 ml with each gel. The schedule lists the amount for every gel.',
+      'Drink about 250 ml/h: about 80 ml with each gel. The schedule lists the amount for every gel.',
     );
     expect(within(dialog()).queryByTestId('mouth-rinse-note')).not.toBeInTheDocument();
     expect(within(dialog()).queryByRole('list', { name: 'Caffeine tablets' })).not.toBeInTheDocument();
@@ -233,9 +233,9 @@ describe('MixingDialog', () => {
     expect(within(dialog()).queryByTestId('mix-section-gel')).not.toBeInTheDocument();
     const drink = block('drink');
     expect(stepTitles(drink)).toEqual(['Step 1: Add the Powders', 'Step 2: Fill and Shake']);
-    expect(lines(drink, 'Drink ingredients')).toEqual([['Sodium Chloride (Table Salt)', '89 mg']]);
-    // 100 ml/h for 30 min: one bottle filled to 50 ml.
-    expect(stepText(drink, 'Fill and Shake')).toMatch(/up to the 50 ml mark/);
+    expect(lines(drink, 'Drink ingredients')).toEqual([['Sodium Chloride (Table Salt)', '0.19 g']]);
+    // 250 ml/h for 30 min: one bottle filled to 125 ml.
+    expect(stepText(drink, 'Fill and Shake')).toMatch(/up to the 125 ml mark/);
     expect(within(dialog()).queryByText(/Warm .* of water/)).not.toBeInTheDocument();
     expect(
       within(dialog()).getByText('There are no carbs to put in gels, so the recipe puts the salts in your drink.'),
@@ -253,7 +253,8 @@ describe('MixingDialog', () => {
       ['Sodium Chloride (Table Salt)', '2.3 g'],
     ]);
     // The drink holds all of it, so its own checks say how strong it is.
-    expect(sectionWarnings('drink')).toHaveTextContent('Each bottle is 75% carbohydrate.');
+    // 225 g in the plan's 750 ml.
+    expect(sectionWarnings('drink')).toHaveTextContent('Each bottle is 30% carbohydrate.');
     expect(within(dialog()).getByText(/No gels are planned, so the recipe puts all the carbs in your drink/)).toBeInTheDocument();
     // No gel, so no "take each gel with water" note.
     expect(within(dialog()).queryByText(/with each gel/)).not.toBeInTheDocument();

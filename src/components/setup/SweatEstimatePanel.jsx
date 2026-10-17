@@ -46,9 +46,11 @@ export function SweatFact({ term, children, testId }) {
  * model derived from the speed, and heat acclimatisation), a note when the
  * estimate hit the model's ceiling, and the heat balance details (air speed,
  * skin temperature, dry, breathing and solar heat flows; the dry flow is
- * named a gain, with its size, when the air is hotter than the skin) behind
- * a disclosure. Every number is from `plan.sweat.estimate`, in the UI language
- * and units. Exported for the guided flow.
+ * named a gain, with its size, when the air is hotter than the skin; a note
+ * when the dry flow uses a lower air speed than evaporation, the cycling cap
+ * at the ISO 7933 limit) behind a disclosure. Every number is from
+ * `plan.sweat.estimate`, in the UI language and units. Exported for the
+ * guided flow.
  */
 export default function SweatEstimatePanel() {
   const t = useT();
@@ -60,6 +62,8 @@ export default function SweatEstimatePanel() {
   const conditions = describeConditions(t, currentConditions(inputs), derivedPowerW);
   // Negative when the air is hotter than the skin: then the body gains that heat (shown as a positive gain).
   const dryHeatW = roundTo(estimate.dryHeatLossW, 0);
+  // Cycling faster than 3 m/s: heat lost to the air (and the sun's heat) uses the capped speed, evaporation the full one.
+  const dryAirCapped = estimate.dryAirSpeedMs < estimate.airSpeedMs;
 
   return (
     <div data-testid="sweat-estimate-panel" className="space-y-3">
@@ -116,6 +120,11 @@ export default function SweatEstimatePanel() {
           <SweatFact term={t("ui-setup-sweat.estimate.breathing")}>{watts(estimate.respiratoryHeatLossW)}</SweatFact>
           <SweatFact term={t("ui-setup-sweat.estimate.sun")}>{watts(estimate.solarGainW)}</SweatFact>
         </dl>
+        {dryAirCapped ? (
+          <p className="mt-3 text-body-sm text-ink-2" data-testid="sweat-estimate-dry-air">
+            {t("ui-setup-sweat.estimate.dryAirSpeedCapped", { speed: roundTo(estimate.dryAirSpeedMs * 3.6, 1) })}
+          </p>
+        ) : null}
       </Disclosure>
     </div>
   );

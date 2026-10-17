@@ -127,7 +127,7 @@ describe('RaceBoard: layout and landmarks', () => {
     expect(regions).toHaveLength(3);
     expect(regions[0]).toBe(screen.getByRole('region', { name: 'Recipe' }));
     expect(regions[1]).toBe(screen.getByRole('region', { name: 'Next up' }));
-    expect(regions[2]).toBe(screen.getByRole('region', { name: 'Warnings (2)' }));
+    expect(regions[2]).toBe(screen.getByRole('region', { name: 'Warnings (1)' }));
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Race board' })).not.toBeInTheDocument();
   });
@@ -195,15 +195,15 @@ describe('RaceBoard: title row', () => {
     renderBoard();
     expect(screen.getByTestId('board-summary')).toHaveTextContent('3:00 h · Cycling · Moderate');
     expect(screen.getByTestId('board-summary')).toHaveClass('display-section');
-    // Heat-balance estimate for 30 km/h at 20 °C in the shade: 0.15 L/h ± 0.5 L/h.
-    expect(screen.getByTestId('board-sweat-chip')).toHaveTextContent(/^Sweat 0\.15 L\/h ±0\.5$/);
-    expect(screen.getByTestId('board-sweat')).toHaveTextContent('Sweat 0.15 L/h ±0.5 Estimate');
+    // Heat-balance estimate for 30 km/h at 20 °C in the shade: 0.33 L/h ± 0.5 L/h.
+    expect(screen.getByTestId('board-sweat-chip')).toHaveTextContent(/^Sweat 0\.33 L\/h ±0\.5$/);
+    expect(screen.getByTestId('board-sweat')).toHaveTextContent('Sweat 0.33 L/h ±0.5 Estimate');
     expect(screen.getByTestId('board-sweat')).toHaveAttribute('data-source', 'estimate');
   });
 
   it.each([
     [{ sweat: { source: 'preset' } }, 'Sweat 1.25 L/h ±0.5', 'Self-assessed'],
-    [{ sweat: { source: 'test' } }, 'Sweat 0.15 L/h ±0.5', 'Estimate (no usable sweat test)'],
+    [{ sweat: { source: 'test' } }, 'Sweat 0.33 L/h ±0.5', 'Estimate (no usable sweat test)'],
     // [baker2017] [cheuvront2017] a sweat test is accurate to about ±0.15 L/h
     [{ sweat: { source: 'test', tests: [TEST] } }, 'Sweat 1.36 L/h ±0.15', 'Sweat test, scaled to this event'],
     [{ sweat: { source: 'test', tests: [TEST], calibrate: false } }, 'Sweat 1.36 L/h ±0.15', 'Sweat test'],
@@ -233,15 +233,15 @@ describe('RaceBoard: title row', () => {
   it('counts the warnings in a chip that opens the panel and moves the focus there', async () => {
     const user = userEvent.setup();
     renderBoard({ caffeine: { enabled: true, asIngredient: true } });
-    const chip = screen.getByRole('button', { name: '5 warnings: show the list' });
+    const chip = screen.getByRole('button', { name: '4 warnings: show the list' });
     expect(chip).toHaveAttribute('data-level', 'danger');
     expect(chip.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     // Drawn as tall as the static sweat chip; a phone board shows the icon and the count (the name says it in full).
     expect(chip).toHaveClass('min-h-7');
     expect(screen.getByTestId('board-sweat-chip')).toHaveClass('min-h-7');
-    expect(within(chip).getByTestId('board-warnings-chip-compact')).toHaveTextContent(/^5$/);
+    expect(within(chip).getByTestId('board-warnings-chip-compact')).toHaveTextContent(/^4$/);
     expect(within(chip).getByTestId('board-warnings-chip-compact')).toHaveClass('@md:hidden');
-    const toggle = within(warningsPanel()).getByRole('button', { name: 'Warnings (5)' });
+    const toggle = within(warningsPanel()).getByRole('button', { name: 'Warnings (4)' });
     expect(chip).toHaveAttribute('aria-controls', toggle.getAttribute('aria-controls'));
 
     await user.click(toggle);
@@ -249,7 +249,7 @@ describe('RaceBoard: title row', () => {
     await user.click(chip);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveFocus();
-    expect(warningItems()).toHaveLength(5);
+    expect(warningItems()).toHaveLength(4);
 
     // Already open: the chip only moves the focus.
     chip.focus();
@@ -291,10 +291,10 @@ describe('RaceBoard: KPI tiles', () => {
     expect(value('sodium')).toBe('300');
     expect(sub('Sodium')).toBe('900 mg total');
     expect(within(tile('Sodium')).queryByTestId('kpi-sodium-status')).not.toBeInTheDocument();
-    // Fluid: 100 ml/h for 3 h; 0.15 L water lost of 70 kg = 0.2 %.
-    expect(value('fluid')).toBe('100');
+    // Fluid: 250 ml/h for 3 h; 0.23 L water lost of 70 kg = 0.3 %.
+    expect(value('fluid')).toBe('250');
     expect(tile('Fluid')).toHaveTextContent('ml/h');
-    expect(sub('Fluid')).toBe('300 ml total · 0.2% loss');
+    expect(sub('Fluid')).toBe('750 ml total · 0.3% loss');
     // Caffeine is off.
     expect(value('caffeine')).toBe('Off');
     expect(sub('Caffeine')).toBe('Not in this plan');
@@ -440,8 +440,9 @@ describe('RaceBoard: KPI tiles', () => {
 
   // [hewbutler2015] drinking more than you sweat means weight gain
   it('flags a projected weight gain with text and an icon, not only colour', () => {
+    // 2.4 L drunk against 0.98 L sweated: 1.42 L gained, 2.0 % of 70 kg.
     renderBoard({ fluid: { mode: 'manual', manualMlPerHour: 800 } });
-    expect(sub('Fluid')).toBe('2,400 ml total · 2.8% gain');
+    expect(sub('Fluid')).toBe('2,400 ml total · 2% gain');
     const status = screen.getByTestId('kpi-fluid-status');
     expect(status).toHaveTextContent('Weight gain');
     expect(status).toHaveAttribute('data-tone', 'danger');
@@ -639,7 +640,8 @@ describe('RaceBoard: recipe lanes', () => {
     renderBoard({ event: { durationMin: 30 } });
     expect(screen.queryByTestId('recipe-section-gel')).not.toBeInTheDocument();
     expect(rows('drink')).toEqual(expectedRows({ event: { durationMin: 30 } }, 'drink'));
-    expect(rows('drink')[0]).toEqual(['Sodium Chloride (Table Salt)', '89 mg']);
+    // 150 mg/h sodium for 30 min = 75 mg, from 191 mg of table salt.
+    expect(rows('drink')[0]).toEqual(['Sodium Chloride (Table Salt)', '0.19 g']);
     expect(warningsPanel()).toHaveTextContent('There are no carbs to put in gels, so the recipe puts the salts in your drink.');
   });
 
@@ -797,10 +799,10 @@ describe('RaceBoard: next up', () => {
   it('lists the first four schedule events with times', () => {
     renderBoard();
     expect(items()).toEqual([
-      ['T+0m', 'Start', 'Start your activity and take gel 1 with about 30 ml fluid.'],
-      ['T+20m', 'Fuel', 'Take gel 2 with about 30 ml fluid.'],
-      ['T+40m', 'Fuel', 'Take gel 3 with about 40 ml fluid.'],
-      ['T+1h', 'Fuel', 'Take gel 4 with about 30 ml fluid.'],
+      ['T+0m', 'Start', 'Start your activity and take gel 1 with about 80 ml fluid.'],
+      ['T+20m', 'Fuel', 'Take gel 2 with about 80 ml fluid.'],
+      ['T+40m', 'Fuel', 'Take gel 3 with about 90 ml fluid.'],
+      ['T+1h', 'Fuel', 'Take gel 4 with about 80 ml fluid.'],
     ]);
     // 10 events in all.
     expect(within(nextUp()).getByTestId('next-more')).toHaveTextContent('6 more events in the full schedule');
@@ -936,8 +938,10 @@ describe('RaceBoard: next up', () => {
 describe('RaceBoard: warnings panel', () => {
   it('lists every plan warning, danger first, open by default and collapsible', async () => {
     const user = userEvent.setup();
-    renderBoard({ caffeine: { enabled: true, asIngredient: true } });
-    const plan = computePlan({ caffeine: { enabled: true, asIngredient: true } });
+    // 100 ml/h of fluid keeps a warning between the danger and the notes: 900 mg sodium in 300 ml.
+    const inputs = { caffeine: { enabled: true, asIngredient: true }, fluid: { mode: 'manual', manualMlPerHour: 100 } };
+    renderBoard(inputs);
+    const plan = computePlan(inputs);
     expect(warningItems().map((li) => li.dataset.level)).toEqual(['danger', 'warning', 'info', 'info', 'info']);
     expect(warningItems()).toHaveLength(plan.warnings.length);
     expect(warningItems()[0]).toHaveTextContent(/^Danger: Add caffeine as 100 mg tablets/);
@@ -957,8 +961,8 @@ describe('RaceBoard: warnings panel', () => {
 
   it('follows plan changes', () => {
     renderBoard();
-    expect(warningItems().map((li) => li.dataset.level)).toEqual(['warning', 'info']);
-    expect(warningItems()[1]).toHaveTextContent('Take each gel with about 210 ml of water.');
+    expect(warningItems().map((li) => li.dataset.level)).toEqual(['info']);
+    expect(warningItems()[0]).toHaveTextContent('Take each gel with about 210 ml of water.');
   });
 });
 
@@ -983,26 +987,26 @@ describe('RaceBoard: warnings announcement', () => {
     vi.useFakeTimers();
     try {
       renderBoard();
-      expect(warningItems()).toHaveLength(2);
+      expect(warningItems()).toHaveLength(1);
       // Caffeine as an ingredient adds the "tablets, never powder" danger and more.
       act(() => latest.set('caffeine', { ...latest.inputs.caffeine, enabled: true, asIngredient: true }));
       expect(status()).toHaveTextContent(/^$/);
       act(() => vi.advanceTimersByTime(WARNINGS_ANNOUNCE_DELAY_MS - 1));
       expect(status()).toHaveTextContent(/^$/);
       act(() => vi.advanceTimersByTime(1));
-      expect(status()).toHaveTextContent(/^5 warnings, 1 danger$/);
+      expect(status()).toHaveTextContent(/^4 warnings, 1 danger$/);
 
       // A change that is undone before it settles is not announced.
       act(() => latest.set('caffeine.asIngredient', false));
       act(() => vi.advanceTimersByTime(WARNINGS_ANNOUNCE_DELAY_MS / 2));
       act(() => latest.set('caffeine.asIngredient', true));
       act(() => vi.advanceTimersByTime(WARNINGS_ANNOUNCE_DELAY_MS * 2));
-      expect(status()).toHaveTextContent(/^5 warnings, 1 danger$/);
+      expect(status()).toHaveTextContent(/^4 warnings, 1 danger$/);
 
-      // Back to no caffeine: two warnings, no danger.
+      // Back to no caffeine: one warning, no danger.
       act(() => latest.set('caffeine.enabled', false));
       act(() => vi.advanceTimersByTime(WARNINGS_ANNOUNCE_DELAY_MS));
-      expect(status()).toHaveTextContent(/^2 warnings$/);
+      expect(status()).toHaveTextContent(/^1 warning$/);
     } finally {
       vi.useRealTimers();
     }
@@ -1047,12 +1051,12 @@ describe('RaceBoard: units, language and currency', () => {
 
   it('shows the gel water and volume in fl oz', () => {
     renderBoard(undefined, { prefs: { unitSystem: 'imperial' } });
-    // 140 ml = 4.7 fl oz; one gel ≈ 32 ml = 1.1 fl oz; 100 ml/h = 3.4 fl oz/h.
+    // 140 ml = 4.7 fl oz; one gel ≈ 32 ml = 1.1 fl oz; 250 ml/h = 8.5 fl oz/h; 0.33 L/h = 11 fl oz/h.
     expect(rows('gel').at(-1)).toEqual(['Warm water', '4.7 fl oz']);
     expect(fact('gel', 'Gel volume')).toBe('≈ 1.1 fl oz');
     expect(fact('gel', 'Gel mass')).toBe('42 g');
-    expect(value('fluid')).toBe('3.4');
-    expect(screen.getByTestId('board-sweat-chip')).toHaveTextContent('Sweat 5.1 fl oz/h ±17');
+    expect(value('fluid')).toBe('8.5');
+    expect(screen.getByTestId('board-sweat-chip')).toHaveTextContent('Sweat 11 fl oz/h ±17');
   });
 
   it.each([730, 740, 745])('never names two equal volumes for a %s ml fill of a 750 ml bottle in fl oz', (ml) => {
@@ -1082,9 +1086,9 @@ describe('RaceBoard: units, language and currency', () => {
 
   it('follows a change of the unit system while open', () => {
     renderBoard();
-    expect(value('fluid')).toBe('100');
+    expect(value('fluid')).toBe('250');
     act(() => latest.ui.setUnitSystem('imperial'));
-    expect(value('fluid')).toBe('3.4');
+    expect(value('fluid')).toBe('8.5');
     act(() => latest.ui.setCurrency('GBP'));
     // GBP 0.012/g × 225 g = £2.70.
     expect(screen.getByTestId('cost-diy')).toHaveTextContent('£2.70');

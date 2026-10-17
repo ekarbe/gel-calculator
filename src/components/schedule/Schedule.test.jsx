@@ -133,13 +133,13 @@ describe('Schedule: gel schedule', () => {
     expect(types()).toEqual(['start', ...Array(8).fill('fuel'), 'finish']);
 
     const items = scheduleItems();
-    // Default plan: the heat-balance estimate gives 0.15 L/h sweat, so 100 ml/h fluid.
-    // 33.3 ml per gel, rounded on the running total: 30, 30, 40, 30, ….
+    // Default plan: the heat-balance estimate gives 0.33 L/h sweat, so 250 ml/h fluid.
+    // 83.3 ml per gel, rounded on the running total: 80, 80, 90, 80, ….
     expect(items[0]).toHaveTextContent('T+0m');
     expect(within(items[0]).getByRole('heading', { name: 'At the start: Start' })).toBeInTheDocument();
-    expect(items[0]).toHaveTextContent('Start your activity and take gel 1 with about 30 ml fluid.');
+    expect(items[0]).toHaveTextContent('Start your activity and take gel 1 with about 80 ml fluid.');
     expect(items[2]).toHaveTextContent('T+40m');
-    expect(items[2]).toHaveTextContent('Take gel 3 with about 40 ml fluid.');
+    expect(items[2]).toHaveTextContent('Take gel 3 with about 90 ml fluid.');
     expect(items[9]).toHaveTextContent('T+3h');
     expect(within(items[9]).getByRole('heading', { name: '3 hours after the start: Finish' })).toBeInTheDocument();
     expect(items[9]).toHaveTextContent('Finish. Begin your recovery.');
@@ -412,7 +412,7 @@ describe('Schedule: fluid advice', () => {
     renderSchedule();
     const plan = computePlan({});
     expect(advice()).toHaveTextContent(t(plan.fluid.recommended.why.summary));
-    expect(advice()).toHaveTextContent('Drink about 100 ml/h.');
+    expect(advice()).toHaveTextContent('Drink about 250 ml/h.');
   });
 
   it('adds the drink-to-thirst hint for short events', () => {

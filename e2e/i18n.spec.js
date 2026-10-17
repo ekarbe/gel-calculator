@@ -117,8 +117,8 @@ test('an American browser starts in imperial units and dollars', async ({ browse
   const page = await context.newPage();
   const errors = await openExpert(page);
   expect(await storedPrefs(page)).toEqual({ locale: 'en', unitSystem: 'imperial', currency: 'USD', mode: 'expert' });
-  // 100 ml/h is 3.4 US fl oz/h; carbs and sodium stay in g and mg.
-  await expect(kpiValue(page, 'fluid')).toHaveText(/^3\.4\s*fl oz\/h$/);
+  // 250 ml/h is 8.5 US fl oz/h; carbs and sodium stay in g and mg.
+  await expect(kpiValue(page, 'fluid')).toHaveText(/^8\.5\s*fl oz\/h$/);
   await expect(kpiValue(page, 'carbs')).toHaveText(/^75\s*g\/h$/);
   // USD 0.015/g × 225 g.
   await expect(page.getByTestId('cost-diy')).toHaveText('$3.38');
@@ -131,8 +131,8 @@ test('imperial units show lb, °F, mph and fl oz, and typed values go back to me
   await chooseSettings(page, { Units: 'Imperial' });
   expect(await storedPrefs(page)).toMatchObject({ unitSystem: 'imperial' });
 
-  // The board: fluid in US fl oz, nutrients still in g and mg.
-  await expect(kpiValue(page, 'fluid')).toHaveText(/^3\.4\s*fl oz\/h$/);
+  // The board: fluid in US fl oz (250 ml/h = 8.5 fl oz/h), nutrients still in g and mg.
+  await expect(kpiValue(page, 'fluid')).toHaveText(/^8\.5\s*fl oz\/h$/);
   await expect(kpiValue(page, 'sodium')).toHaveText(/^\d+\s*mg\/h$/);
   await expect(page.getByTestId('recipe-section-gel').getByRole('listitem').filter({ hasText: 'Warm water' })).toHaveText(/4\.7\s*fl oz/);
   await expect(page.getByTestId('recipe-section-gel').getByRole('listitem').filter({ hasText: 'Maltodextrin' }).getByTestId('item-amount')).toHaveText('158 g');

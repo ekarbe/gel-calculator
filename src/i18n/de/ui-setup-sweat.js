@@ -91,6 +91,9 @@ const uiSetupSweat = {
   'ui-setup-sweat.estimate.dryHeatGain': 'Wärmeaufnahme aus der Luft',
   'ui-setup-sweat.estimate.breathing': 'Wärmeabgabe über die Atmung',
   'ui-setup-sweat.estimate.sun': 'Wärme durch die Sonne',
+  // Cycling faster than 10.8 km/h: the dry heat flows use the capped air speed (ISO 7933 limit)
+  'ui-setup-sweat.estimate.dryAirSpeedCapped':
+    'Die Wärmeabgabe an die Luft und die Wärme durch die Sonne berechnet das Modell mit höchstens {speed:speed} Luftgeschwindigkeit, der Grenze der Hitzestress-Norm ISO 7933. Für die Verdunstung von Schweiß nutzt es die volle Luftgeschwindigkeit.',
 
   // Exercise conditions as one line (estimate and test list)
   'ui-setup-sweat.conditions.running': 'Laufen mit {speedKmh:speed}',
