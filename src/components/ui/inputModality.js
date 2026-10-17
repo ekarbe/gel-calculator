@@ -23,11 +23,14 @@
  *   showed on every dialog opened by a tap. Chromium draws no ring there.
  *   The root element carries `data-input="pointer"` after a pointer press and
  *   `data-input="keyboard"` after a key press; globals.css hides the ring in
- *   pointer mode, except on text fields. A key press brings the rings back.
- * - A tapped button does not take the focus in Safari, so a dialog opened by
- *   a tap saw `<body>` as the focused element and could not give the focus
- *   back on close (VoiceOver users lost their place). `lastActivatedControl()`
- *   names the control the last click activated, for a short while after it.
+ *   pointer mode, except on text fields. A key press brings the rings back,
+ *   and so does leaving the window (focus that returns from the address bar
+ *   is the browser's to mark).
+ * - A tapped button does not take the focus in Safari (the focus stays on
+ *   `<body>` or goes to a focusable ancestor such as `<main tabindex="-1">`),
+ *   so a dialog opened by a tap could not give the focus back to its opener.
+ *   `lastActivatedControl()` names the control the last click activated, for
+ *   a short while after it.
  *
  * The listeners are installed once, when this module is first imported in a
  * browser (capture phase, so they run before React's handlers).
@@ -74,6 +77,13 @@ export function installInputModality() {
     },
     true,
   );
+  // Focus that comes back from the browser's own UI or another window (Tab from
+  // the address bar) arrives without a key press in the page: let the
+  // browser's :focus-visible decide again, as before any input.
+  window.addEventListener('blur', () => {
+    mode = null;
+    delete document.documentElement.dataset.input;
+  });
   document.addEventListener(
     'click',
     (event) => {

@@ -214,6 +214,22 @@ describe('Dialog', () => {
     expect(opener).toHaveFocus();
   });
 
+  it('gives the focus back to the tapped opener when Safari focused its ancestor instead', () => {
+    // WebKit moves the focus of a tap to the nearest focusable ancestor (<main tabindex="-1">).
+    render(
+      <main tabIndex={-1} data-testid="main">
+        <Harness />
+      </main>,
+    );
+    const opener = screen.getByRole('button', { name: 'Open mixing' });
+    screen.getByTestId('main').focus();
+    fireEvent.pointerDown(opener);
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
   it('does not let the body pass its scroll on to the page', async () => {
     const user = userEvent.setup();
     render(<Harness />);

@@ -109,10 +109,12 @@ export default function Dialog({
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!open || !dialog) return undefined;
-    // A tapped button takes no focus in Safari (the focused element is then
-    // <body>): the control the tap activated is the one to give focus back to.
+    // A tapped button takes no focus in Safari: the focus stays on <body> or
+    // moves to a focusable ancestor (<main tabindex="-1">). The control the
+    // tap activated is then the one to give focus back to.
     const active = document.activeElement;
-    const opener = active && active !== document.body ? active : lastActivatedControl();
+    const tapped = lastActivatedControl();
+    const opener = tapped && (!active || active === document.body || active.contains(tapped)) ? tapped : active;
     const html = document.documentElement;
     const previousOverflow = html.style.overflow;
     html.style.overflow = 'hidden';

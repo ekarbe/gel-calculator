@@ -9,8 +9,20 @@ afterEach(() => {
 
 describe('inputModality', () => {
   it('installs its listeners once, when imported in a browser', () => {
+    // Importing the module installed them; a second install adds none.
+    const added = vi.spyOn(document, 'addEventListener');
+    const addedOnWindow = vi.spyOn(window, 'addEventListener');
     expect(installInputModality()).toBe(true);
-    expect(installInputModality()).toBe(true);
+    expect(added).not.toHaveBeenCalled();
+    expect(addedOnWindow).not.toHaveBeenCalled();
+  });
+
+  it('forgets the last input when the window loses focus', () => {
+    fireEvent.pointerDown(document.body);
+    expect(document.documentElement.dataset.input).toBe('pointer');
+    fireEvent.blur(window);
+    expect(inputMode()).toBeNull();
+    expect(document.documentElement.dataset.input).toBeUndefined();
   });
 
   it('marks the root element with the last input: pointer or keyboard', () => {

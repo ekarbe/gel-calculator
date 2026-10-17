@@ -176,6 +176,25 @@ describe('NumberField', () => {
     expect(field()).toHaveValue('1.25');
   });
 
+  it('steps from the decimal reading of a lone separator, and commits it while typing', async () => {
+    const user = userEvent.setup();
+    render(<Controlled label="Body mass" initial={0.5} min={0} max={20} step={0.1} unit="L" />);
+    await user.clear(field());
+    await user.type(field(), '1,250');
+    await user.keyboard('{ArrowUp}');
+    // 1.25 + 0.1, on the 0.1 grid (read as 1250 it would clamp to 20).
+    expect(screen.getByTestId('stored')).toHaveTextContent('1.4');
+    await user.clear(field());
+    await user.type(field(), '1,250');
+    await user.click(screen.getByRole('button', { name: 'Increase Body mass' }));
+    expect(screen.getByTestId('stored')).toHaveTextContent('1.4');
+    // A whole value at once (pasted or filled in) commits while the field keeps the focus.
+    field().focus();
+    fireEvent.change(field(), { target: { value: '1,250' } });
+    expect(field()).toHaveFocus();
+    expect(screen.getByTestId('stored')).toHaveTextContent('1.25');
+  });
+
   it('keeps reading "1,250" as 1250 where the range holds it', async () => {
     const user = userEvent.setup();
     render(<Controlled initial={500} min={0} max={5000} step={10} unit="mg" />);

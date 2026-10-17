@@ -1218,12 +1218,15 @@ components use the tokens only. Fonts load with `next/font/google`
   heading), as Chromium already does and iOS Safari did not:
   `ui/inputModality.js` marks `<html data-input="pointer|keyboard">` from
   the last pointer or key press and globals.css hides the ring in pointer
-  mode except on text fields; any key press brings the rings back. Touch
+  mode except on text fields; any key press brings the rings back, and so
+  does leaving the window (focus that returns from the address bar is the
+  browser's to mark). Touch
   targets are at least 44 px on touch screens.
 - Dialogs are native modal `<dialog>`s with a labelled title: the page
   behind is inert, the focus starts inside, Escape and the backdrop close
   them, and the focus returns to the opener (in Safari, where a tapped
-  button takes no focus, to the control the tap activated). Their body does
+  button takes no focus and the focus stays on `<body>` or goes to
+  `<main tabindex="-1">`, to the control the tap activated). Their body does
   not pass its scroll on to the page (`overscroll-behavior: contain`).
   Openers say `aria-haspopup="dialog"`.
 - A sweat-test form puts the focus on its heading when it opens, not on the

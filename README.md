@@ -79,7 +79,7 @@ The main application page is located at `src/app/page.jsx`.
     npm run test:e2e                         # end-to-end tests against ./out
     ```
 
-    The end-to-end tests run on a desktop and a phone viewport in Chromium, and the phone layout checks also on an iPhone in WebKit (Safari's engine): the guided flow, the race board, German and imperial units, the keyboard and the dialogs, axe accessibility checks in light and dark, guided and expert, English and German, the layout from 360 to 1440 px and the print view.
+    The end-to-end tests run on a desktop and a phone viewport in Chromium: the guided flow, the race board, German and imperial units, the keyboard and the dialogs, axe accessibility checks in light and dark, guided and expert, English and German, the layout from 360 to 1440 px and the print view. The dialog and focus checks in `e2e/ios.spec.js` (tagged `@webkit`) also run on an iPhone 17 in WebKit (Safari's engine).
 
     To use a Chromium you already have, set `PW_CHROMIUM_EXECUTABLE=/path/to/chromium` for `npm run test:e2e`. Without WebKit, run `npm run test:e2e -- --project chromium --project mobile`.
 
