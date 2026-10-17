@@ -185,6 +185,16 @@ export async function expectNoOverflow(page, view) {
  * @param {string} [include] CSS selector to limit the scan to
  */
 export async function seriousViolations(page, include) {
+  // Let entrance animations (e.g. a dialog fading in) finish first: axe reads
+  // the computed colours, and a half-faded element fails colour contrast.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime))
+        .map((a) => a.finished.catch(() => {})),
+    ),
+  );
   let builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']);
   if (include) builder = builder.include(include);
   const { violations } = await builder.analyze();
