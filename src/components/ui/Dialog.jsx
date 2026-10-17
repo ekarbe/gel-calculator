@@ -182,9 +182,10 @@ export default function Dialog({
               {closeLabel ?? t('ui-common.close')}
             </Button>
           </div>
-          {/* flex-auto (basis: content), not flex-1 (basis 0%): WebKit sizes the
-              fit-content modal from the 0% basis, so the body collapsed to 0 px
-              on iPhones. Too tall for the screen, it shrinks (min-h-0) and scrolls. */}
+          {/* flex-auto (basis: its content), not flex-1 (basis 0%): a percentage
+              inside the fit-content modal depends on the dialog's own height, and
+              iOS Safari resolved it to 0, so the body collapsed to its padding on
+              iPhones. Too tall for the screen, it shrinks (min-h-0) and scrolls. */}
           <div data-dialog-body="" className={cx('min-h-0 flex-auto overflow-y-auto px-4 py-4 lg:px-5', bodyClassName)}>
             {description ? (
               <p id={descriptionId} className="mb-3 text-body-sm text-ink-2">

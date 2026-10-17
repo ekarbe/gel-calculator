@@ -106,11 +106,13 @@ function TemplateCard({ template, gPerHour, onApply }) {
   const hasOtherIngredients = Boolean(template.otherIngredients) && template.otherIngredients !== "None";
 
   return (
-    <li className="min-w-0">
+    // A one-cell grid stretches the card to the row's height without a
+    // percentage height, which iOS Safari can resolve to 0 inside a dialog.
+    <li className="grid min-w-0">
       <article
         aria-labelledby={headingId}
         data-template-id={template.id}
-        className="flex h-full flex-col gap-3 rounded-panel border border-line bg-surface p-4"
+        className="flex flex-col gap-3 rounded-panel border border-line bg-surface p-4"
       >
         <div className="flex items-start justify-between gap-2">
           <h3 id={headingId} className="display-title min-w-0 text-ink">

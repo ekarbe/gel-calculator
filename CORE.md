@@ -1078,8 +1078,11 @@ components use the tokens only. Fonts load with `next/font/google`
   typed text while focused, `toInput`/`fromInput`), `Select`, `Switch`
   (`role="switch"`), `Chip` (wraps its text unless told to truncate; an
   interactive chip keeps a 36 px hit area, 44 px on touch), `Dialog`
-  (native `<dialog>` with
-  `showModal()`), `Disclosure`, `Tabs` (roving tab index), `Toast`
+  (native `<dialog>` with `showModal()`, height fit-content up to the
+  screen; the body is `flex: 1 1 auto` with `min-height: 0`, sized by its
+  content and scrolling when the dialog reaches the screen height; no
+  percentage heights inside a dialog, which iOS Safari 26 resolved to 0 and
+  so collapsed every dialog body), `Disclosure`, `Tabs` (roving tab index), `Toast`
   (`role="status"`, polite), `WarningList`, `Why`, `SkipLink`, `Icon`
   (lucide icons, decorative unless named) and `icons/` (logo, Strava and
   GitHub). Hooks: `useFocusAfterRender` (focus an element once React has
@@ -1286,9 +1289,10 @@ return exists in the registry.
   amounts, the bottle fill and the mixing steps in both languages and unit
   systems) that the board, the dialogs and the print view use.
 - **End-to-end tests** (Playwright against the static export, desktop
-  Chrome and a 390 × 844 phone; `e2e/`, helpers in `e2e/helpers.js`; every
-  context starts as an `en-GB` visitor; tags `@phone` and `@desktop` limit a
-  test to one project):
+  Chrome, a 390 × 844 Chrome phone and an iPhone 17 in WebKit; `e2e/`,
+  helpers in `e2e/helpers.js`; every context starts as an `en-GB` visitor;
+  tags `@phone` and `@desktop` limit a test to one Chrome project, and the
+  iPhone runs only the tests tagged `@webkit`):
   - `smoke.spec.js`: no console errors in either mode; the `h1`; the default
     plan (75 g/h, the recipe lines); a duration change to 1 h giving
     15 g/h; a "Why?" revealing its citation; a v4 link restoring 240 min in
@@ -1329,6 +1333,14 @@ return exists in the registry.
     every expert view and every dialog, on both projects, and in the print
     view; in forced colours a switch and a segmented choice still show their
     state.
+  - `ios.spec.js` (`@phone @webkit`, also on the iPhone): every dialog
+    (mixing steps, share, recipe image, settings, my recipes, templates)
+    shows its body's content on a phone, fits the screen with its title,
+    close button and footer, and a body taller than the screen scrolls to its
+    end. Playwright's WebKit is newer than iOS Safari 26, which collapsed
+    the dialog bodies while they had a 0 % flex basis (see `Dialog`); it
+    renders that layout correctly, so the iPhone project guards WebKit
+    layout in general rather than that one bug.
   - `layout.spec.js`: no horizontal overflow at 360, 390, 768, 1024 and
     1440 px (phone emulation below 1024) on every guided screen, every
     expert view and two dialogs, in English and German; two columns from
