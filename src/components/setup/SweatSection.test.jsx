@@ -338,10 +338,11 @@ describe('SweatSection', () => {
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Add a sweat test' }));
     const form = within(panel).getByRole('form', { name: 'Add a sweat test' });
-    expect(within(form).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toBeInTheDocument();
+    // The heading takes the focus, not the date field (iOS would open its date picker at once).
+    expect(within(form).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toHaveFocus();
     expect(within(form).getByText(/Empty your bladder\. Weigh yourself in little or no clothing\./)).toBeInTheDocument();
     const date = within(form).getByLabelText('Date');
-    expect(date).toHaveFocus();
+    expect(date).not.toHaveFocus();
     expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     // Conditions start from the current inputs.
     expect(within(form).getByLabelText('Sport')).toHaveValue('cycling');
@@ -611,11 +612,11 @@ describe('SweatSection', () => {
     expect(readInputs().sweat.tests).toEqual([HOT_RIDE]);
     expect(within(panel).getByRole('form', { name: 'Add a sweat test' })).toBeInTheDocument();
     expect(within(panel).getByRole('radio', { name: 'Hot ride' })).toHaveFocus();
-    // The only test goes too: the focus moves into the open form.
+    // The only test goes too: the focus moves to the open form's heading.
     fireEvent.click(within(panel).getByRole('button', { name: 'Delete Hot ride' }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Yes, delete' }));
     expect(readInputs().sweat.tests).toEqual([]);
-    expect(within(panel).getByLabelText('Date')).toHaveFocus();
+    expect(within(panel).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toHaveFocus();
     view.unmount();
 
     // Another test is being edited.

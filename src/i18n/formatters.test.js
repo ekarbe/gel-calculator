@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createFormat, MINUS, UNIT_SYMBOLS, INPUT_DIGITS } from './formatters';
+import { createFormat, MINUS, UNIT_SYMBOLS, INPUT_DIGITS, parseLocaleNumber, parseInRange } from './formatters';
 
 const en = createFormat('en', { unitSystem: 'metric' });
 const us = createFormat('en', { unitSystem: 'imperial', currency: 'USD' });
@@ -225,6 +225,35 @@ describe('number input', () => {
     expect(en.parseNumber('1,750')).toBe(1750);
     expect(en.parseNumber('100,750')).toBe(100750);
     expect(de.parseNumber('1.750')).toBe(1750);
+  });
+
+  it('reads a lone separator as the decimal one with grouping off', () => {
+    expect(parseLocaleNumber('1,250', 'en', { grouping: false })).toBe(1.25);
+    expect(parseLocaleNumber('70,250', 'en', { grouping: false })).toBe(70.25);
+    expect(parseLocaleNumber('1.250', 'de', { grouping: false })).toBe(1.25);
+    // Both separators, or none: the same as with grouping.
+    expect(parseLocaleNumber('1,250.5', 'en', { grouping: false })).toBe(1250.5);
+    expect(parseLocaleNumber('12', 'de', { grouping: false })).toBe(12);
+    expect(parseLocaleNumber('1,250,000', 'en', { grouping: false })).toBeNaN();
+  });
+
+  it('falls back to the decimal reading when only that one is in the field range', () => {
+    // The iOS decimal keypad offers the separator of the phone's region: an English page on a
+    // French iPhone types 1,250 L as "1,250", which grouped would be 1250 (over the 20 L maximum).
+    const litres = (n) => Number.isFinite(n) && n >= 0 && n <= 20;
+    const kg = (n) => Number.isFinite(n) && n >= 30 && n <= 300;
+    const mg = (n) => Number.isFinite(n) && n >= 0 && n <= 5000;
+    expect(parseInRange('1,250', 'en', litres)).toBe(1.25);
+    expect(parseInRange('70,250', 'en', kg)).toBe(70.25);
+    expect(parseInRange('1.250', 'de', litres)).toBe(1.25);
+    expect(en.parseInRange('1,250', litres)).toBe(1.25);
+    // Both readings in range: the grouped one, as before.
+    expect(parseInRange('1,250', 'en', mg)).toBe(1250);
+    expect(de.parseInRange('1.250', mg)).toBe(1250);
+    // Neither in range, or no number: the usual reading.
+    expect(parseInRange('25', 'en', litres)).toBe(25);
+    expect(parseInRange('9,999', 'en', kg)).toBe(9999);
+    expect(parseInRange('abc', 'en', litres)).toBeNaN();
   });
 
   it('parses numbers typed in German', () => {

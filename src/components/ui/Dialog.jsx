@@ -24,6 +24,7 @@ import Toast from './Toast';
 import { cx } from './cx';
 import { useT } from '../../i18n/useT';
 import { UiContext } from '../../state/UiProvider';
+import { lastActivatedControl } from './inputModality';
 
 /** Width per size. */
 const SIZES = Object.freeze({ sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' });
@@ -47,8 +48,10 @@ const SIZES = Object.freeze({ sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' })
  * for `autoFocus`; else the first element with `data-autofocus` (or an
  * `autofocus` attribute); else the close button. On close (or unmount while
  * open), focus returns to `returnFocus` (a ref) or to the element that had
- * focus when the dialog opened, when it is still in the page. The page does
- * not scroll behind an open dialog.
+ * focus when the dialog opened (after a tap in Safari, which focuses no
+ * button: the control the tap activated, see `inputModality.js`), when it is
+ * still in the page. After a tap no focus ring shows (globals.css). The page
+ * does not scroll behind an open dialog.
  *
  * Toast: inside a `UiProvider` the dialog renders its own toast region (the
  * `toastMessage` of `useUi()`), because the page's toast is inert and
@@ -106,7 +109,10 @@ export default function Dialog({
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!open || !dialog) return undefined;
-    const opener = document.activeElement;
+    // A tapped button takes no focus in Safari (the focused element is then
+    // <body>): the control the tap activated is the one to give focus back to.
+    const active = document.activeElement;
+    const opener = active && active !== document.body ? active : lastActivatedControl();
     const html = document.documentElement;
     const previousOverflow = html.style.overflow;
     html.style.overflow = 'hidden';
@@ -185,8 +191,9 @@ export default function Dialog({
           {/* flex-auto (basis: its content), not flex-1 (basis 0%): a percentage
               inside the fit-content modal depends on the dialog's own height, and
               iOS Safari resolved it to 0, so the body collapsed to its padding on
-              iPhones. Too tall for the screen, it shrinks (min-h-0) and scrolls. */}
-          <div data-dialog-body="" className={cx('min-h-0 flex-auto overflow-y-auto px-4 py-4 lg:px-5', bodyClassName)}>
+              iPhones. Too tall for the screen, it shrinks (min-h-0) and scrolls,
+              without passing its scroll on to the page behind (overscroll-contain). */}
+          <div data-dialog-body="" className={cx('min-h-0 flex-auto overflow-y-auto overscroll-contain px-4 py-4 lg:px-5', bodyClassName)}>
             {description ? (
               <p id={descriptionId} className="mb-3 text-body-sm text-ink-2">
                 {description}

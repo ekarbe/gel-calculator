@@ -153,7 +153,7 @@ const uiDialogs = {
 
   // My recipes dialog
   'ui-dialogs.recipes.description':
-    'Rezepte werden nur in diesem Browser gespeichert. Kopiere einen Link, um ein Rezept auf einem anderen Gerät zu nutzen.',
+    'Rezepte werden nur in diesem Browser gespeichert, und Safari löscht sie nach etwa einer Woche ohne Besuch. Kopiere einen Link, um ein Rezept zu behalten oder auf einem anderen Gerät zu nutzen.',
   'ui-dialogs.recipes.save.heading': 'Aktuellen Plan speichern',
   // {summary} is a recipe summary (below)
   'ui-dialogs.recipes.current': 'Aktueller Plan: {summary}',

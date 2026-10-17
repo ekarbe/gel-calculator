@@ -164,6 +164,27 @@ describe('NumberField', () => {
     expect(screen.getByRole('button', { name: 'Body mass verringern' })).toBeInTheDocument();
   });
 
+  it('reads a lone separator as the decimal one when the grouped number is out of range', async () => {
+    // An English page on an iPhone set to a comma region: its decimal keypad types "1,250" for 1.25.
+    const user = userEvent.setup();
+    render(<Controlled label="Body mass" initial={0.5} min={0} max={20} step={0.1} unit="L" />);
+    await user.clear(field());
+    await user.type(field(), '1,250');
+    expect(screen.getByTestId('stored')).toHaveTextContent('1.25');
+    await user.click(screen.getByRole('button', { name: 'elsewhere' }));
+    expect(screen.getByTestId('stored')).toHaveTextContent('1.25');
+    expect(field()).toHaveValue('1.25');
+  });
+
+  it('keeps reading "1,250" as 1250 where the range holds it', async () => {
+    const user = userEvent.setup();
+    render(<Controlled initial={500} min={0} max={5000} step={10} unit="mg" />);
+    await user.clear(field());
+    await user.type(field(), '1,250');
+    await user.click(screen.getByRole('button', { name: 'elsewhere' }));
+    expect(screen.getByTestId('stored')).toHaveTextContent('1250');
+  });
+
   it('marks an error and can hide the steppers or be disabled', () => {
     const { rerender } = render(<Controlled error="Out of range" steppers={false} />);
     expect(field()).toHaveAttribute('aria-invalid', 'true');

@@ -201,6 +201,26 @@ describe('Dialog', () => {
     expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus();
   });
 
+  it('gives the focus back to the tapped opener when the tap left it unfocused (Safari)', () => {
+    // Safari focuses no button on a tap: the focus stays on <body> while the dialog opens.
+    render(<Harness />);
+    const opener = screen.getByRole('button', { name: 'Open mixing' });
+    expect(document.body).toHaveFocus();
+    fireEvent.pointerDown(opener);
+    fireEvent.click(opener);
+    expect(screen.getByRole('dialog', { name: 'Mixing steps' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it('does not let the body pass its scroll on to the page', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const dialog = await openDialog(user);
+    expect(dialog.querySelector('[data-dialog-body]')).toHaveClass('overscroll-contain', 'flex-auto', 'min-h-0', 'overflow-y-auto');
+  });
+
   it('stops the page from scrolling while open', async () => {
     const user = userEvent.setup();
     render(<Harness />);

@@ -23,6 +23,8 @@ import { useT } from "../../i18n/useT";
 import SkipLink from "../ui/SkipLink";
 import Toast from "../ui/Toast";
 import { cx } from "../ui/cx";
+// Tracks tap vs. key use (focus rings after a tap, focus return in Safari dialogs).
+import "../ui/inputModality";
 import ShellHeader from "./ShellHeader";
 import ShellTabBar from "./ShellTabBar";
 import ShellFooter from "./ShellFooter";

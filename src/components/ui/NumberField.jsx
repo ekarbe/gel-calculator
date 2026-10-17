@@ -124,7 +124,7 @@ export default function NumberField({
 
   /** Steps from the current (typed or stored) number. */
   const stepBy = (multiple) => {
-    const typed = draft === null ? NaN : f.parseNumber(draft);
+    const typed = draft === null ? NaN : f.parseInRange(draft, inRange);
     const base = Number.isFinite(typed) ? typed : Number.isFinite(shown) ? shown : hasMin ? min : 0;
     const next = clamp(roundToStep(base + multiple * stepSize, stepSize));
     setDraft(null);
@@ -201,12 +201,12 @@ export default function NumberField({
                 if (emptyValue !== undefined) onChange(emptyValue);
                 return;
               }
-              const n = f.parseNumber(text);
+              const n = f.parseInRange(text, inRange);
               if (inRange(n)) commit(n);
             }}
             onBlur={() => {
               if (draft === null) return;
-              const n = f.parseNumber(draft);
+              const n = f.parseInRange(draft, inRange);
               if (Number.isFinite(n)) commit(clamp(n));
               setDraft(null);
             }}

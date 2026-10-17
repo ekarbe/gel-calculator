@@ -104,3 +104,39 @@ for (const { name, open, footer } of DIALOGS) {
     expect(errors).toEqual([]);
   });
 }
+
+test('a dialog opened by a tap shows no focus ring until a key is pressed @phone @webkit', async ({ page }) => {
+  // iOS Safari draws :focus-visible on an element focused by script after a tap (the dialog's close button);
+  // the root's data-input="pointer" hides it, and a key press brings it back.
+  const errors = await openExpert(page);
+  const opener = header(page).getByRole('button', { name: 'Settings', exact: true });
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  await expect(dialog).toBeVisible();
+  await settle(page);
+  const close = dialog.getByRole('button', { name: 'Close', exact: true });
+  const outline = (locator) => locator.evaluate((el) => `${getComputedStyle(el).outlineStyle} ${getComputedStyle(el).outlineWidth}`);
+  await expect(close).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.dataset.input)).toBe('pointer');
+  expect(await outline(close)).toMatch(/^none /);
+
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.dataset.input)).toBe('keyboard');
+  expect(await outline(close)).toBe('solid 2px');
+  // The rule itself (Chromium draws no ring after a tap anyway): pointer mode hides the ring of an
+  // element that matches :focus-visible.
+  expect(await close.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
+  await page.evaluate(() => {
+    document.documentElement.dataset.input = 'pointer';
+  });
+  expect(await outline(close)).toMatch(/^none /);
+
+  // Closed by a tap, the dialog gives the focus back to its opener, again without a ring.
+  await close.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await outline(opener)).toMatch(/^none /);
+  expect(errors).toEqual([]);
+});

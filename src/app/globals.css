@@ -246,6 +246,14 @@
   }
 }
 
+/* After a tap or a click, no focus ring where script moved the focus (a dialog's close button, a
+   guided step's heading): iOS Safari draws :focus-visible there, Chromium does not. inputModality.js
+   sets data-input on <html>; a key press brings the rings back. Text fields keep their ring, as in
+   every browser. Unlayered, so it also wins over the focus-ring utility. */
+html[data-input="pointer"] :focus-visible:not(input, textarea, select, [contenteditable]) {
+  outline: none;
+}
+
 /* Small uppercase caption (labels above numbers): the design's caption role, uppercase +0.06em. */
 @utility caption {
   font-size: var(--text-caption);
