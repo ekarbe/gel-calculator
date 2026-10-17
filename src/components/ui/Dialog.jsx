@@ -174,7 +174,7 @@ export default function Dialog({
     >
       {open && shown ? (
         <>
-          <div className="flex items-start justify-between gap-3 border-b border-line py-2 pl-4 pr-2 lg:pl-5">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line py-2 pl-4 pr-2 lg:pl-5">
             <h2 id={titleId} className="display-section min-w-0 py-2 text-ink">
               {title}
             </h2>
@@ -182,7 +182,10 @@ export default function Dialog({
               {closeLabel ?? t('ui-common.close')}
             </Button>
           </div>
-          <div className={cx('min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-5', bodyClassName)}>
+          {/* flex-auto (basis: content), not flex-1 (basis 0%): WebKit sizes the
+              fit-content modal from the 0% basis, so the body collapsed to 0 px
+              on iPhones. Too tall for the screen, it shrinks (min-h-0) and scrolls. */}
+          <div data-dialog-body="" className={cx('min-h-0 flex-auto overflow-y-auto px-4 py-4 lg:px-5', bodyClassName)}>
             {description ? (
               <p id={descriptionId} className="mb-3 text-body-sm text-ink-2">
                 {description}
@@ -191,7 +194,7 @@ export default function Dialog({
             {children}
           </div>
           {footer ? (
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3 lg:px-5">{footer}</div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3 lg:px-5">{footer}</div>
           ) : null}
           {ui ? <Toast layer="dialog" message={ui.toastMessage} tone={ui.toastTone} /> : null}
         </>
