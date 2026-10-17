@@ -338,10 +338,11 @@ describe('SweatSection', () => {
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Add a sweat test' }));
     const form = within(panel).getByRole('form', { name: 'Add a sweat test' });
-    expect(within(form).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toBeInTheDocument();
+    // The heading takes the focus, not the date field (iOS would open its date picker at once).
+    expect(within(form).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toHaveFocus();
     expect(within(form).getByText(/Empty your bladder\. Weigh yourself in little or no clothing\./)).toBeInTheDocument();
     const date = within(form).getByLabelText('Date');
-    expect(date).toHaveFocus();
+    expect(date).not.toHaveFocus();
     expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     // Conditions start from the current inputs.
     expect(within(form).getByLabelText('Sport')).toHaveValue('cycling');
@@ -545,6 +546,21 @@ describe('SweatSection', () => {
     ]);
   });
 
+  it('saves a body mass typed with a lone comma as its decimal when the grouped number is out of range', () => {
+    // An English page on an iPhone set to a comma region: the decimal keypad types "70,250" for 70.25 kg.
+    renderSection({ sweat: { source: 'test' } });
+    const panel = screen.getByTestId('sweat-test-panel');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add a sweat test' }));
+    const form = within(panel).getByRole('form');
+    fireEvent.change(within(form).getByLabelText('Body mass after (kg)'), { target: { value: '69' } });
+    const pre = within(form).getByLabelText('Body mass before (kg)');
+    pre.focus();
+    fireEvent.change(pre, { target: { value: '70,250' } });
+    fireEvent.submit(form);
+    expect(within(panel).queryByRole('form')).not.toBeInTheDocument();
+    expect(readInputs().sweat.tests).toMatchObject([{ preKg: 70.25, postKg: 69 }]);
+  });
+
   it('deletes a sweat test only after an in-page confirmation', () => {
     renderSection({ sweat: { source: 'test', tests: [HOT_RIDE, COOL_RIDE], selectedTestId: 't1' } });
     const panel = screen.getByTestId('sweat-test-panel');
@@ -611,11 +627,11 @@ describe('SweatSection', () => {
     expect(readInputs().sweat.tests).toEqual([HOT_RIDE]);
     expect(within(panel).getByRole('form', { name: 'Add a sweat test' })).toBeInTheDocument();
     expect(within(panel).getByRole('radio', { name: 'Hot ride' })).toHaveFocus();
-    // The only test goes too: the focus moves into the open form.
+    // The only test goes too: the focus moves to the open form's heading.
     fireEvent.click(within(panel).getByRole('button', { name: 'Delete Hot ride' }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Yes, delete' }));
     expect(readInputs().sweat.tests).toEqual([]);
-    expect(within(panel).getByLabelText('Date')).toHaveFocus();
+    expect(within(panel).getByRole('heading', { level: 3, name: 'Add a sweat test' })).toHaveFocus();
     view.unmount();
 
     // Another test is being edited.

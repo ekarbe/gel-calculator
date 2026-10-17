@@ -104,7 +104,7 @@ describe('RecipesDialog: opening and closing', () => {
     expect(dialog().tagName).toBe('DIALOG');
     expect(screen.getByTestId('modal')).toHaveTextContent(RECIPES_MODAL);
     expect(dialog()).toHaveAccessibleDescription(
-      'Recipes are saved in this browser only. Copy a link to use one on another device.',
+      'Recipes are saved in this browser only, and Safari deletes them after about a week without a visit. Copy a link to keep a recipe or to use it on another device.',
     );
   });
 

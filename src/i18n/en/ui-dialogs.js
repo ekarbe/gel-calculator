@@ -157,7 +157,8 @@ const uiDialogs = {
   'ui-dialogs.templates.applied': '{name} template applied.',
 
   // My recipes dialog
-  'ui-dialogs.recipes.description': 'Recipes are saved in this browser only. Copy a link to use one on another device.',
+  'ui-dialogs.recipes.description':
+    'Recipes are saved in this browser only, and Safari deletes them after about a week without a visit. Copy a link to keep a recipe or to use it on another device.',
   'ui-dialogs.recipes.save.heading': 'Save the current plan',
   // {summary} is a recipe summary (below)
   'ui-dialogs.recipes.current': 'Current plan: {summary}',

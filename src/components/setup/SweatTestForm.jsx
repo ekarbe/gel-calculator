@@ -43,8 +43,9 @@ import { rateForText } from "./SweatHelpers";
  * not touch is saved unchanged; typed values convert back and are rounded
  * (mass to 1 g, volumes to 1 ml, speed and temperature to 0.01). The form
  * shows the test protocol and a live preview of the result
- * (`sweatTestRate`, the same numbers the plan uses). The date field gets the
- * focus when the form opens; Escape cancels.
+ * (`sweatTestRate`, the same numbers the plan uses). The form's heading
+ * gets the focus when the form opens (not the date field, which would open
+ * the iOS date picker at once); Escape cancels.
  *
  * Enter submits without leaving the field, and a number field keeps a typed
  * number outside its range (or text that is no number) until it loses focus.
@@ -66,11 +67,11 @@ export default function SweatTestForm({ idPrefix, mode, initial, onSave, onCance
   const [draft, setDraft] = useState(initial);
   // The latest draft, for a save right after a field commits (before React renders the new state).
   const draftRef = useRef(initial);
-  const dateRef = useRef(/** @type {HTMLInputElement|null} */ (null));
+  const headingRef = useRef(/** @type {HTMLHeadingElement|null} */ (null));
   const id = (name) => `${idPrefix}-${name}`;
 
   useEffect(() => {
-    dateRef.current?.focus();
+    headingRef.current?.focus();
   }, []);
 
   /** @param {SweatTestDraft} next */
@@ -95,11 +96,11 @@ export default function SweatTestForm({ idPrefix, mode, initial, onSave, onCance
     const typed = field.value;
     flushSync(() => field.blur());
     if (field.value === typed) return true;
-    const n = f.parseNumber(typed);
     const min = field.getAttribute("aria-valuemin");
     const max = field.getAttribute("aria-valuemax");
-    const inRange = Number.isFinite(n) && (min === null || n >= Number(min)) && (max === null || n <= Number(max));
-    if (inRange) return true; // Only the formatting changed (e.g. "70.0" → "70").
+    const accepts = (n) => Number.isFinite(n) && (min === null || n >= Number(min)) && (max === null || n <= Number(max));
+    // The same reading as the field's own (NumberField): a lone separator may be the decimal one.
+    if (accepts(f.parseInRange(typed, accepts))) return true; // Only the formatting changed (e.g. "70.0" → "70").
     field.focus();
     return false;
   };
@@ -141,7 +142,7 @@ export default function SweatTestForm({ idPrefix, mode, initial, onSave, onCance
       }}
       className="@container space-y-4 rounded-panel border border-line-strong bg-surface p-3 lg:p-4"
     >
-      <Heading id={headingId} className="display-title text-ink">
+      <Heading id={headingId} ref={headingRef} tabIndex={-1} className="display-title text-ink">
         {mode === "edit" ? t("ui-setup-sweat.form.editTitle") : t("ui-setup-sweat.form.addTitle")}
       </Heading>
 
@@ -155,7 +156,6 @@ export default function SweatTestForm({ idPrefix, mode, initial, onSave, onCance
       <div className={grid}>
         <Field label={t("ui-setup-sweat.form.date")} id={id("date")}>
           <input
-            ref={dateRef}
             type="date"
             value={draft.date}
             onChange={(event) => update({ date: event.target.value })}

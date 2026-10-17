@@ -140,7 +140,7 @@ export default function SweatTestPanel({ idPrefix, headingLevel = 3 }) {
     // A deleted selected test leaves `selectedTestId` naming no test: the inputs turn it into null (the last test).
     set("sweat.tests", (list) => (Array.isArray(list) ? list.filter((test) => test?.id !== testId) : []));
     // The focused "Yes, delete" goes away with its row. Add is not shown while the form is open.
-    focusAfterRender(...(neighbour ? [id(`${neighbour.id}-use`)] : []), id("add"), id("form-date"));
+    focusAfterRender(...(neighbour ? [id(`${neighbour.id}-use`)] : []), id("add"), id("form-heading"));
   };
 
   return (
