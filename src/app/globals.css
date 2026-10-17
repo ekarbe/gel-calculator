@@ -14,119 +14,350 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
+
+/*  "Race day" design system (Phase 3, direction C).
+
+    Colour tokens are plain custom properties on :root (light) and .dark
+    (dark; next-themes puts the class on <html>), exposed to Tailwind with
+    `@theme inline`, so utilities read them directly: bg-surface, text-ink,
+    text-muted, border-line, bg-glucose-soft, text-danger, outline-focus …
+    Components use these tokens only (no hex values, no default palette).
+    scripts/check-contrast.mjs reads the two token blocks below and checks
+    every text/background pair for WCAG AA in both themes (it runs in the
+    test suite); fix a failure by changing the token here, never per
+    component. Changes against the design doc: dark --glucose #4d94ff →
+    #559aff (4.48:1 on its soft tint, now 4.7:1) and the extra --line-strong
+    for control borders (3:1, WCAG 1.4.11). */
+
 @import "tailwindcss";
 
 /* Follow the class next-themes puts on <html> instead of the OS media query. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --color-bg-primary: var(--bg-primary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-card: var(--card-bg);
-  --color-card-bg: var(--card-bg);
-  --color-modal-bg: var(--modal-bg);
-  --color-card-border: var(--card-border);
-  --color-card-border-hover: var(--card-border-hover);
-  --color-apple-blue: #007AFF;
-  --color-apple-green: #34C759;
-  --color-apple-red: #FF3B30;
-  --color-apple-amber: #FF9500;
-  --color-apple-purple: #AF52DE;
-  --color-apple-teal: #2dd4bf;
-  
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  
-  --radius-glass: 2rem;
-  --shadow-glass: 0 4px 24px rgba(0, 0, 0, 0.04);
-  --shadow-glass-hover: 0 12px 48px rgba(0, 0, 0, 0.08);
-}
-
 @layer base {
   :root {
-    --bg-primary: #f5f5f7;
-    --text-primary: #1d1d1f;
-    --text-secondary: #86868b;
-    --card-bg: rgba(255, 255, 255, 0.65);
-    --modal-bg: rgba(255, 255, 255, 0.90);
-    --card-border: rgba(0, 0, 0, 0.04);
-    --card-border-hover: rgba(0, 0, 0, 0.1);
+    color-scheme: light;
+    /* Surfaces and text */
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --surface-2: #eceef2;
+    --line: #d9dde3;
+    --line-strong: #7c8593;
+    --ink: #0b0e13;
+    --ink-2: #3c4554;
+    --muted: #5b6573;
+    /* Primary action and focus */
+    --accent: #f5a300;
+    --accent-ink: #0b0e13;
+    --focus: #1863d2;
+    /* One colour per substance */
+    --glucose: #1863d2;
+    --fructose: #7a4bd8;
+    --sodium: #097266;
+    --fluid: #0869a2;
+    --caffeine: #925621;
+    /* Status (always with an icon and text) */
+    --ok: #127440;
+    --warn: #925600;
+    --danger: #b42318;
+    /* Soft tints for chips and lane backgrounds: 12 % on the surface */
+    --glucose-soft: color-mix(in srgb, var(--glucose) 12%, var(--surface));
+    --fructose-soft: color-mix(in srgb, var(--fructose) 12%, var(--surface));
+    --sodium-soft: color-mix(in srgb, var(--sodium) 12%, var(--surface));
+    --fluid-soft: color-mix(in srgb, var(--fluid) 12%, var(--surface));
+    --caffeine-soft: color-mix(in srgb, var(--caffeine) 12%, var(--surface));
+    --ok-soft: color-mix(in srgb, var(--ok) 12%, var(--surface));
+    --warn-soft: color-mix(in srgb, var(--warn) 12%, var(--surface));
+    --danger-soft: color-mix(in srgb, var(--danger) 12%, var(--surface));
+    --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    /* Dim layer behind a modal dialog (dialog::backdrop) */
+    --scrim: rgb(0 0 0 / 0.55);
   }
 
   .dark {
     color-scheme: dark;
-    --bg-primary: #000000;
-    --text-primary: #f5f5f7;
-    --text-secondary: #86868b;
-    --card-bg: rgba(28, 28, 30, 0.65);
-    --modal-bg: rgba(28, 28, 30, 0.90);
-    --card-border: rgba(255, 255, 255, 0.1);
-    --card-border-hover: rgba(255, 255, 255, 0.2);
-  }
-
-  body {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    line-height: 1.6;
-    transition: background-color 0.3s ease, color 0.3s ease;
-    /* Mesh Background Setup */
-    position: relative;
-    overflow-x: hidden;
-  }
-
-  body::before {
-    content: '';
-    position: fixed;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background-image: radial-gradient(circle at 50% 50%, rgba(0, 122, 255, 0.08) 0%, transparent 60%),
-                      radial-gradient(circle at 20% 80%, rgba(175, 82, 222, 0.05) 0%, transparent 50%),
-                      radial-gradient(circle at 80% 20%, rgba(52, 199, 89, 0.04) 0%, transparent 40%);
-    z-index: -1;
-    animation: meshPulse 20s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
-
-  .dark body::before {
-    background-image: radial-gradient(circle at 50% 50%, rgba(0, 122, 255, 0.15) 0%, transparent 60%),
-                      radial-gradient(circle at 20% 80%, rgba(175, 82, 222, 0.12) 0%, transparent 50%),
-                      radial-gradient(circle at 80% 20%, rgba(52, 199, 89, 0.1) 0%, transparent 40%);
-  }
-
-  @keyframes meshPulse {
-    0% { transform: scale(1) rotate(0deg); }
-    100% { transform: scale(1.1) rotate(5deg); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    body::before { animation: none; }
+    --bg: #0b0e13;
+    --surface: #141922;
+    --surface-2: #1b222d;
+    --line: #263040;
+    --line-strong: #677283;
+    --ink: #f2f4f7;
+    --ink-2: #b4bdca;
+    --muted: #8d98a8;
+    --accent: #ffb020;
+    --accent-ink: #0b0e13;
+    --focus: #6aa8ff;
+    --glucose: #559aff;
+    --fructose: #b08cff;
+    --sodium: #2dd4bf;
+    --fluid: #5ac8fa;
+    --caffeine: #d9a066;
+    --ok: #4cc38a;
+    --warn: #f0b44c;
+    --danger: #ff7a6e;
+    /* Soft tints: 18 % on the surface */
+    --glucose-soft: color-mix(in srgb, var(--glucose) 18%, var(--surface));
+    --fructose-soft: color-mix(in srgb, var(--fructose) 18%, var(--surface));
+    --sodium-soft: color-mix(in srgb, var(--sodium) 18%, var(--surface));
+    --fluid-soft: color-mix(in srgb, var(--fluid) 18%, var(--surface));
+    --caffeine-soft: color-mix(in srgb, var(--caffeine) 18%, var(--surface));
+    --ok-soft: color-mix(in srgb, var(--ok) 18%, var(--surface));
+    --warn-soft: color-mix(in srgb, var(--warn) 18%, var(--surface));
+    --danger-soft: color-mix(in srgb, var(--danger) 18%, var(--surface));
+    --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--surface));
+    --scrim: rgb(0 0 0 / 0.65);
   }
 }
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
+@theme inline {
+  /* Colours */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-focus: var(--focus);
+  --color-glucose: var(--glucose);
+  --color-glucose-soft: var(--glucose-soft);
+  --color-fructose: var(--fructose);
+  --color-fructose-soft: var(--fructose-soft);
+  --color-sodium: var(--sodium);
+  --color-sodium-soft: var(--sodium-soft);
+  --color-fluid: var(--fluid);
+  --color-fluid-soft: var(--fluid-soft);
+  --color-caffeine: var(--caffeine);
+  --color-caffeine-soft: var(--caffeine-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  /* Fonts (next/font variables set on <html> in src/app/layout.jsx) */
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-barlow-condensed), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale: text-caption, text-body-sm, text-body, text-title, text-section, text-kpi, text-kpi-lg, text-hero */
+  /* The caption size carries no tracking of its own: the +0.06em belongs to the
+     uppercase caption role (the `caption` utility below), not to small
+     mixed-case text set in `text-caption` (lane details, citation links). */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.25rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.5rem;
+  --text-title--letter-spacing: 0.02em;
+  --text-section: 1.5rem;
+  --text-section--line-height: 1.75rem;
+  --text-section--letter-spacing: 0.02em;
+  --text-kpi: 2.25rem;
+  --text-kpi--line-height: 1;
+  --text-kpi-lg: 3rem;
+  --text-kpi-lg--line-height: 1;
+  --text-hero: 3.5rem;
+  --text-hero--line-height: 1;
+
+  /* Shape and depth: rounded-panel (10 px), rounded-control (8 px, inputs and chips), rounded-full for pills */
+  --radius-panel: 10px;
+  --radius-control: 8px;
+  --shadow-dialog: 0 12px 40px rgb(0 0 0 / 0.25);
+
+  /* Motion: 150–200 ms opacity/transform only, off under prefers-reduced-motion (below) */
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-rise-in: rise-in 200ms ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Keep focused controls and scrolled-to sections clear of the sticky header and the fixed
+       bottom bar (tab bar or guided dock): the shell sets the two heights while they are pinned
+       (usePinnedHeight), 0 otherwise. WCAG 2.4.11. */
+    scroll-padding-top: calc(var(--pinned-top, 0px) + 0.5rem);
+    scroll-padding-bottom: calc(var(--pinned-bottom, 0px) + 0.5rem);
   }
 
-  .bg-modal {
-    background-color: var(--color-modal-bg);
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  .glass-card {
-    background-color: var(--card-bg);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-glass);
-    box-shadow: var(--shadow-glass);
-    transition: box-shadow 0.4s ease, border-color 0.4s ease;
+  /* Every focusable element gets the same visible ring (2 px, offset 2). */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
-  .glass-card:hover {
-    box-shadow: var(--shadow-glass-hover);
-    border-color: var(--card-border-hover);
+  ::selection {
+    background-color: color-mix(in srgb, var(--focus) 28%, transparent);
+  }
+
+  /* Numbers line up: the display and data faces always use tabular figures. */
+  .font-display,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  dialog {
+    color: var(--ink);
+  }
+
+  /* The backdrop of a modal dialog. ::backdrop inherits the tokens from its
+     dialog in current browsers; the fallback covers older ones. */
+  dialog::backdrop {
+    background-color: var(--scrim, rgb(0 0 0 / 0.55));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Small uppercase caption (labels above numbers): the design's caption role, uppercase +0.06em. */
+@utility caption {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Condensed display headings: card titles (title) and section headings (section). */
+@utility display-title {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  letter-spacing: var(--text-title--letter-spacing);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@utility display-section {
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+  letter-spacing: var(--text-section--letter-spacing);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Big tabular number of a KPI tile: 2.25 rem on phones, 3 rem from 1024 px. */
+@utility kpi-value {
+  font-family: var(--font-display);
+  font-size: var(--text-kpi);
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  @media (width >= 64rem) {
+    font-size: var(--text-kpi-lg);
+  }
+}
+
+/* Tabular numerals for numbers in body text (alias of tabular-nums). */
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The focus ring, for elements that style their own outline away. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Sticky 1 rem under the header (its height is --pinned-top, set by the shell; 3.5 rem until
+   measured) and never taller than the screen below it: the expert race board. */
+@utility sticky-below-header {
+  position: sticky;
+  top: calc(var(--pinned-top, 3.5rem) + 1rem);
+  max-height: calc(100dvh - var(--pinned-top, 3.5rem) - 2rem);
+}
+
+/* Safe-area padding for the sticky header and the phone tab bar. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Print: black on white with every colour token flattened, so nothing
+   depends on colour; the print view (src/components/print) does the rest. */
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --line: #000000;
+    --line-strong: #000000;
+    --ink: #000000;
+    --ink-2: #000000;
+    --muted: #000000;
+    --accent: #ffffff;
+    --accent-ink: #000000;
+    --focus: #000000;
+    --glucose: #000000;
+    --fructose: #000000;
+    --sodium: #000000;
+    --fluid: #000000;
+    --caffeine: #000000;
+    --ok: #000000;
+    --warn: #000000;
+    --danger: #000000;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  @page {
+    margin: 14mm;
   }
 }

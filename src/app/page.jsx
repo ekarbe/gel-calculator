@@ -15,53 +15,59 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import App from "./app";
-import { CalculatorProvider } from "../context/CalculatorContext";
+import { PlanProvider } from "../state/PlanProvider";
+import { UiProvider } from "../state/UiProvider";
+import { t } from "../i18n";
 
-const siteUrl = 'https://eikekarbe.com';
-const pageUrl = `${siteUrl}/gel-calculator`;
-const title = 'DIY Energy Gel & Sports Drink Calculator | Optimize Your Fuel';
-const description = 'Calculate precise carb ratios (glucose:fructose) and electrolyte needs for your endurance activity. Create custom DIY energy gel or sports drink recipes.';
-const imageUrl = `${siteUrl}/favicon.svg`;
+export const SITE_URL = 'https://eikekarbe.com';
+export const PAGE_URL = `${SITE_URL}/gel-calculator`;
+/** The social preview card (1200 × 630, `public/og.png`), as an absolute URL. */
+export const OG_IMAGE_URL = `${PAGE_URL}/og.png`;
+
+const title = t('ui-shell.meta.title');
+const description = t('ui-shell.meta.description');
+const image = { url: OG_IMAGE_URL, width: 1200, height: 630, alt: t('ui-shell.meta.imageAlt'), type: 'image/png' };
 
 export const metadata = {
-  title: title,
-  description: description,
+  title,
+  description,
   keywords: ['energy gel calculator', 'diy sports drink', 'sports nutrition', 'endurance fuel', 'electrolytes', 'carbohydrates', 'homemade gel', 'cycling', 'running', 'triathlon'],
   alternates: {
-    canonical: pageUrl,
+    canonical: PAGE_URL,
   },
 
   openGraph: {
-    title: title,
-    description: description,
-    url: pageUrl,
-    siteName: 'Gel Calculator',
-    images: [
-      {
-        url: imageUrl,
-        width: 24,
-        height: 24,
-        alt: 'Gel Calculator Logo',
-      },
-    ],
+    title,
+    description,
+    url: PAGE_URL,
+    siteName: t('ui-shell.wordmark'),
+    images: [image],
     locale: 'en_US',
     type: 'website',
   },
 
   twitter: {
-    card: 'summary',
-    title: title,
-    description: description,
-    images: [imageUrl],
+    card: 'summary_large_image',
+    title,
+    description,
+    images: [image],
   },
 };
 
+/**
+ * The calculator page. `PlanProvider` holds the inputs and the computed plan
+ * (and restores a `?s=` share link or the autosave on mount); `UiProvider`
+ * holds the dialogs, the toast, the UI prefs (language, units, currency,
+ * mode) and the layout state. `App` renders the whole page frame, including
+ * its one `<main>`. The metadata is English (the static page has no
+ * language preference yet; the shell sets `<html lang>` after mount).
+ */
 export default function Page() {
   return (
-    <CalculatorProvider>
-      <main className="min-h-screen">
+    <PlanProvider>
+      <UiProvider>
         <App />
-      </main>
-    </CalculatorProvider>
+      </UiProvider>
+    </PlanProvider>
   );
 }
