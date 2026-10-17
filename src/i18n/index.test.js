@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import fc from 'fast-check';
-import { t, hasMessage, MESSAGES, CATALOGS } from './index';
+import {
+  t,
+  createT,
+  hasMessage,
+  MESSAGES,
+  CATALOGS,
+  LOCALE_CATALOGS,
+  LOCALE_MESSAGES,
+  LOCALES,
+  DEFAULT_LOCALE,
+  PLACEHOLDER_TYPES,
+  placeholdersOf,
+  placeholderNames,
+  fillPlaceholders,
+} from './index';
 import { computePlan, DEFAULT_INPUTS, INPUT_OPTIONS } from '../domain/plan';
 
 afterEach(() => {
@@ -235,7 +249,7 @@ describe('coverage of the domain', () => {
         continue;
       }
       const text = t(message);
-      const unfilled = text.match(/\{\w+\}/g);
+      const unfilled = text.match(/\{\w+(?::\w+)*\}/g);
       if (unfilled) missing.add(`${message.key} leaves ${unfilled.join(', ')}`);
     }
     for (const event of plan.schedule) {
@@ -323,5 +337,259 @@ describe('coverage of the domain', () => {
     expect([...missing]).toEqual([]);
     // Sanity check that the walk reaches most of the catalog.
     expect(seen.size).toBeGreaterThan(100);
+  });
+});
+
+describe('placeholders', () => {
+  it('lists plain, typed and unit-less placeholders in order', () => {
+    const text = 'Drink {mlPerHour:volume}/h, {lo:volumeL:nounit}–{hi:volumeL}/h, gel {gel}.';
+    expect(placeholdersOf(text)).toEqual(['mlPerHour:volume', 'lo:volumeL:nounit', 'hi:volumeL', 'gel']);
+    expect(placeholderNames(text)).toEqual(['mlPerHour', 'lo', 'hi', 'gel']);
+    expect(placeholdersOf(undefined)).toEqual([]);
+    expect(placeholderNames(42)).toEqual([]);
+  });
+
+  it('uses only known placeholder types in every catalog', () => {
+    for (const [key, text] of Object.entries(MESSAGES)) {
+      for (const token of placeholdersOf(text)) {
+        const [, type, ...flags] = token.split(':');
+        if (type !== undefined) expect(PLACEHOLDER_TYPES, `${key}: ${token}`).toContain(type);
+        for (const flag of flags) expect(flag, `${key}: ${token}`).toBe('nounit');
+      }
+    }
+  });
+
+  it('types the quantity placeholders of the domain catalogs', () => {
+    // Every ml, L, kg, % or °C right after a placeholder must come from a typed one.
+    for (const [key, text] of Object.entries(MESSAGES)) {
+      expect(text, key).not.toMatch(/\{\w+\} ?(ml|L\b|kg|%|°|km\/h|cm)/);
+    }
+  });
+
+  it('writes no fixed volume, mass or temperature as literal text, so imperial converts them too', () => {
+    // A literal "25 ml" or "1 kg" would stay metric in imperial; quantities go through typed placeholders.
+    // Nutrients (g, mg, mg/L, mmol/L, mOsm/kg) and percentages are not converted, so they may be literal.
+    const literal = /\b\d+(?:[.,]\d+)?\s?(ml|L|kg|°C|km\/h|cm)(?![\w/])/;
+    for (const [key, text] of Object.entries(MESSAGES)) {
+      if (key.startsWith('ui-dialogs.templates.data.')) continue; // product label prose, quoted as printed
+      expect(text, key).not.toMatch(literal);
+    }
+  });
+});
+
+describe('createT', () => {
+  const metric = createT('en', { unitSystem: 'metric' });
+  const imperial = createT('en', { unitSystem: 'imperial' });
+  const de = createT('de', { unitSystem: 'metric' });
+
+  it('is the module t for English metric, cached per locale, units and currency', () => {
+    expect(createT()).toBe(t);
+    expect(createT('en', { unitSystem: 'metric', currency: 'EUR' })).toBe(t);
+    expect(createT('en', { unitSystem: 'imperial' })).toBe(imperial);
+    expect(createT('xx')).toBe(t);
+    expect(t.locale).toBe('en');
+    expect(t.unitSystem).toBe('metric');
+    expect(imperial.unitSystem).toBe('imperial');
+    expect(de.locale).toBe('de');
+    expect(Object.isFrozen(t)).toBe(true);
+  });
+
+  it('keeps every English sentence unchanged in metric', () => {
+    expect(metric('fluid.why.plan', { mlPerHour: 800, sharePct: 80, sweatMlPerHour: 1250, maxMlPerHour: 800 })).toBe(
+      'Drink about 800 ml/h. This replaces roughly 80% of your sweat loss of 1,250 ml/h, capped at 800 ml/h. Drinking less than you sweat avoids weight gain.',
+    );
+    expect(metric('sweat.why.test', { rateLph: 1.36, uncertaintyLph: 0.15, lo: 1.21, hi: 1.51 })).toBe(
+      'Your sweat test gives 1.36 L/h for this event. A careful test is accurate to about ±0.15 L/h, so your rate is likely 1.21–1.51 L/h.',
+    );
+    expect(metric('bicarb.why.dose', { gPerKg: 0.3, massKg: 70, doseG: 21 })).toBe('Your dose is 0.3 g/kg for 70 kg, or 21 g.');
+    expect(metric('recipe.water.drink', { ml: 600 })).toBe('Water, to fill each bottle to 600 ml');
+    expect(metric('concentration.warn.syrupsThinner', { targetPct: 60, pct: 52.5 })).toContain('more than a 60% gel');
+    expect(metric('fluid.warn.deficitMild', { deficitL: 1.35, deficitPct: 1.9, limitPct: 2 })).toBe(
+      'With this plan you would lose about 1.35 L of water, 1.9% of your body mass. Losses above 2% can start to hurt performance, mostly in the heat.',
+    );
+    expect(metric('carbs.warn.tooLittleFructose', { gPerHour: 95, minRatio: '1:0.55' })).toContain('use at least 1:0.55 glucose');
+    // A mass is written as a mass (1 L of water is 1 kg; the old text said "0.18 L of mass").
+    expect(metric('sweat.why.testCorrection', { correctionL: 0.18, energyKcal: 913 })).toBe(
+      'The test result leaves out 0.18 kg of mass you lost by burning about 913 kcal. That loss comes from fuel and breathing, not sweat.',
+    );
+  });
+
+  it('converts typed quantities to imperial units', () => {
+    expect(imperial('fluid.warn.aboveCeiling', { mlPerHour: 1000, maxMlPerHour: 800 })).toBe(
+      'You plan to drink 34 fl oz/h. Guidelines suggest up to 27 fl oz/h. Larger amounts can upset your stomach.',
+    );
+    expect(imperial('sweat.why.test', { rateLph: 1.36, uncertaintyLph: 0.15, lo: 1.21, hi: 1.51 })).toBe(
+      'Your sweat test gives 46 fl oz/h for this event. A careful test is accurate to about ±5.1 fl oz/h, so your rate is likely 41–51 fl oz/h.',
+    );
+    expect(imperial('bicarb.why.dose', { gPerKg: 0.3, massKg: 70, doseG: 21 })).toBe('Your dose is 0.3 g/kg for 154.3 lb, or 21 g.');
+    expect(imperial('schedule.fuelWithFluid', { gel: 2, fluidMl: 150 })).toBe('Take gel 2 with about 5.1 fl oz fluid.');
+    // Nutrients and percentages are never converted.
+    expect(imperial('electrolytes.warn.sodiumHigh', { mgPerHour: 1200, limitMgPerHour: 1000 })).toContain('1,200 mg/h');
+    expect(imperial('fluid.warn.deficitMild', { deficitL: 1.35, deficitPct: 1.9, limitPct: 2 })).toContain('46 fl oz of water, 1.9% of');
+    // A mass stays a mass in imperial (lb, never fl oz).
+    expect(imperial('sweat.why.testCorrection', { correctionL: 0.4, energyKcal: 2000 })).toContain('leaves out 0.9 lb of mass');
+    // The sweat-test rule and the mouth rinse follow the unit system the test form and the drink use.
+    expect(metric('sweat.why.measure', { lossKg: 1, sweatL: 1 })).toMatch(/ Count 1 kg as 1 L\.$/);
+    expect(imperial('sweat.why.measure', { lossKg: 1, sweatL: 1 })).toMatch(/ Count 2\.2 lb as 34 fl oz\.$/);
+    expect(metric('carbs.mouthRinse.howTo', { rinseMl: 25 })).toContain('Swish 25 ml of a 6–8% maltodextrin drink');
+    expect(imperial('carbs.mouthRinse.howTo', { rinseMl: 25 })).toContain('Swish 0.8 fl oz of a 6–8% maltodextrin drink');
+  });
+
+  it('writes German text with German numbers and typed values', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(de('fluid.warn.aboveSweat', { mlPerHour: 1500, sweatMlPerHour: 1250.5 })).toContain('Du planst 1.500 ml/h zu trinken.');
+    expect(de('sweat.why.preset', { rateLph: 1.25, lo: 0.75, hi: 1.75 })).toBe(
+      'Du hast eine Schweißrate von 1,25 L/h gewählt. Eine Selbsteinschätzung ist grob, deine tatsächliche Rate liegt also wahrscheinlich bei 0,75–1,75 L/h.',
+    );
+    expect(de('concentration.warn.drinkStrong', { pct: 9.5, limitPct: 8 })).toBe(
+      'Jede Flasche enthält 9,5 % Kohlenhydrate. Über 8 % verlässt ein Getränk den Magen langsamer. Teste es im Training.',
+    );
+    expect(de('carbs.warn.ratioNotReachable', { target: '1:0.5', achievable: '1:0.25' })).toContain(
+      'Mit deinen Zutaten ist 1:0,5 Glukose zu Fruktose nicht möglich. Das Rezept nutzt 1:0,25,',
+    );
+    expect(de('carbs.ratio.why.medium', { fructose: 0.5 })).toContain('Nimm 1:0,5 Glukose zu Fruktose');
+    expect(de('schedule.fuel', { gel: -1234 })).toBe('Nimm Gel −1.234.');
+    expect(de('bicarb.why.dose', { gPerKg: 0.3, massKg: 70, doseG: 21 })).toBe('Deine Dosis: 0,3 g/kg bei 70 kg, also 21 g.');
+    expect(de('fluid.warn.deficitMild', { deficitL: 1.35, deficitPct: 1.9, limitPct: 2 })).toContain(
+      'etwa 1,35 L Wasser verlieren, 1,9 % deines Körpergewichts',
+    );
+    expect(de('ui-common.why')).toBe('Warum?');
+    // Every key has German text, so nothing falls back.
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('converts typed quantities to imperial units in German too', () => {
+    const deImperial = createT('de', { unitSystem: 'imperial' });
+    expect(deImperial('fluid.warn.aboveCeiling', { mlPerHour: 1000, maxMlPerHour: 800 })).toBe(
+      'Du planst 34 fl oz/h zu trinken. Leitlinien empfehlen bis zu 27 fl oz/h. Größere Mengen können deinen Magen belasten.',
+    );
+    expect(deImperial('schedule.fuelWithFluid', { gel: 2, fluidMl: 150 })).toBe('Nimm Gel 2 mit etwa 5,1 fl oz Flüssigkeit.');
+    expect(deImperial('bicarb.why.dose', { gPerKg: 0.3, massKg: 70, doseG: 21 })).toBe('Deine Dosis: 0,3 g/kg bei 154,3 lb, also 21 g.');
+    // Nutrients stay in mg in every unit system.
+    expect(deImperial('electrolytes.warn.sodiumHigh', { mgPerHour: 1200, limitMgPerHour: 1000 })).toContain('1.200 mg/h');
+  });
+
+  it('falls back to English for a key German lacks, and warns once per locale and key', async () => {
+    // A German catalog without its keys, in a fresh copy of this module.
+    vi.resetModules();
+    vi.doMock('./de/ui-common', () => ({ default: {} }));
+    try {
+      const fresh = await import('./index');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const deFresh = fresh.createT('de');
+      const key = 'ui-common.close';
+      expect(fresh.hasMessage(key, 'de')).toBe(false);
+      expect(deFresh(key)).toBe('Close');
+      expect(deFresh(key)).toBe('Close');
+      expect(deFresh('ui-common.increase', { label: 1234.5 })).toBe('Increase 1.234,5');
+      expect(warn.mock.calls.filter(([text]) => text.includes(`[i18n] Missing de message: ${key} (using en)`))).toHaveLength(1);
+    } finally {
+      vi.doUnmock('./de/ui-common');
+      vi.resetModules();
+    }
+  });
+
+  it('leaves typed placeholders without a value as written', () => {
+    expect(imperial('recipe.water.drink')).toBe('Water, to fill each bottle to {ml:volume}');
+    expect(imperial('recipe.water.drink', { ml: null })).toBe('Water, to fill each bottle to {ml:volume}');
+  });
+
+  it('accepts numeric strings for typed placeholders and keeps other strings', () => {
+    expect(imperial('recipe.water.drink', { ml: '600' })).toBe('Water, to fill each bottle to 20 fl oz');
+    expect(imperial('recipe.water.drink', { ml: 'lots of' })).toBe('Water, to fill each bottle to lots of');
+    expect(metric('schedule.fuel', { gel: 'two' })).toBe('Take gel two.');
+  });
+
+  it('formats every placeholder type', () => {
+    const fill = (template, params) => fillPlaceholders(template, params, { locale: 'en', unitSystem: 'imperial', currency: 'USD' });
+    expect(fill('{v:temp}', { v: 20 })).toBe('68 °F');
+    expect(fill('{v:speed}', { v: 30 })).toBe('18.6 mph');
+    expect(fill('{v:height}', { v: 175 })).toBe('5 ft 9 in');
+    expect(fill('{v:pace}', { v: 5 })).toBe('8:03 min/mi');
+    expect(fill('{v:pace:nounit}', { v: 5 })).toBe('8:03');
+    expect(fill('{v:integer}', { v: 2.6 })).toBe('3');
+    expect(fill('{v:currency}', { v: 3.375 })).toBe('$3.38');
+    expect(fill('{v:ratio}', { v: { glucose: 2, fructose: 1 } })).toBe('1:0.5');
+    expect(fill('{v:ratio}', { v: 3 })).toBe('3');
+    expect(fill('{v:unknown}', { v: 1234.5678 })).toBe('1,234.568');
+    expect(fill('{v:mass:nounit}', { v: 70 })).toBe('154.3');
+    expect(fill('{v:volumeL}', { v: 0.15 })).toBe('5.1 fl oz');
+    expect(fill('{v:percent}', { v: 12.25 })).toBe('12.25%');
+    expect(fill('{a} and {b}', { a: 1 })).toBe('1 and {b}');
+    expect(fill('no placeholders', undefined)).toBe('no placeholders');
+    const metricFill = (template, params) => fillPlaceholders(template, params);
+    expect(metricFill('{v:temp}', { v: 20.25 })).toBe('20.25 °C');
+    expect(metricFill('{v:height}', { v: 175 })).toBe('175 cm');
+    expect(metricFill('{v:currency}', { v: 3.375 })).toBe('€3.38');
+    expect(fillPlaceholders('{v:currency}', { v: 3.375 }, { locale: 'de', currency: 'EUR' })).toBe('3,38\u00a0€');
+  });
+});
+
+describe('catalogs per locale', () => {
+  it('registers English and German catalogs under the same namespaces', () => {
+    expect(LOCALES).toEqual(['en', 'de']);
+    expect(DEFAULT_LOCALE).toBe('en');
+    expect(LOCALE_CATALOGS.en).toBe(CATALOGS);
+    expect(LOCALE_MESSAGES.en).toBe(MESSAGES);
+    expect(Object.isFrozen(LOCALE_MESSAGES.de)).toBe(true);
+    expect(Object.keys(LOCALE_CATALOGS.de)).toEqual(Object.keys(CATALOGS));
+  });
+
+  it('registers every UI namespace', () => {
+    for (const name of [
+      'ui-common',
+      'ui-setup',
+      'ui-setup-event',
+      'ui-setup-sweat',
+      'ui-setup-targets',
+      'ui-setup-recipe',
+      'ui-recipe',
+      'ui-board',
+      'ui-schedule',
+      'ui-print',
+      'ui-dialogs',
+      'ui-guided',
+      'ui-shell',
+    ]) {
+      expect(CATALOGS, name).toHaveProperty([name]);
+    }
+  });
+
+  it('has a German twin for every English catalog, with the same keys and placeholders', () => {
+    for (const [name, en] of Object.entries(CATALOGS)) {
+      const catalog = LOCALE_CATALOGS.de[name];
+      expect(catalog, `en/${name} has no de twin`).toBeDefined();
+      expect(Object.keys(catalog).sort(), name).toEqual(Object.keys(en).sort());
+      for (const [key, text] of Object.entries(catalog)) {
+        // The same placeholders, each as often as in English, with the same {name:type} suffixes.
+        expect(placeholdersOf(text).sort(), key).toEqual(placeholdersOf(en[key]).sort());
+      }
+    }
+    for (const name of Object.keys(LOCALE_CATALOGS.de)) {
+      expect(CATALOGS[name], `de/${name} has no en twin`).toBeDefined();
+    }
+    expect(Object.keys(LOCALE_MESSAGES.de).sort()).toEqual(Object.keys(MESSAGES).sort());
+  });
+
+  it('holds only non-empty German strings, written the German way', () => {
+    for (const [key, text] of Object.entries(LOCALE_MESSAGES.de)) {
+      expect(typeof text, key).toBe('string');
+      expect(text.trim(), key).not.toBe('');
+      // Quantities come from typed placeholders, as in English.
+      expect(text, key).not.toMatch(/\{\w+\} ?(ml|L\b|kg|%|°|km\/h|cm)/);
+      // Literal decimals use a comma ("2,5 h", "1:0,8"); "1.150" is a thousands separator.
+      expect(text, key).not.toMatch(/\d\.\d{1,2}(?!\d)/);
+      // A space before the percent sign ("50 %"), German quotes („…“).
+      expect(text, key).not.toMatch(/\d%/);
+      expect(text, key).not.toMatch(/[”]/);
+    }
+  });
+
+  it('hasMessage looks at one locale only', () => {
+    expect(hasMessage('schedule.fuel')).toBe(true);
+    expect(hasMessage('schedule.fuel', 'en')).toBe(true);
+    expect(hasMessage('schedule.fuel', 'xx')).toBe(true);
+    expect(hasMessage('schedule.fuel', 'de')).toBe(true);
+    expect(LOCALE_MESSAGES.de['schedule.fuel']).toBe('Nimm Gel {gel}.');
   });
 });

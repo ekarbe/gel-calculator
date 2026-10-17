@@ -134,22 +134,25 @@ export function recommendFluid(input) {
  *   exercise-associated hyponatremia (almond2005, hewbutler2015).
  * - Otherwise intake above 800 ml/h → warning `fluid.aboveCeiling` (sawka2007).
  *
- * The sweat loss is compared in whole ml/h, the same value the message
- * shows. This keeps float noise in estimated rates (0.5499999999999999 L/h)
- * from flagging an intake equal to the sweat loss (550 ml/h), and the message
- * never reads as "550 is more than 550".
+ * The intake and the sweat loss are compared in whole ml/h, the values the
+ * messages show. This keeps float noise in estimated rates
+ * (0.5499999999999999 L/h) from flagging an intake equal to the sweat loss
+ * (550 ml/h), the message never reads as "550 is more than 550", and a
+ * manual intake typed in fl oz (34 fl oz/h is stored as 1005.5 ml/h) reads
+ * "1,006 ml/h" in metric, as the board shows it.
  *
  * A non-finite sweat rate skips the sweat comparison. A non-finite or
  * non-positive intake returns no warnings. A missing or `null` context is
  * treated as `{}`.
  *
- * @param {number} mlPerHour  Fluid intake in ml/h.
+ * @param {number} intakeMlPerHour  Fluid intake in ml/h.
  * @param {{ sweatRateLph?: number } | null} [context]
  * @returns {Warning[]}
  */
-export function fluidWarnings(mlPerHour, context) {
+export function fluidWarnings(intakeMlPerHour, context) {
   const { sweatRateLph } = context ?? {};
-  if (!Number.isFinite(mlPerHour) || mlPerHour <= 0) return [];
+  if (!Number.isFinite(intakeMlPerHour) || intakeMlPerHour <= 0) return [];
+  const mlPerHour = Math.round(intakeMlPerHour);
 
   if (Number.isFinite(sweatRateLph)) {
     const sweatMlPerHour = Math.round(Math.max(0, sweatRateLph) * 1000);
@@ -233,7 +236,7 @@ const NO_PROJECTION = Object.freeze({ waterDeficitL: 0, deficitPct: 0, scaleChan
  *   so a water gain can still show as a small loss on the scale.
  * - `level 'gain'` (danger `fluid.projectedGain`, hewbutler2015, params
  *   `gainL`, at least 0.01) uses the rule of {@link fluidWarnings}: the
- *   intake is above the sweat loss in whole ml/h. So the two always agree,
+ *   intake is above the sweat loss, both in whole ml/h. So the two always agree,
  *   and float noise in an estimated rate (0.5499999999999999 L/h) never turns
  *   an intake equal to the sweat loss (550 ml/h) into a gain. The numbers
  *   keep the sign of the level: when they disagree by less than 0.5 ml/h × h
@@ -259,8 +262,8 @@ export function projectBodyMass(input) {
 
   const sweatLph = Math.max(0, sweatRateLph);
   const fluidMl = nonNegative(fluidMlPerHour);
-  // Same comparison as fluidWarnings: the sweat loss in whole ml/h.
-  const gain = fluidMl > Math.round(sweatLph * 1000);
+  // Same comparison as fluidWarnings: the intake and the sweat loss in whole ml/h.
+  const gain = Math.round(fluidMl) > Math.round(sweatLph * 1000);
   const deficit = (sweatLph - fluidMl / 1000) * hours;
   const waterDeficitL = noNegativeZero(gain ? Math.min(deficit, 0) : Math.max(deficit, 0));
   const mass = nonNegative(massKg);

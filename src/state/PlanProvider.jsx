@@ -41,6 +41,10 @@ import { loadAutosave, saveAutosave } from "./storage";
  *   not be read (damaged, or from an older version), so the autosave or the defaults are shown instead.
  * @property {boolean} restored  True once the mount restore (link, else autosave) has run. Autosave
  *   only starts after it.
+ * @property {'link'|'autosave'|null} restoredFrom  Where the mount restore took the inputs from: a
+ *   readable `?s=` share link, the autosave, or nothing (`null`: the defaults or `initialInputs`).
+ *   `null` until `restored` is true; set in the same render as `restored`. Loading a saved recipe
+ *   later does not change it. The UI uses it to tell a first visit (guided mode) from a return.
  */
 
 /** Autosave waits this long after the last change, in ms. */
@@ -160,6 +164,7 @@ function dropShareParam() {
  *    sets `shareLinkFailed`, so the app can tell the visitor the shared plan
  *    was not loaded; the autosave is used instead.
  * 2. else the autosave, when there is one (`loadAutosave`).
+ * `restoredFrom` records which one was used (`'link'`, `'autosave'` or `null`).
  *
  * Autosave: after that restore has run, every change to the inputs is saved
  * (`saveAutosave`) {@link AUTOSAVE_DELAY_MS} ms after the last change. The
@@ -179,6 +184,10 @@ export function PlanProvider({ children, initialInputs, persist = true }) {
   // record an external event from an effect.)
   const [shareLinkFailed, markShareLinkFailed] = useReducer(() => true, false);
   const [restored, markRestored] = useReducer(() => true, false);
+  const [restoredFrom, recordRestoredFrom] = useReducer(
+    (current, source) => current ?? source,
+    /** @type {'link'|'autosave'|null} */ (null),
+  );
   // Read once, by the mount restore.
   const restoreAutosave = useRef(persist && initialInputs === undefined);
   // The inputs the restore produced: already stored, so not saved again.
@@ -197,7 +206,12 @@ export function PlanProvider({ children, initialInputs, persist = true }) {
         markShareLinkFailed();
       }
     }
-    if (!next && restoreAutosave.current) next = loadAutosave();
+    if (next) {
+      recordRestoredFrom("link");
+    } else if (restoreAutosave.current) {
+      next = loadAutosave();
+      if (next) recordRestoredFrom("autosave");
+    }
     if (next) dispatch({ type: "replace", inputs: next });
     markRestored();
   }, []);
@@ -238,8 +252,8 @@ export function PlanProvider({ children, initialInputs, persist = true }) {
   }, []);
 
   const inputsApi = useMemo(
-    () => ({ inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored }),
-    [inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored],
+    () => ({ inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored, restoredFrom }),
+    [inputs, set, apply, replace, reset, loadInputs, shareLinkFailed, restored, restoredFrom],
   );
   const plan = useMemo(() => computePlan(inputs), [inputs]);
 

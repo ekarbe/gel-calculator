@@ -1,7 +1,7 @@
 # Gel Calculator: Systems & Logic
 
 This document describes how the calculator works **as implemented** at the end
-of Phase 2. Every number below is the value the code uses. Where a rule is an
+of Phase 3. Every number below is the value the code uses. Where a rule is an
 interim simplification, it says so and names the phase that replaces it.
 
 ## 1. Architecture
@@ -16,10 +16,11 @@ browser's `localStorage`, next to any recipes the user saves.
 | Data | `src/constants/constants.js`, `src/constants/templates.js` | Carb sources and salts (with osmolality and water data), sweat presets, commercial gel templates |
 | Evidence | `src/domain/evidence.js` | Citation registry (`CITATIONS`, `citationLabel`, `citationUrl`) |
 | Domain | `src/domain/{carbs,solver,heatBalance,sweat,hydration,electrolytes,concentration,caffeine,bicarbonate,schedule,recipe}.js` | One pure module per topic (plus `objects.js`, a plain-object check shared with the state layer) |
+| Units, cost | `src/domain/units.js`, `src/domain/cost.js` | Metric ↔ imperial conversions; the cost estimate per currency (section 10.3) |
 | Plan | `src/domain/plan.js` | Inputs schema v4 (with the v3 migration), `normalizeInputs`, `computePlan`, `templateToInputs` |
-| Text | `src/i18n/en/*.js`, `src/i18n/index.js` | English message catalogs and `t()` |
-| State | `src/state/{PlanProvider.jsx,UiProvider.jsx,shareCodec.js,storage.js}` | Inputs reducer with autosave, memoised plan, UI state, share links, saved recipes |
-| UI | `src/app/*`, `src/components/{feature,modal,shared}` | Cards, modals, the print view, `Why` and `Warnings` |
+| Text | `src/i18n/{en,de}/*.js`, `src/i18n/{index,locales,formatters,format,useT}.js` | English and German catalogs, `createT`/`useT()`, locale- and unit-aware formatting (section 10.1) |
+| State | `src/state/{PlanProvider.jsx,UiProvider.jsx,prefs.js,shareCodec.js,storage.js}` | Inputs reducer with autosave, memoised plan, UI state and prefs, share links, saved recipes |
+| UI | `src/app/*`, `src/components/{ui,shell,setup,board,schedule,print,dialogs,guided}` | Primitives, the app shell, setup sections, race board, schedule, print view, dialogs, guided flow (section 10.4) |
 
 ### Data flow
 
@@ -32,16 +33,18 @@ inputs ──normalizeInputs──▶ PlanProvider state ──computePlan (useM
    └──────── set(path, value) / apply(partial) / replace / reset / loadInputs ◀──────┘
 ```
 
-`src/app/page.jsx` renders `PlanProvider > UiProvider > App`. Components read
-the inputs with `usePlanInputs()`, the plan with `usePlan()` and the UI state
-with `useUi()`. They never compute nutrition themselves: every target, amount,
+`src/app/page.jsx` renders `PlanProvider > UiProvider > App`, and `App`
+renders the shell (`src/components/shell/AppShell.jsx`). Components read
+the inputs with `usePlanInputs()`, the plan with `usePlan()`, the UI state
+and prefs with `useUi()`, text with `useT()` and number formatting with
+`useFormat()`. They never compute nutrition themselves: every target, amount,
 water volume, osmolality and comparison they show comes from the plan.
-Components only format those numbers, convert units for display (lb, °F, in,
-L) and draw progress rings and bars. Every explanation or warning from the
-domain goes through `t()`. Number formatting (`src/components/shared/format.js`),
-ratio text (`formatRatio` in `src/domain/carbs.js`) and the recipe helpers
-(`src/components/shared/recipe.js`) are shared, so a value reads the same in
-every card, modal, share image and printout.
+Components only format those numbers, convert units for display (lb, in,
+°F, mph, fl oz) and draw bars. Every string a component shows, aria labels
+included, comes from a catalog through `t()`; every number goes through the
+locale's formatter (`createFormat` in `src/i18n/formatters.js`, which also
+writes ratios with `formatRatio` from `src/domain/carbs.js`), so a value reads
+the same on the board, in the dialogs, the share image and the printout.
 
 ### Domain rules
 
@@ -60,7 +63,7 @@ every card, modal, share image and printout.
   Ingredient and salt labels are the exception: they are plain strings (the
   English source label, or the name the user typed for a custom one).
 - Every recommendation carries a `why` (Explanation) with citation ids. The UI
-  shows it behind a "Why?" button (`src/components/shared/Why.jsx`) with links
+  shows it behind a "Why?" disclosure (`src/components/ui/Why.jsx`) with links
   to the studies.
 - Warning ids are stable (`carbs.aboveStudied`). Message keys are namespaced by
   module (`carbs.warn.aboveStudied`).
@@ -375,8 +378,8 @@ Duration picks a band:
   stays at 70 g/h (80% of 90).
 - In the `rinse` band `mouthRinseHowTo` carries the protocol (message
   `carbs.mouthRinse.howTo`: 25 ml of a 6–8% maltodextrin drink, swish 5–10 s,
-  every 5–10 min) and its studies [carter2004, brietzke2019]. The carb card,
-  the mixing steps and the printout show this one text.
+  every 5–10 min) and its studies [carter2004, brietzke2019]. The carbs
+  target in the setup, the mixing steps and the printout show this one text.
 
 ### 5.2 Glucose:fructose ratio (`recommendRatio`, `checkRatio`, `formatRatio`)
 
@@ -544,8 +547,8 @@ intensity, weigh bottles, record urine, repeat 2–3 times).
   loss (the same whole-ml/h rule as `fluid.aboveSweat`) → `gain`, danger
   `fluid.projectedGain` [hewbutler2015]; deficit above 3 % → `high`, warning
   `fluid.deficitHigh` [sawka2007]; above 2 % → `mild`, info `fluid.deficitMild`;
-  else `ok`. Both overdrinking dangers stay in `plan.warnings`; the
-  electrolytes card shows only `fluid.aboveSweat` when both apply.
+  else `ok`. Both overdrinking dangers stay in `plan.warnings`; the fluid
+  target in the setup shows only `fluid.aboveSweat` when both apply.
 
 ### 5.7 Sodium (`recommendSodium`, `sodiumWarnings`)
 
@@ -758,11 +761,13 @@ Off by default. `doseG = gPerKg × massKg` (0.2–0.3 g/kg), `sodiumMg = doseG �
 | Bicarbonate | 0.2–0.3 g/kg; hidden for events over 90 min; warns about GI, sodium and medical conditions | `planBicarbonate` |
 | Inputs | every field clamped or validated; share links, autosaves and saved recipes pass the same check | `normalizeInputs` |
 
-Warnings render through `src/components/shared/Warnings.jsx`: one box per
-warning, coloured and iconed by level (danger red with an octagon, warning
-amber with a triangle, info blue with an "i"), a screen-reader prefix
-("Danger:", "Warning:", "Note:") and the citation links. The printout writes
-the level out.
+Warnings render through `src/components/ui/WarningList.jsx` (`role="list"`):
+danger first, then warnings, then notes; one box per warning in its status
+colour with an icon per level (danger an octagon, warning a triangle, info an
+"i"), a screen-reader prefix ("Danger:", "Warning:", "Note:", translated) and
+the citation links. The race board lists every plan warning; the setup
+sections show the ones about their own inputs. The printout writes the level
+out, so a printed warning never depends on colour.
 
 ## 7. Templates (`src/constants/templates.js`)
 
@@ -782,9 +787,12 @@ fructose lists), the sodium salt, other ingredients, source URLs and notes.
 | GU Roctane Ultra Endurance Energy Gel | 21 g | 125 mg | 1:0.33 | no |
 | UnTapped Maple Syrup Energy Gel | 26 g | 5 mg | 1:1 | yes |
 
-`verified: false` means at least one value is an estimate; the modal says so
-and shows the notes. The modal states that each template is inspired by the
-brand and not affiliated with it. Applying a template uses `templateToInputs`
+`verified: false` means at least one value is an estimate; the Templates
+dialog says so ("Label not verified") and shows the notes. It states that
+each template is inspired by the brand and not affiliated with it. The
+template prose (description, notes, other ingredients, source labels) is in
+the `ui-dialogs.templates.data.*` catalog keys, so German has its own text; a
+test keeps the English keys identical to `templates.js`. Applying a template uses `templateToInputs`
 (section 4): Maurten's dextrose and fructose at 1:0.8 become weights 55.56 and
 44.44.
 
@@ -804,10 +812,12 @@ brand and not affiliated with it. Applying a template uses `templateToInputs`
 - `PlanProvider` reads `?s=` once on mount (section 10). An unreadable link
   logs `Ignoring unreadable share link`, removes `s` from the address bar and
   sets `shareLinkFailed`; the app then shows a toast saying the link could not
-  be opened, and the autosave (or the defaults) is shown. The URL is not
-  rewritten while you edit; the Share modal and the recipes modal build fresh
-  links.
-- Display units (kg/lb, °C/°F) are not part of the link.
+  be opened (once, for 8 s, in the visitor's language), and the autosave (or
+  the defaults) is shown. The URL is not rewritten while you edit; the Share
+  dialog and My recipes build fresh links.
+- Language, unit system, currency, theme and mode are not part of the link:
+  each visitor keeps their own prefs. A first visit with a readable link
+  opens in expert mode (the link is a finished plan).
 
 ## 9. Storage: autosave and saved recipes (`src/state/storage.js`)
 
@@ -821,6 +831,8 @@ and never throw. Stored JSON that cannot be parsed counts as empty.
 | --- | --- |
 | `gel-calculator:autosave` | One share string: the last inputs (`loadAutosave`, `saveAutosave`) |
 | `gel-calculator:recipes` | JSON array of `{ id, name, savedAt, encoded }`, newest first |
+| `gel-calculator:prefs` | JSON `{ locale, unitSystem, currency, mode }` (`src/state/prefs.js`, section 10.2) |
+| `theme` | `system`, `light` or `dark` (kept by `next-themes`) |
 
 - `saveRecipe(name, inputs)`: id `'r' + Date.now().toString(36) + counter`,
   `savedAt` an ISO time strictly after every stored recipe. Names are trimmed
@@ -831,108 +843,307 @@ and never throw. Stored JSON that cannot be parsed counts as empty.
 
 ## 10. Text, state and UI
 
-- **i18n.** `src/i18n/en/<module>.js` holds the English text per domain module
-  (bicarb, caffeine, carbs, concentration, electrolytes, fluid, plan, recipe,
-  schedule, sweat). `t(messageOrKey, params)` fills `{name}` placeholders
-  (numbers with `toLocaleString('en-US')`, negative ones with a real minus
-  sign "−"). A missing key returns the key and
-  warns once in development. Tests walk the plan over random v4 inputs (every
-  format, sweat source, custom ingredient and salt) and check that every key
-  it can return exists and every placeholder is filled. UI labels are still
-  English literals in the components.
+### 10.1 Text and languages (`src/i18n/`)
+
+- **Catalogs.** `src/i18n/<locale>/<namespace>.js`, locales `en` (default)
+  and `de`. One namespace per domain module (bicarb, caffeine, carbs,
+  concentration, electrolytes, fluid, plan, recipe, schedule, sweat) and one
+  per UI area (`ui-common`, `ui-setup`, `ui-setup-event`, `ui-setup-sweat`,
+  `ui-setup-targets`, `ui-setup-recipe`, `ui-recipe`, `ui-board`,
+  `ui-schedule`, `ui-print`, `ui-dialogs`, `ui-guided`, `ui-shell`).
+  `ui-recipe` holds what the board, the dialogs, the print view and the
+  setup share about a recipe: the built-in ingredient and salt names (German
+  names in `de`; a renamed ingredient keeps its own name), amounts, servings,
+  osmolality and the mixing steps; `ui-common` holds the sport, intensity,
+  setting and sun names. Every key starts with
+  its namespace (`ui-board.kpi.carbs`). `index.js` imports each catalog by
+  name (Turbopack has no glob import): a new catalog is registered in
+  `EN_CATALOGS` and `DE_CATALOGS`. No component has an English literal; aria
+  labels, page metadata and the template prose come from catalogs too.
+- **Translate.** `createT(locale, { unitSystem, currency })` returns
+  `t(messageOrKey, params)`; `useT()` (`useT.js`) gives the one for the
+  UI prefs, and the module-level `t` is English and metric (page metadata,
+  non-React callers, tests). A key missing in German falls back to English
+  and warns once per key outside production; an unknown key returns the key.
+- **Placeholders.** `{name}` writes a number in the locale's format (up to 3
+  decimals, grouping, a real minus "−") or a string as it is.
+  `{name:type}` is a typed quantity, given in the plan's metric unit and
+  converted to the unit system: `volume` (ml → "800 ml" / "27 fl oz"),
+  `volumeL` (L), `mass` (kg → "70 kg" / "154.3 lb"), `temp` (°C → "20 °C" /
+  "68 °F"), `speed` (km/h → "30 km/h" / "18.6 mph"), `pace` (min/km →
+  "4:30 min/km" / "7:15 min/mi"), `height` (cm → "175 cm" / "5 ft 9 in"),
+  `percent` ("60%" in English, "60 %" with a no-break space in German),
+  `ratio` ("1:0.5" / "1:0,5"), `integer` and `currency`. `{name:type:nounit}`
+  drops the unit for the first value of a range. Nutrients (g, mg, mg/L,
+  kcal) are plain numbers with the unit in the text: they stay in g and mg
+  in every unit system, as in sports nutrition. Plural forms use `.one` /
+  `.other` keys, picked by `pluralOf(count)` / `countText(t, f, key, count)`
+  (`plural.js`).
+- **German.** Du-form, short, the sport-nutrition terms of the design doc
+  (Kohlenhydrate, Glukose/Fruktose, Natrium, Schweißrate, Trinkmenge,
+  Natron, Zubereitung, „Warum?“). German numbers use a decimal comma and a
+  dot for thousands ("1.710 mg", "1,25 L/h"), currency after the amount
+  ("3,15 €"), dates "17.10.2026". Dates follow the browser's region within
+  the UI language (`dateTagFor`): an en-GB browser reads "17 October 2026",
+  en-US "October 17, 2026"; numbers keep the UI language's format.
+  `index.test.js` checks that every `de`
+  catalog has exactly the keys and the placeholders of its `en` twin, and
+  pins a few German sentences.
+- **Formatting.** `createFormat(locale, { unitSystem, currency })`
+  (`formatters.js`, pure) and `useFormat()` (`format.js`, for components)
+  return `{ number, integer, mass, height, temp, speed, pace, volume,
+  volumeL, percent, currency, date, ratio, duration }` plus `toDisplay` /
+  `fromDisplay` for number fields and `parseNumber` (reads "72,5" in
+  German). Missing or
+  non-finite numbers count as 0; values are rounded before the sign, so a
+  zero never shows as "−0". Imperial values are rounded per kind (154.3 lb,
+  68.9 in, 68 °F, 18.6 mph, 25.4 fl oz); metric values show as stored (up to
+  3 decimals), so a value the app computes (a body mass from a dose, a
+  temperature from °F, a fluid rate) is rounded to what its field shows
+  before it is written, in metric only: imperial converts the exact value.
+- **Page language.** The shell sets `<html lang>` and `document.title` from
+  the UI language. The static HTML (and its Open Graph data) is English.
+
+### 10.2 State (`src/state/`)
+
 - **`PlanProvider`** (`{ children, initialInputs?, persist = true }`). A reducer
   over the inputs with actions `set(path, value)` (dot path or key array,
   numeric segments index arrays, value may be an updater), `apply(partial)`
   (deep merge, arrays replace), `replace(inputs)` (onto the defaults),
   `reset()` and `loadInputs(inputs)` (replace, and drop `?s=` from the address
-  bar, for the recipes modal). Every action goes through `normalizeInputs`; a
-  no-op keeps the same state object, so the plan is not recomputed.
+  bar, for My recipes). Every action goes through `normalizeInputs`; a no-op
+  keeps the same state object, so the plan is not recomputed.
   - Mount restore, once: the `?s=` link first, else the autosave. `restored`
-    turns true after it. `initialInputs` (tests) skips the autosave restore;
-    `persist={false}` turns autosave off.
+    turns true after it, and `restoredFrom` says what it restored
+    (`'link'`, `'autosave'` or `null`). `initialInputs` (tests) skips the
+    autosave restore; `persist={false}` turns autosave off.
   - Autosave: after the restore, every change is saved 400 ms
     (`AUTOSAVE_DELAY_MS`) after the last one. The restored inputs are not
     written back, nothing is saved before the restore (so the defaults never
     overwrite a stored plan), a pending save is written on `pagehide` and
     dropped on unmount.
   - `usePlanInputs()` returns `{ inputs, set, apply, replace, reset,
-    loadInputs, shareLinkFailed, restored }`; `usePlan()` the plan. Both throw
-    outside the provider.
-- **`UiProvider`.** One open modal at a time (`TEMPLATE_MODAL`, `SHARE_MODAL`,
-  `MIXING_MODAL`, `RECIPES_MODAL`, exported so openers and modals use the same
-  names), the share view, a toast with a 3 s timer, and the display units
-  `massUnit` (`kg`/`lb`) and `tempUnit` (`C`/`F`). The inputs always store kg,
-  cm and °C.
-- **Shared helpers.** `src/components/shared/`: `Segmented` (with the
-  Auto/Adjust options), `NumberInput` (keeps typed text while focused, commits
-  in-range values live and any value on blur), `format.js` (`fmt`,
-  `formatRange`, `signed` with a real minus and rounding before the sign,
-  `formatDuration`, `aboutKcal` for estimated burns), `units.js` (`LB_PER_KG`,
-  `CM_PER_IN`), `labels.js` (intensity, sport, setting and sun names),
-  `recipe.js` (section titles, line labels including "Custom salt N" for an
-  unnamed custom salt, servings text, the delivered ratio (0:0 when the
-  recipe delivers no carbs), the warnings that explain the recipe,
-  osmolality display), `mixing.js` (`mixingSteps`: the one step builder for
-  the mixing modal and the print view; water only when the recipe lists a
-  water line), `bodyMass.js` and `BodyMassLevel.jsx` (the body-mass
-  projection text and level chip for the activity summary, the electrolytes
-  card and the print view: "Water gained" for a gain, never a negative
-  deficit; the ok level reads "Up to 2% loss" to match the domain's "> 2 %"
-  rule), `share.js` (`shareUrl`, `copyText`) and `useFocusAfterRender` (moves
-  focus to a stable target after an inline form or row goes away). Amber and
-  green text uses the `apple-amber-ink` / `apple-green-ink` colors, dark in
-  the light theme so it stays readable (at least 6:1); salt lines on the share
-  image use teal-700 in light mode for the same reason, and the format
-  panel's unpicked choices use the primary text at 75 %.
-- **Cards.**
-  - *Activity Basics*: Session (duration, intensity, sport; speed with pace
-    for running, power with the power estimated from the speed for cycling,
-    METs for other sports; running and cycling share one speed, so a sport
-    change replaces a speed that does not fit the new sport with its typical
-    speed, `speedForSport`, and a running pace faster than the marathon world
-    record gets a note), You (body mass, height in cm or in, heat
-    acclimatised), Conditions (temperature, humidity, setting, sun), then the
-    carb target, caffeine and bicarbonate.
-  - *Electrolytes & Hydration*: sweat source Test | Estimate | Presets. Test
-    lists the sweat tests (measured L/h or the problem), with add/edit
-    (protocol note, live preview), select, delete with an in-page confirm and
-    the calibrate switch. Estimate shows the rate ± 0.5 L/h, the heat
-    production, energy use, heat to lose by sweating and the conditions.
-    Then sodium, extras, salts (manual amounts in grams, salts from a label)
-    and fluid with the projected body-mass change and its level.
-  - *Carb Matrix*: ratio (Auto/Adjust) and the Ingredients section: a bar of
-    the ratios the ingredients can make with the allowed range, the target and
-    the recipe ratio; the list with a weight per ingredient (number and
-    slider); grouped add menu; custom ingredients from a label.
-  - *Final Recipe*: format (Gel / Drink / Both, gels per hour, gel consistency
-    with its %, bottle size 500/750/950/custom, the drink's carb share), the
-    Total / Per serving view, one block per section with its lines, servings,
-    per-serving facts, osmolality ≈ with a tonicity chip and its warnings, a
-    rough cost, "View Mixing Instructions" and "Print / save as PDF".
-  - *Balance Analysis*: carbs, sodium, fluid and energy rings (with the
-    estimated burn), sweat rate with its source and uncertainty, the body-mass
-    projection and the ratio bar of the delivered ratio.
-  - *Timeline*: every gel, drink sip, caffeine and bicarbonate dose with its
-    time, plus how many bottles to drink from.
-- **Modals.** Mixing steps per section (gel: weigh, dissolve in the warm
-  water, divide into N flasks of about X ml, caffeine tablets; drink: per
-  bottle add the powders, fill to the mark, shake), templates, share (link and
-  recipe image with every section) and **My recipes** (save the current plan
-  under a name, then open, rename, duplicate, delete with an in-page confirm,
-  or copy its link; problems such as blocked storage or the 50-recipe limit
-  show as a toast). Escape in an inline rename or delete confirmation cancels
-  it and keeps the modal open: the inline handler calls `preventDefault`, and
-  the modal's `document` listener ignores handled events (in the app React
-  listens on `document` itself, so `stopPropagation` alone cannot stop it).
-- **Print view.** `src/components/feature/PrintRecipe.jsx` renders with
-  `hidden print:block`, and the app content is `print:hidden`, so printing
-  (the recipe card's "Print / save as PDF" calls `window.print()`) gives a
-  black-on-white page: title and date of printing, a plan summary, every
-  recipe section as a table (whole amount and per serving), the mixing steps,
-  the schedule table, every warning with its level written out, and the full
-  references. Block headings never end a page on their own
-  (`break-after: avoid`). The conditions name the sun only outdoors, as the
-  sweat model uses it. The jsPDF export is gone.
+    loadInputs, shareLinkFailed, restored, restoredFrom }`; `usePlan()` the
+    plan. Both throw outside the provider.
+- **`UiProvider`.** One open dialog at a time (`MIXING_MODAL`,
+  `TEMPLATE_MODAL`, `SHARE_MODAL`, `RECIPES_MODAL`, `SETTINGS_MODAL`, used by
+  openers and dialogs alike), the share view, a toast (`showToast(message,
+  { tone, durationMs })`, tones `neutral`/`ok`/`warn`/`danger`, 3 s by
+  default), the prefs and the layout state: `guidedStep` (0–3) and
+  `boardTab` (`board`/`setup`/`schedule`, the phone tab), neither persisted.
+- **Prefs** (`prefs.js`): `{ locale: 'en'|'de', unitSystem:
+  'metric'|'imperial', currency: 'EUR'|'USD'|'GBP', mode: 'guided'|'expert' }`
+  in `localStorage` key `gel-calculator:prefs` (every access in try/catch;
+  unknown values are dropped field by field). Defaults come from
+  `navigator.language`: `de*` → German, metric, EUR; `en-US` → English,
+  imperial, USD; `en-GB` → English, metric, GBP; anything else → English,
+  metric, EUR. The mode defaults to `guided` on a first visit (no stored
+  prefs, and the plan restored neither a link nor an autosave), else
+  `expert`. The prefs resolve after the plan's mount restore; until then
+  `prefsReady` is false, the prefs are the defaults and the shell keeps
+  `<main>` empty and `aria-busy`, so no layout flashes. The theme (System,
+  Light, Dark) is kept by `next-themes` (`localStorage` key `theme`, class
+  `dark` on `<html>`). The inputs always stay metric (kg, cm, °C, km/h, ml).
+
+### 10.3 Units and cost
+
+- **`src/domain/units.js`** (pure): kg ↔ lb, cm ↔ in (and ft + in for
+  display), °C ↔ °F, km/h ↔ mph, min/km ↔ min/mi (pace from speed and back),
+  ml ↔ US fl oz, L ↔ fl oz, `toUnitSystem(kind, value, system)` /
+  `fromUnitSystem(…)` for the quantity kinds, and rounding helpers. Round
+  trips are property-tested.
+- **At the edge.** Number fields show the converted value (`toInput`) and
+  convert what is typed back to metric (`fromInput`) before it reaches the
+  plan, without rounding: 160 lb is stored as 72.57 kg and shows as 160 lb
+  again. Converted values shown in lb, in, °F, mph or fl oz are rounded per
+  kind (section 10.1); the bottle-size presets keep one decimal
+  (25.4 fl oz).
+- **Cost** (`src/domain/cost.js`): `estimateCost(totalCarbsG, currency)`
+  with rough per-gram prices of carbohydrate, home-mixed vs commercial gels:
+  USD 0.015 / 0.10, EUR 0.014 / 0.09, GBP 0.012 / 0.08 →
+  `{ diy, commercial, savings, currency, approximate: true }`. The board shows
+  it labelled "approximate", in the chosen currency. The plan's own
+  currency-less `cost` field is unchanged.
+
+### 10.4 UI (`src/components/`)
+
+The race-day design (design doc, direction C): flat panels with a 1 px
+hairline, condensed display type (Barlow Condensed) for numbers and titles,
+IBM Plex Sans for text, IBM Plex Mono for tables and times, tabular figures
+for every number, one colour per substance (glucose, fructose, sodium, fluid,
+caffeine) everywhere and status colours that always come with an icon and
+text. The tokens are CSS custom properties in `src/app/globals.css` (light
+and the class-based dark theme), exposed to Tailwind through `@theme`;
+components use the tokens only. Fonts load with `next/font/google`
+(self-hosted at build). Motion is limited to 150–200 ms and off under
+`prefers-reduced-motion`.
+
+- **Primitives** (`ui/`, one file each with tests): `Button`, `Panel`,
+  `PanelHeader` (collapsible panels: the chevron right after the title, the
+  actions wrapping under it on narrow panels, the summary line under the
+  row), `Stat` (KPI tile; its "Why?" shrinks to an icon in a narrow tile),
+  `Lane`, `Segmented` (radio group with arrow keys), `Field`, `NumberField`
+  (−/+ steppers, unit suffix, min/max/step, locale-aware typing, keeps the
+  typed text while focused, `toInput`/`fromInput`), `Select`, `Switch`
+  (`role="switch"`), `Chip` (wraps its text unless told to truncate; an
+  interactive chip keeps a 36 px hit area, 44 px on touch), `Dialog`
+  (native `<dialog>` with
+  `showModal()`), `Disclosure`, `Tabs` (roving tab index), `Toast`
+  (`role="status"`, polite), `WarningList`, `Why`, `SkipLink`, `Icon`
+  (lucide icons, decorative unless named) and `icons/` (logo, Strava and
+  GitHub). Hooks: `useFocusAfterRender` (focus an element once React has
+  rendered it) and `usePinnedHeight` (below).
+- **Shell** (`shell/`). `AppShell` holds the skip link, the sticky header,
+  `<main>`, the footer, the phone tab bar, the toast, the dialogs and the
+  print host. `ShellHeader`: logo and the "Gel Calculator" wordmark (the
+  page's `h1`; below 640 px only the logo shows, the names stay for screen
+  readers), the Guided / Expert switch, My recipes, Share and Settings.
+  `ShellTabBar` (phones, expert mode): Board, Setup, Schedule, at least
+  56 px tall and safe-area aware; the current tab is marked by a top bar,
+  bold text and `aria-pressed`, and each tab keeps its own scroll position.
+  The header, the tab bar and the guided dock publish their height while
+  they are pinned (`usePinnedHeight` → `--pinned-top` / `--pinned-bottom`),
+  and the page's `scroll-padding` keeps a focused or revealed element clear
+  of them. In a viewport under 32 rem tall (a 1280 × 1024 screen at 400 %
+  zoom, a phone in landscape) the header and the tab bar scroll with the
+  page instead of covering half of it.
+  `ShellFooter`: author line, Strava and GitHub links ("opens in a new tab").
+- **Expert layout.** From 1024 px two columns: the setup sections on the
+  left (up to 420 px) and the race board on the right, sticky 1 rem under
+  the header (`sticky-below-header`) and scrolling on its own when taller
+  than the screen. The two columns end before the full schedule, which
+  spans the width below them, so the sticky board never covers it; "Full
+  schedule" in Next up scrolls to it. Below 1024 px one view at a time,
+  picked in the tab bar (Board by default).
+- **Mode switch.** Leaving a mode unmounts its layout and any open form (a
+  sweat test, a custom ingredient). So the first press of the header switch
+  while a form is open stays, shows the form (the Setup tab on phones),
+  moves the focus into it and says so in a toast; the second press leaves
+  without it. From guided mode the switch goes through the flow's own
+  check (`GuidedFlow`'s `ref.leave()`). A mode change scrolls to the top.
+- **Setup** (`setup/`), as collapsible panels in this order: *Event* (sport,
+  duration in h + min, intensity, speed with the pace for running, power
+  with the estimate from the speed for cycling, METs for other sports,
+  setting; a sport change replaces a speed that does not fit the new sport,
+  and a pace faster than the marathon world record gets a note), *Body &
+  weather* (the unit switch for the whole app, body mass, height,
+  acclimatised, temperature, humidity, sun), *Sweat* (Test / Estimate /
+  Presets tabs: the sweat-test list with add, edit, select, delete and the
+  calibrate switch; the estimate with its drivers and the heat-balance
+  details; the presets; saltiness; the sweat summary and the projected
+  body-mass change), *Targets* (carbs and ratio with Auto / Adjust, the
+  evidence band, gut-trained opt-in, mouth rinse; sodium; fluid; the
+  advanced extras), *Ingredients* (the list with weights as number and
+  slider, the reach bar of the ratios the ingredients can make, the grouped
+  add menu, custom ingredients from a label), *Salts* (auto with the sodium
+  salt choice, or manual amounts in grams for the whole activity, custom
+  salts, delivered vs target), *Format* (gel / drink / both, gels per hour,
+  gel consistency, bottle size, the drink's carb share) and *Caffeine &
+  bicarbonate* (bicarbonate behind a "Show" button for events over 90 min).
+  The field groups are exported, so the guided flow reuses them.
+- **Race board** (`board/`). Title row: the "Race board" heading, the event
+  summary ("3:00 h · Cycling · Moderate"), the sweat chip ("Sweat 1.25 L/h
+  ±0.5" and its source) and the warnings-count chip, which opens the
+  warnings panel and moves the focus to it. KPI row: carbs g/h (ratio and
+  total), sodium mg/h (total), fluid ml/h (total and the body-mass change),
+  caffeine mg (or "Off"); 2 × 2 on a phone, one row from 42 rem, each tile a
+  group with its substance colour bar and a "Why?". Under the KPIs, from a
+  48 rem wide board, two columns: the recipe on the left, Next up, the
+  warnings and the cost estimate on the right (one column below that, in
+  this order). Recipe: Total ↔ Per serving (the `format.view` input), one
+  flat block per gel batch ("Gels ×9") or drink ("Bottles ×4"), a lane per
+  ingredient whose bar is its share of the block's carbs, salts and water
+  as plain rows; then Start mixing (the one accent button), Print plan and
+  Share plan; then each block's per-serving facts and osmolality with a
+  tonicity chip. So on a 390 × 844 phone the lanes and Start mixing are on
+  the first screen. Next up: the first four schedule events, how many
+  follow and "Full schedule". Warnings: every plan warning, danger first; a
+  polite live region announces when the number of warnings or dangers
+  changes (`BoardAnnouncer`, after the plan settles). The warnings chip
+  shows only its icon and count on a narrow board; its name always says it
+  in full.
+- **Schedule** (`schedule/`): every gel, sip, caffeine and bicarbonate dose
+  as a list or a table, with compact times (T−1h 30m, T+20m) and the same
+  time in words for screen readers ("1 hour 30 minutes before the start"),
+  the bottle note for drinks, and the fluid advice.
+- **Print** (`print/`): the print host is `hidden print:block` and the app
+  `print:hidden`, so printing (Print plan calls `window.print()`) gives a
+  black-on-white page; under `@media print` every colour token is flattened
+  to black or white. Title and date of printing, a plan summary, every
+  recipe section as a table (whole amount and per serving) with its facts,
+  the mixing steps, the schedule table, every warning with its level
+  written out and the references. Block headings never end a page on their
+  own (`break-after: avoid`).
+- **Dialogs** (`dialogs/`, all on `Dialog`): *Mixing steps* per section (gel:
+  weigh, dissolve in the warm water, divide into N flasks, caffeine tablets;
+  drink: per bottle add the powders, fill to the mark, shake; then what to
+  drink during the activity). *Share*: the link (copy) and a picture of the
+  targets and the recipe (`html-to-image`). *Gel templates*: the eight
+  templates with their ratio, verified badge, per-gel facts, carb sources,
+  other ingredients, label sources and "Inspired by …; not affiliated".
+  *My recipes*: save the current plan under a name, then open, rename,
+  duplicate, copy the link or delete (with an in-dialog confirm); "Start
+  from a gel template". Escape in an inline rename or delete confirmation
+  cancels it and keeps the dialog open. *Settings*: theme, language, units
+  and currency, applied at once.
+- **Guided flow** (`guided/`): four steps on five screens, phone first:
+  *Event*; *Body & weather* (the body and weather fields with the setting,
+  then "Have you done a sweat test?" with the sweat-test list and form or
+  the estimate); *Ingredients* (a pantry grid of carb tiles to toggle, with
+  "More ingredients" and "Add your own from a label", the reach bar, and the
+  salt you have); *Recipe & plan* (the race board and the full schedule).
+  Each screen has a one-line reason and a "Why?". The step list doubles as
+  the progress bar (`aria-current="step"`) and jumps to a step; Back and
+  Next name where they go; after a move the focus lands on the new screen's
+  heading. The dock pinned to the bottom shows the live carbs, sodium and
+  fluid per hour and the warnings count, which opens the list; on a narrow
+  phone its captions are short ("KH", "Natrium", "Trinken" in German, the
+  full names for screen readers) and never break inside a word. "Switch to
+  expert" is on every step; expert mode keeps everything the flow set, and
+  the flow keeps its step when you come back. An open form blocks the first
+  "Switch to expert" the same way as the header switch.
+
+### 10.5 Accessibility
+
+- Landmarks: banner (header), `main` (with the skip link as the first tab
+  stop), contentinfo (footer), the phone tab bar ("Sections") and the
+  guided step list ("Guided setup") as navigation. The setup column and the
+  race board are named regions inside `main`; panels are regions named by
+  their headings, recipe sections and KPI tiles are groups. One `h1` (the
+  wordmark), then a logical heading order.
+- Every control has a visible label (or an accessible name for icon
+  buttons), hints and errors through `aria-describedby`, and a visible 2 px
+  focus ring in `--focus` with a 2 px offset (number fields draw it around
+  the whole stepper group). Touch targets are at least 44 px on touch
+  screens.
+- Dialogs are native modal `<dialog>`s with a labelled title: the page
+  behind is inert, the focus starts inside, Escape and the backdrop close
+  them, and the focus returns to the opener. Openers say
+  `aria-haspopup="dialog"`.
+- "Why?" and the other explanations are disclosures (`aria-expanded`,
+  `aria-controls`), not hover tooltips. The toast and the board's warning
+  count are announced politely; the warnings under a setup field are not a
+  live region (a value typed digit by digit would read out each step);
+  nothing depends on colour alone (icons, words, bars with text, the
+  current tab in bold with a bar).
+- Focus not obscured (SC 2.4.11): the page's `scroll-padding` follows the
+  pinned header, tab bar and dock, so a focused control scrolls clear of
+  them; under 32 rem of height they stop being pinned.
+- Forced colours (Windows high contrast): the switch, the segmented choice,
+  the tabs, the progress markers and the primary button keep their state
+  with system colours (`forced-colors:` variants), not with fills the
+  browser drops.
+- Reflow and text spacing: every view fits 320 px (and the WCAG text
+  spacing at 320 px in German) without horizontal scrolling; chips and
+  captions wrap instead of being cut.
+- Contrast: `scripts/check-contrast.mjs` reads the tokens from
+  `globals.css` and checks every text/background pair of the design doc
+  (≥ 4.5:1 for text, ≥ 3:1 for the focus ring and control borders) in both
+  themes; its Vitest test runs in `npm test`. A failure is fixed in the
+  token, not per component.
+- `<html lang>` follows the language; language names in Settings carry
+  their own `lang`, and the built-in ingredient names are translated, so a
+  German page has no untagged English names.
 
 ## 11. Citation registry
 
@@ -966,26 +1177,81 @@ return exists in the registry.
   research scripts (`final_model.py`, `osmo.py`).
 - **Property tests** (fast-check): the ingredient solver, the heat-balance
   model (bounds, monotonic in temperature), the caffeine body-load cap,
-  `normalizeInputs` idempotence, the recipe totals, and `computePlan` never
-  throwing or returning NaN.
+  `normalizeInputs` idempotence, the recipe totals, `computePlan` never
+  throwing or returning NaN, and the unit round trips.
+- **i18n tests**: every key the plan can return exists and every
+  placeholder is filled (random v4 inputs); every `de` catalog has the keys
+  and placeholders of its `en` twin; the typed placeholders and formatters
+  in both languages and unit systems.
 - **Component tests** render the real providers (with `persist={false}`) and
-  assert real plan numbers, unique ids and accessible names. `vitest.setup.js`
-  clears `localStorage` after every test, so no test sees another's autosave.
-  `RecipesModal.document.test.jsx` mounts React on `document`, as the App
-  Router does, because React Testing Library's div container hides how
-  `document` listeners behave.
-- **Smoke tests** (Playwright, `e2e/smoke.spec.js`, desktop and phone) run
-  against the static export: no console errors, header and recipe present, no
-  horizontal overflow on a phone, the default plan (75 g/h, non-empty recipe),
-  a duration change to 1 h giving 15 g/h, a "Why?" control revealing a
-  citation link, a v4 link restoring a 240 min event, a v3 link opening
-  migrated (dextrose instead of maltodextrin, the preset sweat rate, the per-gel
-  view), a v2 link showing the "could not be opened" notice without
-  overflowing a phone, the autosave restoring the plan after a reload, the
-  print view replacing the app under print media (with block headings kept
-  with their content), the drink format showing 4 bottles of 600 ml, Escape
-  in a My recipes rename or delete cancelling it without closing the modal,
-  and a custom ingredient joining the recipe.
+  assert real plan numbers, unique ids, accessible names, keyboard
+  behaviour, the German text with German numbers (and no English fallback)
+  and imperial units. `vitest.setup.js` clears `localStorage` after every
+  test, runs every test as a neutral English visitor (`navigator.language`
+  `en`) and polyfills `<dialog>` (`showModal`, `close`, Escape) for jsdom.
+  `RecipesDialog.document.test.jsx` mounts React on `document`, as the App
+  Router does. `scripts/check-contrast.test.mjs` checks the token contrast
+  (section 10.5). `recipeText.test.js` checks the shared recipe text (names,
+  amounts, the bottle fill and the mixing steps in both languages and unit
+  systems) that the board, the dialogs and the print view use.
+- **End-to-end tests** (Playwright against the static export, desktop
+  Chrome and a 390 × 844 phone; `e2e/`, helpers in `e2e/helpers.js`; every
+  context starts as an `en-GB` visitor; tags `@phone` and `@desktop` limit a
+  test to one project):
+  - `smoke.spec.js`: no console errors in either mode; the `h1`; the default
+    plan (75 g/h, the recipe lines); a duration change to 1 h giving
+    15 g/h; a "Why?" revealing its citation; a v4 link restoring 240 min in
+    expert mode; a v3 link opening migrated (dextrose, the preset sweat rate,
+    the per-gel view); a v2 link showing the notice and leaving the address;
+    the autosave after a reload; guided on the first visit and the mode
+    remembered; the drink format with 4 bottles of 600 ml; a custom
+    ingredient joining the recipe; Escape in My recipes' inline editors; the
+    board numbers equal to `computePlan`.
+  - `guided.spec.js`: the whole guided flow on a phone (event, body and
+    weather, sweat, pantry with honey and sodium citrate, the board, mixing,
+    Back and the step list, "Switch to expert" keeping every value, the
+    autosave and the remembered mode), the dock's warnings, and the header
+    switch returning to the same step.
+  - `board.spec.js`: the four KPI tiles (caption, value, sub-line, "Why?"
+    with its citation) in the first screen (2 × 2 on a phone, one row on a
+    desktop), the gel lanes, Start mixing and the one-row chips on the first
+    screen of a 390 × 844 phone and a 1440 × 900 desktop (with Next up
+    beside the recipe there), in English and German, the caffeine tile,
+    Total ↔ Per serving, Next up and the warnings panel in level order.
+  - `i18n.spec.js`: switching to German (text, `lang`, title, number,
+    percent and currency formats, the tab bar, remembered after a reload,
+    and back, German ingredient names), German decimal input, the browser
+    defaults for `de-DE` and `en-US` (with the short dock captions), and
+    imperial units (lb, in and ft + in, °F, mph, fl oz on the
+    board and in the fields, typed values stored in metric and shown again
+    unchanged after a reload, back to metric).
+  - `keyboard.spec.js`: every dialog opens with Enter, is a native modal
+    with the focus inside and Tab kept in it, closes with Escape and with its
+    Close button and gives the focus back; templates from My recipes;
+    applying a template; the skip link; the phone tab bar; Print plan; the
+    focus ring (2 px, `--focus`) on the first 40 tab stops in both themes;
+    no tab stop hidden behind the header, the tab bar or the dock (the phone
+    setup, the guided flow, the desktop page walked backwards).
+  - `a11y.spec.js`: `@axe-core/playwright` (WCAG 2.0–2.2 A/AA and best
+    practices) finds no serious or critical violation in light and dark,
+    English and German, on every guided screen (and the open dock list),
+    every expert view and every dialog, on both projects, and in the print
+    view; in forced colours a switch and a segmented choice still show their
+    state.
+  - `layout.spec.js`: no horizontal overflow at 360, 390, 768, 1024 and
+    1440 px (phone emulation below 1024) on every guided screen, every
+    expert view and two dialogs, in English and German; two columns from
+    1024 px with the sticky board, which never covers the full schedule
+    (1024, 1280 and 1440 px); the German dock captions on one line from 320
+    to 414 px; every German view at 320 px with the WCAG text spacing; the
+    header and the tab bar not pinned in a 320 × 256 viewport (400 % zoom);
+    print media showing the print layout black on white (also from the dark
+    theme, in German) with a British date for an en-GB visitor.
+- **Images.** `node scripts/render-images.mjs [og|screenshots|all]`
+  renders `public/og.png` (from `scripts/og-card.html`, with the built
+  fonts) and the README screenshots in `assets/` from the static export
+  (`npm run build` first; Playwright's Chromium, `PW_CHROMIUM_EXECUTABLE`
+  to point at another one).
 
 ## 13. Known limitations
 
@@ -1022,16 +1288,22 @@ return exists in the registry.
 - **Energy** has three values: from the carb target (`energy.kcal`), from the
   carbs the recipe delivers (`energy.deliveredKcal`) and the estimated burn
   (`energy.expenditureKcal`).
-- **Cost** uses two fixed per-gram prices in an unnamed currency.
+- **Cost** uses fixed rough per-gram prices per currency (section 10.3), not
+  live prices or the user's own products.
 - **Templates:** four of eight labels are not fully verified.
 - **Citations** with two authors read "et al." (Vist & Maughan 1995 shows as
   "Vist et al. 1995"), the Phase 1 label rule.
-- **UI text** outside domain messages is hard-coded English; only kg/lb,
-  cm/in and °C/°F conversion exist.
+- **Compact schedule times** (T−1h 30m) read the same in both languages;
+  screen readers get the time in words.
+- **The static page** (its `<title>` and Open Graph data before the app
+  starts) is English; the app then sets the title and `lang` for German.
+- **One view.** On a 390 × 844 phone the title row, the four KPI tiles,
+  the gel lanes and Start mixing fit the first screen; Next up, the
+  warnings and the per-serving facts need a scroll (a desktop shows Next up
+  beside the recipe).
 
-## 14. What the next phase changes
+## 14. Open work
 
-- **Phase 3:** the race-day redesign (layout C: the key numbers, schedule and
-  recipe in one view), a guided mode, an accessibility pass, German text with
-  all UI labels moved to i18n, more units (oz) and a chosen currency for
-  cost.
+- **Cycling sweat estimate.** The heat-balance estimate for the default ride
+  (0.15 L/h at 30 km/h and 20 °C) is low for cycling (section 13); an
+  evidence-based correction is the next planned change.

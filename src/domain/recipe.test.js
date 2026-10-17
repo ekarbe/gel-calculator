@@ -1191,7 +1191,7 @@ describe('i18n catalog (en/recipe)', () => {
     expect(messages.length).toBeGreaterThan(0);
     for (const message of messages) {
       expect(catalog, `missing key ${message.key}`).toHaveProperty([message.key]);
-      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
       for (const name of placeholders) {
         expect(message.params, `${message.key} lacks param ${name}`).toHaveProperty(name);
       }

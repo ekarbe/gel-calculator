@@ -1305,7 +1305,7 @@ describe('i18n catalog (en/schedule)', () => {
     expect(messages.length).toBeGreaterThan(0);
     for (const message of messages) {
       expect(catalog, `missing key ${message.key}`).toHaveProperty([message.key]);
-      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]).sort();
       expect(placeholders, message.key).toEqual(Object.keys(message.params ?? {}).sort());
     }
   });

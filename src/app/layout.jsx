@@ -15,19 +15,42 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 import "./globals.css";
-import { Inter } from "next/font/google";
-import { ThemeProvider } from "../components/shared/ThemeProvider";
+import { Barlow_Condensed, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { ThemeProvider } from "../components/shell/ThemeProvider";
+import { t } from "../i18n";
 
-const inter = Inter({
+// Self-hosted at build time. Each sets a CSS variable on <html> that the
+// font tokens in globals.css (font-display, font-sans, font-mono) read.
+// The latin subset covers German (ä, ö, ü, ß), €, £ and the minus sign.
+
+/** Display face: numbers, KPI values, card titles. */
+const displayFont = Barlow_Condensed({
   subsets: ["latin"],
+  weight: ["600", "700", "800"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-barlow-condensed",
+});
+
+/** Body face: text, labels, inputs. */
+const sansFont = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-plex-sans",
+});
+
+/** Data face: tables, schedule times. */
+const monoFont = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-plex-mono",
 });
 
 export const metadata = {
   metadataBase: new URL('https://eikekarbe.com'),
-  title: 'Gel Calculator',
-  description: 'Calculate your energy gel mixture',
+  title: t('ui-shell.wordmark'),
+  description: t('ui-shell.meta.description'),
   icons: [
     {
       rel: 'icon',
@@ -44,9 +67,28 @@ export const metadata = {
   ],
 };
 
+/**
+ * `viewport-fit=cover` lets the page draw under a notch or home indicator;
+ * the shell pads its header, tab bar and sides with the safe-area insets.
+ */
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
+/**
+ * The root layout: fonts, the theme provider (the `dark` class on
+ * `<html>`, before the first paint) and the structured data. `lang`
+ * starts as English; the shell changes it to the chosen language.
+ */
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${displayFont.variable} ${sansFont.variable} ${monoFont.variable}`}
+    >
       <head>
         <script
           type="application/ld+json"
@@ -54,9 +96,12 @@ export default function RootLayout({ children }) {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "Gel Calculator",
-              "description": "Calculate the perfect energy gel mixture for your endurance activities.",
+              "name": t('ui-shell.wordmark'),
+              "description": t('ui-shell.meta.description'),
               "url": "https://eikekarbe.com/gel-calculator",
+              "image": "https://eikekarbe.com/gel-calculator/og.png",
+              "applicationCategory": "HealthApplication",
+              "operatingSystem": "Any",
             }),
           }}
         />

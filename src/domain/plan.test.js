@@ -1405,7 +1405,7 @@ describe('computePlan: review regressions', () => {
   // [carter2004] [brietzke2019]
   it('passes the mouth rinse protocol through for 45–75 min', () => {
     expect(computePlan({ event: { durationMin: 60 } }).carbs.mouthRinseHowTo).toEqual({
-      summary: { key: 'carbs.mouthRinse.howTo' },
+      summary: { key: 'carbs.mouthRinse.howTo', params: { rinseMl: 25 } },
       citations: ['carter2004', 'brietzke2019'],
     });
     expect(computePlan(DEFAULT_INPUTS).carbs.mouthRinseHowTo).toBeNull();

@@ -88,6 +88,9 @@ export const HIGH_CARB_MIN_DURATION_MIN = 150;
 /** Studies behind the carbohydrate mouth rinse protocol. */
 const MOUTH_RINSE_CITATIONS = ['carter2004', 'brietzke2019'];
 
+/** Volume of carb drink for one mouth rinse, ml [carter2004]. */
+export const MOUTH_RINSE_ML = 25;
+
 const round5 = (x) => Math.round(x / 5) * 5;
 const round2 = (x) => Math.round(x * 100) / 100;
 
@@ -176,7 +179,7 @@ export function recommendCarbs({ durationMin, intensity, highCarb = false } = {}
     band,
     mouthRinse,
     mouthRinseHowTo: mouthRinse
-      ? { summary: { key: 'carbs.mouthRinse.howTo' }, citations: [...MOUTH_RINSE_CITATIONS] }
+      ? { summary: { key: 'carbs.mouthRinse.howTo', params: { rinseMl: MOUTH_RINSE_ML } }, citations: [...MOUTH_RINSE_CITATIONS] }
       : null,
     why: {
       summary: { key: `carbs.why.${band}`, params: { lo, hi, gPerHour } },

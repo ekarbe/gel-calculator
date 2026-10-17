@@ -125,7 +125,7 @@ describe('recommendCarbs', () => {
   // [carter2004] [brietzke2019] mouth rinse for 45–75 min
   it('gives the mouth rinse protocol only in the rinse band', () => {
     expect(rec(60).mouthRinseHowTo).toEqual({
-      summary: { key: 'carbs.mouthRinse.howTo' },
+      summary: { key: 'carbs.mouthRinse.howTo', params: { rinseMl: 25 } },
       citations: ['carter2004', 'brietzke2019'],
     });
     for (const d of [30, 90, 180]) expect(rec(d).mouthRinseHowTo).toBeNull();
@@ -559,7 +559,7 @@ describe('i18n catalog (en/carbs)', () => {
     expect(messages.length).toBeGreaterThan(0);
     for (const message of messages) {
       expect(catalog, `missing key ${message.key}`).toHaveProperty([message.key]);
-      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
       for (const name of placeholders) {
         expect(message.params ?? {}, `${message.key} needs param ${name}`).toHaveProperty([name]);
       }

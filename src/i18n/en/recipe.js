@@ -16,7 +16,8 @@
 
 /**
  * English text for message keys returned by `src/domain/recipe.js`
- * (`buildRecipe`). Placeholders use `{name}` syntax.
+ * (`buildRecipe`). Placeholders use `{name}` or typed
+ * `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const recipe = {
@@ -25,7 +26,7 @@ const recipe = {
   // Water line of a gel batch: added to the whole batch to dissolve the powders
   'recipe.water.gel': 'Warm water',
   // Water line of a drink: each bottle is topped up to its mark
-  'recipe.water.drink': 'Water, to fill each bottle to {ml} ml',
+  'recipe.water.drink': 'Water, to fill each bottle to {ml:volume}',
   // Heading of the per-serving column of a gel section
   'recipe.serving.gel': 'Per gel',
   // Heading of the per-serving column of a drink section

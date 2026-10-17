@@ -21,7 +21,7 @@ const NO_IONS = { Sodium: 0, Chloride: 0, Potassium: 0, Magnesium: 0, Calcium: 0
 const ALL_EXTRAS = { potassium: true, magnesium: true, calcium: true };
 
 function placeholders(text) {
-  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  return [...text.matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
 }
 
 /** Every number anywhere in a result, walking arrays and objects. */

@@ -24,7 +24,7 @@ function messagesOf(result) {
 }
 
 function placeholders(text) {
-  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  return [...text.matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
 }
 
 describe('constants', () => {
@@ -428,6 +428,16 @@ describe('projectBodyMass', () => {
     expect(over.warnings[0].message.params.gainL).toBe(0.01);
   });
 
+  it('compares and writes a manual intake in whole ml/h (34 fl oz/h is stored as 1005.5 ml/h)', () => {
+    const [ceiling] = fluidWarnings(1005.5, {});
+    expect(ceiling.message.params.mlPerHour).toBe(1006);
+    const [above] = fluidWarnings(1005.5, { sweatRateLph: 0.8 });
+    expect(above.message.params).toEqual({ mlPerHour: 1006, sweatMlPerHour: 800 });
+    // Half a ml/h above the sweat loss rounds to it: no "550 ml/h is more than 550 ml/h".
+    expect(fluidWarnings(550.4, { sweatRateLph: 0.55 })).toEqual([]);
+    expect(projectBodyMass({ sweatRateLph: 0.55, fluidMlPerHour: 550.4, durationMin: 60, massKg: 70 }).level).toBe('ok');
+  });
+
   it('agrees with fluidWarnings about drinking more than you sweat (property)', () => {
     fc.assert(
       fc.property(
@@ -456,12 +466,12 @@ describe('projectBodyMass', () => {
           for (const x of [p.waterDeficitL, p.deficitPct, p.scaleChangeKg]) expect(Number.isFinite(x)).toBe(true);
           expect(p.scaleChangeKg).toBeLessThanOrEqual(-p.waterDeficitL + 1e-12);
           expect(Math.sign(p.deficitPct)).toBe(Math.sign(p.waterDeficitL));
-          // the spec formula; only sub-0.5 ml/h rounding of the sweat rate is set to 0
+          // the spec formula; only sub-0.5 ml/h rounding of the sweat rate and the intake is set to 0
           const hours = durationMin / 60;
           const spec = (sweatRateLph - fluidMlPerHour / 1000) * hours;
-          const gain = hours > 0 && fluidMlPerHour > Math.round(sweatRateLph * 1000);
+          const gain = hours > 0 && Math.round(fluidMlPerHour) > Math.round(sweatRateLph * 1000);
           expect(p.waterDeficitL).toBeCloseTo(gain ? Math.min(spec, 0) : Math.max(spec, 0), 9);
-          expect(Math.abs(p.waterDeficitL - spec)).toBeLessThanOrEqual(0.0005 * hours + 1e-9);
+          expect(Math.abs(p.waterDeficitL - spec)).toBeLessThanOrEqual(0.001 * hours + 1e-9);
           expect(p.scaleChangeKg).toBeCloseTo(-p.waterDeficitL - 0.0002 * energyKcalPerHour * hours, 9);
           if (gain) expect(p.waterDeficitL).toBeLessThanOrEqual(0);
           else expect(p.waterDeficitL).toBeGreaterThanOrEqual(0);

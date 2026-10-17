@@ -16,7 +16,7 @@
 
 /**
  * English text for message keys returned by `src/domain/caffeine.js`.
- * Placeholders use `{name}` syntax.
+ * Placeholders use `{name}` or typed `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const caffeine = {
@@ -37,7 +37,7 @@ const caffeine = {
 
   // planCaffeine: details
   'caffeine.why.dose':
-    'You chose {mgPerKg} mg/kg, which is {doseMg} mg for {massKg} kg. Your plan adds up to {totalMg} mg ({totalMgPerKg} mg/kg). Doses of 3–6 mg/kg improve performance in most studies. Lower doses of 1–2 mg/kg can also help.',
+    'You chose {mgPerKg} mg/kg, which is {doseMg} mg for {massKg:mass}. Your plan adds up to {totalMg} mg ({totalMgPerKg} mg/kg). Doses of 3–6 mg/kg improve performance in most studies. Lower doses of 1–2 mg/kg can also help.',
   'caffeine.why.habitual':
     'Regular coffee drinkers benefit as much as non-users, so your usual intake does not change the dose.',
 

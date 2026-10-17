@@ -17,7 +17,8 @@
 /**
  * English text for message keys returned by `src/domain/schedule.js`
  * (`buildSchedule`), plus one title per event type (`schedule.title.<type>`)
- * for the UI. Placeholders use `{name}` syntax.
+ * for the UI. Placeholders use `{name}` or typed
+ * `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const schedule = {
@@ -38,26 +39,26 @@ const schedule = {
   // Start
   'schedule.start': 'Start your activity.',
   'schedule.startWithGel': 'Start your activity and take gel 1.',
-  'schedule.startWithGelAndFluid': 'Start your activity and take gel 1 with about {fluidMl} ml fluid.',
+  'schedule.startWithGelAndFluid': 'Start your activity and take gel 1 with about {fluidMl:volume} fluid.',
   'schedule.startWithGelAndCaffeine':
     'Start your activity and take gel 1. It contains {caffeineMg} mg caffeine.',
   'schedule.startWithGelFluidAndCaffeine':
-    'Start your activity and take gel 1 with about {fluidMl} ml fluid. It contains {caffeineMg} mg caffeine.',
+    'Start your activity and take gel 1 with about {fluidMl:volume} fluid. It contains {caffeineMg} mg caffeine.',
 
   // During the activity
   'schedule.fuel': 'Take gel {gel}.',
-  'schedule.fuelWithFluid': 'Take gel {gel} with about {fluidMl} ml fluid.',
+  'schedule.fuelWithFluid': 'Take gel {gel} with about {fluidMl:volume} fluid.',
   'schedule.fuelWithCaffeine': 'Take gel {gel}. It contains {caffeineMg} mg caffeine.',
   'schedule.fuelWithFluidAndCaffeine':
-    'Take gel {gel} with about {fluidMl} ml fluid. It contains {caffeineMg} mg caffeine.',
+    'Take gel {gel} with about {fluidMl:volume} fluid. It contains {caffeineMg} mg caffeine.',
   // Drink sips every 20 min when the drink carries the fluid
-  'schedule.drinkSip': 'Drink about {ml} ml from bottle {bottle}.',
+  'schedule.drinkSip': 'Drink about {ml:volume} from bottle {bottle}.',
   // The sip empties bottle {bottle} and runs on into the next one
-  'schedule.drinkSipSwitch': 'Drink about {ml} ml. Finish bottle {bottle}, then go on with bottle {next}.',
+  'schedule.drinkSipSwitch': 'Drink about {ml:volume}. Finish bottle {bottle}, then go on with bottle {next}.',
   // The sip empties bottles {bottle} to {finished} and runs on into bottle {next}
-  'schedule.drinkSipSpan': 'Drink about {ml} ml. Finish bottles {bottle} to {finished}, then go on with bottle {next}.',
+  'schedule.drinkSipSpan': 'Drink about {ml:volume}. Finish bottles {bottle} to {finished}, then go on with bottle {next}.',
   // When no gel or drink sip carries fluid (no gels, or the fluid per gel rounds to 0)
-  'schedule.hydrationOnly': 'Drink about {mlPerHour} ml/h throughout.',
+  'schedule.hydrationOnly': 'Drink about {mlPerHour:volume}/h throughout.',
 
   // Finish
   'schedule.finish': 'Finish. Begin your recovery.',

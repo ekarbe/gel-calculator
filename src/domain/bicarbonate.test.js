@@ -12,7 +12,7 @@ function messagesOf(plan) {
 }
 
 function placeholders(text) {
-  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  return [...text.matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
 }
 
 describe('planBicarbonate: eligibility and visibility', () => {

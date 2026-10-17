@@ -583,7 +583,8 @@ export function resolveSweat(sweatInputs, context) {
   }
 
   details.push({ key: 'sweat.why.sodium', params: { sodiumMmolL } });
-  if (source !== 'test') details.push({ key: 'sweat.why.measure' });
+  // 1 kg of body mass lost is about 1 L of sweat (both typed, so imperial reads lb and fl oz).
+  if (source !== 'test') details.push({ key: 'sweat.why.measure', params: { lossKg: 1, sweatL: 1 } });
 
   if (estimate.uncompensable) {
     warnings.push({

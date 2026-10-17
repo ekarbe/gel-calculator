@@ -76,7 +76,7 @@ function messagesOf(result) {
 }
 
 function placeholders(text) {
-  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  return [...text.matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
 }
 
 describe('presets', () => {
@@ -229,7 +229,7 @@ describe('resolveSweat: estimate', () => {
       details: [
         { key: 'sweat.why.estimateDrivers', params: { heatW: 1061, energyKcalPerHour: 913 } },
         { key: 'sweat.why.sodium', params: { sodiumMmolL: 40 } },
-        { key: 'sweat.why.measure' },
+        { key: 'sweat.why.measure', params: { lossKg: 1, sweatL: 1 } },
       ],
       citations: ['gagnon2013', 'cramer2019', 'jay2024'],
     });
@@ -298,7 +298,7 @@ describe('resolveSweat: preset', () => {
     expect(r.estimate).toEqual(estimateSweatRate(RACE));
     expect(r.why).toEqual({
       summary: { key: 'sweat.why.preset', params: { rateLph: 1.25, lo: 0.75, hi: 1.75, uncertaintyLph: 0.5 } },
-      details: [{ key: 'sweat.why.sodium', params: { sodiumMmolL: 55 } }, { key: 'sweat.why.measure' }],
+      details: [{ key: 'sweat.why.sodium', params: { sodiumMmolL: 55 } }, { key: 'sweat.why.measure', params: { lossKg: 1, sweatL: 1 } }],
       citations: ['baker2017', 'barnes2019'],
     });
   });

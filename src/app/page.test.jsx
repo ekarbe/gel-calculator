@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import Page, { metadata } from './page';
+import Page, { metadata, OG_IMAGE_URL } from './page';
 import { normalizeInputs } from '../domain/plan';
 import { encodeShareState } from '../state/shareCodec';
 
@@ -36,7 +36,8 @@ describe('Page', () => {
   it('renders the app inside PlanProvider and UiProvider', () => {
     const { container } = render(<Page />);
     expect(screen.getByTestId('app-probe')).toBeInTheDocument();
-    expect(container.firstChild).toHaveClass('min-h-screen');
+    // No wrapper: the app renders the whole frame.
+    expect(container.firstChild).toBe(screen.getByTestId('app-probe'));
     // Default plan: 180 min, 75 g/h.
     expect(screen.getByTestId('duration')).toHaveTextContent('180');
     expect(screen.getByTestId('carbs')).toHaveTextContent('75');
@@ -47,7 +48,7 @@ describe('Page', () => {
 
   it('leaves the main landmark to App', () => {
     const { container } = render(<Page />);
-    // App renders its own <main>; the page wrapper must not add a second one.
+    // App renders its own <main>; the page must not add a second one.
     expect(container.querySelector('main')).toBeNull();
   });
 
@@ -69,8 +70,27 @@ describe('Page', () => {
   });
 
   it('exports page metadata with the canonical URL', () => {
-    expect(metadata.title).toMatch(/Gel/);
+    expect(metadata.title).toBe('DIY Energy Gel & Sports Drink Calculator | Optimize Your Fuel');
+    expect(metadata.description).toMatch(/glucose:fructose/);
     expect(metadata.alternates.canonical).toBe('https://eikekarbe.com/gel-calculator');
     expect(metadata.openGraph.url).toBe('https://eikekarbe.com/gel-calculator');
+    expect(metadata.openGraph.siteName).toBe('Gel Calculator');
+  });
+
+  it('points the social previews at the 1200 × 630 card in public/og.png', async () => {
+    expect(OG_IMAGE_URL).toBe('https://eikekarbe.com/gel-calculator/og.png');
+    const image = { url: OG_IMAGE_URL, width: 1200, height: 630, type: 'image/png' };
+    expect(metadata.openGraph.images).toEqual([expect.objectContaining(image)]);
+    expect(metadata.openGraph.images[0].alt).toMatch(/race board/i);
+    expect(metadata.twitter.card).toBe('summary_large_image');
+    expect(metadata.twitter.images).toEqual([expect.objectContaining(image)]);
+
+    // The file is there, a PNG of that size (IHDR: width and height at bytes 16 and 20).
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const png = readFileSync(join(process.cwd(), 'public/og.png'));
+    expect(png.subarray(1, 4).toString('ascii')).toBe('PNG');
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
   });
 });

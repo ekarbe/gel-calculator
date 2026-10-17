@@ -16,7 +16,8 @@
 
 /**
  * English text for message keys returned by `src/domain/plan.js`
- * (`computePlan`). Placeholders use `{name}` syntax.
+ * (`computePlan`). Placeholders use `{name}` or typed
+ * `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const plan = {

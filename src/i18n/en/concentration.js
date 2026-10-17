@@ -17,7 +17,8 @@
 /**
  * English text for message keys returned by `src/domain/concentration.js`
  * (`gelBatch`, `drinkBottles`), plus labels for its tonicity bands and gel
- * consistency presets. Placeholders use `{name}` syntax.
+ * consistency presets. Placeholders use `{name}` or typed
+ * `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const concentration = {
@@ -35,21 +36,21 @@ const concentration = {
 
   // gelBatch
   'concentration.warn.syrupsThinner':
-    'Your ingredients already weigh more than a {targetPct}% gel of these carbs. No water is added, and the gel will be about {pct}% carbohydrate.',
+    'Your ingredients already weigh more than a {targetPct:percent} gel of these carbs. No water is added, and the gel will be about {pct:percent} carbohydrate.',
   'concentration.warn.crystallise':
-    'The dextrose in this gel makes a {glucosePct}% solution in its water. Above {limitPct}% it can crystallise and turn grainy. Swap some dextrose for maltodextrin or fructose, or choose a thinner gel.',
+    'The dextrose in this gel makes a {glucosePct:percent} solution in its water. Above {limitPct:percent} it can crystallise and turn grainy. Swap some dextrose for maltodextrin or fructose, or choose a thinner gel.',
   'concentration.warn.gelTakeWithWater':
-    'This gel is much more concentrated than your body fluids. Take each gel with about {waterMl} ml of water. Your stomach empties it faster that way.',
+    'This gel is much more concentrated than your body fluids. Take each gel with about {waterMl:volume} of water. Your stomach empties it faster that way.',
 
   // drinkBottles
   'concentration.warn.noFluidForDrink':
     'Your plan has no fluid, so there is no drink to mix. Set a fluid target or take your carbs as gels.',
   'concentration.warn.drinkDoesNotFit':
-    'The powders and syrups for each bottle take up about {ingredientsMl} ml. That does not fit in the {fillMl} ml you drink from each bottle. Plan more fluid or take some carbs as gels.',
+    'The powders and syrups for each bottle take up about {ingredientsMl:volume}. That does not fit in the {fillMl:volume} you drink from each bottle. Plan more fluid or take some carbs as gels.',
   'concentration.warn.drinkStrong':
-    'Each bottle is {pct}% carbohydrate. Above {limitPct}% a drink leaves the stomach more slowly. Test it in training.',
+    'Each bottle is {pct:percent} carbohydrate. Above {limitPct:percent} a drink leaves the stomach more slowly. Test it in training.',
   'concentration.warn.drinkTooStrong':
-    'Each bottle is {pct}% carbohydrate. Above {limitPct}% a drink often sits in the stomach and can upset it. Take some carbs as gels, or plan more fluid.',
+    'Each bottle is {pct:percent} carbohydrate. Above {limitPct:percent} a drink often sits in the stomach and can upset it. Take some carbs as gels, or plan more fluid.',
   'concentration.warn.hypertonic':
     'The drink is about {mOsm} mOsm/kg. That is above the isotonic range (up to {limit} mOsm/kg), so water is absorbed a little more slowly.',
   'concentration.warn.veryHypertonic':

@@ -362,3 +362,85 @@ describe('PlanProvider: autosave', () => {
     expect(storedAutosave()).toEqual(stored);
   });
 });
+
+describe('PlanProvider: restoredFrom', () => {
+  const stored = normalizeInputs({ event: { durationMin: 300 } });
+
+  it('is null before and after a restore that found nothing', () => {
+    const seen = [];
+    function Probe() {
+      const { restored, restoredFrom } = usePlanInputs();
+      seen.push([restored, restoredFrom]);
+      return null;
+    }
+    render(
+      <PlanProvider>
+        <Probe />
+      </PlanProvider>,
+    );
+    expect(seen[0]).toEqual([false, null]);
+    expect(seen.at(-1)).toEqual([true, null]);
+  });
+
+  it('is "autosave" when the autosave was restored, set in the same render as restored', () => {
+    saveAutosave(stored);
+    const seen = [];
+    function Probe() {
+      const { restored, restoredFrom } = usePlanInputs();
+      seen.push([restored, restoredFrom]);
+      return null;
+    }
+    render(
+      <PlanProvider>
+        <Probe />
+      </PlanProvider>,
+    );
+    expect(seen.at(-1)).toEqual([true, 'autosave']);
+    // Never restored without knowing where from.
+    expect(seen.filter(([restored, from]) => restored && from === null)).toEqual([]);
+  });
+
+  it('is "link" for a readable share link, even with an autosave', () => {
+    saveAutosave(stored);
+    window.history.replaceState({}, '', `/?s=${encodeShareState({ event: { durationMin: 75 } })}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.restoredFrom).toBe('link');
+  });
+
+  it('is "autosave" when an unreadable link falls back to the autosave, else null', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    window.history.replaceState({}, '', `/?s=${btoa(JSON.stringify({ v: 2 }))}`);
+    const { result: none } = renderHook(useBoth, { wrapper });
+    expect(none.current.api.restoredFrom).toBeNull();
+    saveAutosave(stored);
+    window.history.replaceState({}, '', `/?s=${btoa(JSON.stringify({ v: 2 }))}`);
+    const { result } = renderHook(useBoth, { wrapper });
+    expect(result.current.api.restoredFrom).toBe('autosave');
+  });
+
+  it('is null with initial inputs or persist={false}, and does not change when a recipe is loaded', () => {
+    saveAutosave(stored);
+    const { result: initial } = renderHook(useBoth, {
+      wrapper: ({ children }) => <PlanProvider initialInputs={{ event: { durationMin: 60 } }}>{children}</PlanProvider>,
+    });
+    expect(initial.current.api.restoredFrom).toBeNull();
+    const { result } = renderHook(useBoth, {
+      wrapper: ({ children }) => <PlanProvider persist={false}>{children}</PlanProvider>,
+    });
+    expect(result.current.api.restoredFrom).toBeNull();
+    act(() => result.current.api.loadInputs(stored));
+    expect(result.current.api.restoredFrom).toBeNull();
+  });
+
+  it('is recorded once under StrictMode', () => {
+    window.history.replaceState({}, '', `/?s=${encodeShareState({ event: { durationMin: 75 } })}`);
+    const { result } = renderHook(useBoth, {
+      wrapper: ({ children }) => (
+        <StrictMode>
+          <PlanProvider>{children}</PlanProvider>
+        </StrictMode>
+      ),
+    });
+    expect(result.current.api.restoredFrom).toBe('link');
+  });
+});

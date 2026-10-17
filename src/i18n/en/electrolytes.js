@@ -16,7 +16,7 @@
 
 /**
  * English text for message keys returned by `src/domain/electrolytes.js`.
- * Placeholders use `{name}` syntax.
+ * Placeholders use `{name}` or typed `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const electrolytes = {

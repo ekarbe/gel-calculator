@@ -20,10 +20,19 @@ const PORT = 4173;
 const isCI = !!process.env.CI;
 
 /**
- * Playwright smoke tests against the static export in ./out.
+ * Playwright end-to-end tests against the static export in ./out.
  * Build first (`npm run build`), then `npm run test:e2e`.
  * Set PW_CHROMIUM_EXECUTABLE to use a preinstalled Chromium instead of the
  * one downloaded by `npx playwright install chromium`.
+ *
+ * Two projects: a desktop Chrome window and a 390 × 844 phone (Pixel 7,
+ * touch). A test tagged `@phone` runs only on the phone, one tagged
+ * `@desktop` only on the desktop (for example a test that sets its own
+ * viewport sizes); untagged tests run on both.
+ *
+ * Every context starts as a British English visitor (`en-GB`: English,
+ * metric units, GBP), so the default prefs do not depend on the machine.
+ * Tests that check other browser languages set `locale` themselves.
  *
  * Traces: locally a failing test keeps its trace in ./test-results. On CI only
  * the retry of a failed test records one, and the workflow uploads
@@ -37,6 +46,8 @@ export default defineConfig({
   reporter: isCI ? [['github'], ['list']] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}/gel-calculator/`,
+    locale: 'en-GB',
+    timezoneId: 'Europe/London',
     trace: isCI ? 'on-first-retry' : 'retain-on-failure',
     launchOptions: {
       executablePath: process.env.PW_CHROMIUM_EXECUTABLE || undefined,
@@ -45,10 +56,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      grepInvert: /@phone/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile',
+      grepInvert: /@desktop/,
       use: {
         ...devices['Pixel 7'],
         viewport: { width: 390, height: 844 },

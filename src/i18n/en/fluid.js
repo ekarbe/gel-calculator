@@ -17,29 +17,29 @@
 /**
  * English text for message keys returned by `src/domain/hydration.js`
  * (`recommendFluid`, `fluidWarnings`, `projectBodyMass`).
- * Placeholders use `{name}` syntax.
+ * Placeholders use `{name}` or typed `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const fluid = {
   // recommendFluid
   'fluid.why.plan':
-    'Drink about {mlPerHour} ml/h. This replaces roughly {sharePct}% of your sweat loss of {sweatMlPerHour} ml/h, capped at {maxMlPerHour} ml/h. Drinking less than you sweat avoids weight gain.',
+    'Drink about {mlPerHour:volume}/h. This replaces roughly {sharePct:percent} of your sweat loss of {sweatMlPerHour:volume}/h, capped at {maxMlPerHour:volume}/h. Drinking less than you sweat avoids weight gain.',
   'fluid.why.thirst':
     'For events under 90 min or in cool weather, drinking to thirst works well. Use the plan as a rough guide.',
 
   // Warnings
   'fluid.warn.aboveSweat':
-    'You plan to drink {mlPerHour} ml/h. That is more than you sweat ({sweatMlPerHour} ml/h). Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less than you sweat.',
+    'You plan to drink {mlPerHour:volume}/h. That is more than you sweat ({sweatMlPerHour:volume}/h). Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less than you sweat.',
   'fluid.warn.aboveCeiling':
-    'You plan to drink {mlPerHour} ml/h. Guidelines suggest up to {maxMlPerHour} ml/h. Larger amounts can upset your stomach.',
+    'You plan to drink {mlPerHour:volume}/h. Guidelines suggest up to {maxMlPerHour:volume}/h. Larger amounts can upset your stomach.',
 
   // projectBodyMass
   'fluid.warn.projectedGain':
-    'With this plan you would drink about {gainL} L more than you sweat. Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less.',
+    'With this plan you would drink about {gainL:volumeL} more than you sweat. Weight gain during exercise can cause hyponatremia, a dangerous drop in blood sodium. Drink less.',
   'fluid.warn.deficitHigh':
-    'With this plan you would lose about {deficitL} L of water, {deficitPct}% of your body mass. Losses above {limitPct}% hurt performance and heat tolerance. Drink more if your stomach allows it, and plan your refills.',
+    'With this plan you would lose about {deficitL:volumeL} of water, {deficitPct:percent} of your body mass. Losses above {limitPct:percent} hurt performance and heat tolerance. Drink more if your stomach allows it, and plan your refills.',
   'fluid.warn.deficitMild':
-    'With this plan you would lose about {deficitL} L of water, {deficitPct}% of your body mass. Losses above {limitPct}% can start to hurt performance, mostly in the heat.',
+    'With this plan you would lose about {deficitL:volumeL} of water, {deficitPct:percent} of your body mass. Losses above {limitPct:percent} can start to hurt performance, mostly in the heat.',
 };
 
 export default fluid;

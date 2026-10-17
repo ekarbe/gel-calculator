@@ -16,7 +16,7 @@
 
 /**
  * English text for message keys returned by `src/domain/bicarbonate.js`.
- * Placeholders use `{name}` syntax.
+ * Placeholders use `{name}` or typed `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const bicarb = {
@@ -29,7 +29,7 @@ const bicarb = {
     'Sodium bicarbonate buffers acid in hard efforts. Doses of 0.2–0.3 g/kg improve performance. Most evidence is for efforts of 30 s to 12 min. There is no evidence of a benefit in multi-hour events.',
 
   // planBicarbonate: details
-  'bicarb.why.dose': 'Your dose is {gPerKg} g/kg for {massKg} kg, or {doseG} g.',
+  'bicarb.why.dose': 'Your dose is {gPerKg} g/kg for {massKg:mass}, or {doseG} g.',
   'bicarb.why.timing':
     'Take it 60–180 min before the start, ideally about 90 min. Split it into smaller portions with a carb-rich meal to ease the stomach.',
 

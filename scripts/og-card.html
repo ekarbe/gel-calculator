@@ -1,0 +1,111 @@
+<!--  Gel-Calculator - Personalized fuel calculator for endurance athletes.
+      Copyright (C) 2026  Eike Christian Karbe
+
+      This program is free software: you can redistribute it and/or modify
+      it under the terms of the GNU General Public License as published by
+      the Free Software Foundation, either version 3 of the License, or
+      (at your option) any later version.
+
+      This program is distributed in the hope that it will be useful,
+      but WITHOUT ANY WARRANTY; without even the implied warranty of
+      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+      GNU General Public License for more details.
+
+      You should have received a copy of the GNU General Public License
+      along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+      The 1200 × 630 social preview card (public/og.png), in the dark "Race
+      day" tokens of src/app/globals.css. scripts/render-images.mjs fills in
+      the self-hosted fonts of the build (the FONTS marker) and renders it
+      with Playwright. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gel Calculator social card</title>
+<style>
+/*FONTS*/
+:root {
+  --bg: #0b0e13; --surface: #141922; --surface-2: #1b222d; --line: #263040; --line-strong: #677283;
+  --ink: #f2f4f7; --ink-2: #b4bdca; --muted: #8d98a8; --accent: #ffb020; --accent-ink: #0b0e13;
+  --glucose: #559aff; --fructose: #b08cff; --sodium: #2dd4bf; --fluid: #5ac8fa; --caffeine: #d9a066;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1200px; height: 630px; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'IBM Plex Sans', sans-serif; -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-columns: 520px 1fr; gap: 44px; padding: 48px 60px;
+  font-variant-numeric: tabular-nums;
+}
+.display { font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
+.caption { font-size: 15px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.left { display: flex; flex-direction: column; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand svg { width: 44px; height: 44px; }
+.brand span { font-size: 38px; font-weight: 800; }
+h1 { margin-top: 44px; font-size: 76px; line-height: 0.95; font-weight: 800; }
+h1 em { font-style: normal; color: var(--accent); }
+.lead { margin-top: 24px; font-size: 24px; line-height: 1.4; color: var(--ink-2); }
+.subs { margin-top: auto; display: flex; gap: 8px; flex-wrap: nowrap; }
+.sub { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; font-size: 16px; font-weight: 600; }
+.sub i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.board-title .caption { color: var(--muted); font-size: 13px; }
+.board-title .display { font-size: 30px; font-weight: 700; margin-top: 2px; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kpi { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 10px 19px; overflow: hidden; }
+.kpi::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); }
+.kpi .caption { color: var(--c); font-size: 13px; }
+.kpi .value { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 50px; line-height: 1; margin-top: 2px; }
+.kpi .value small { font-family: 'IBM Plex Sans', sans-serif; font-size: 17px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.kpi .info { font-size: 15px; color: var(--ink-2); margin-top: 2px; }
+.lanes { background: var(--surface-2); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lanes .head { display: flex; justify-content: space-between; align-items: baseline; }
+.lanes .head .display { font-size: 22px; font-weight: 700; }
+.lane .row { display: flex; justify-content: space-between; font-size: 17px; }
+.lane .row b { font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+.lane .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+.bar { margin-top: 5px; height: 7px; border-radius: 999px; background: var(--line); }
+.bar div { height: 100%; border-radius: 999px; background: var(--c); }
+.cta { background: var(--accent); color: var(--accent-ink); border-radius: 8px; text-align: center; font-size: 22px; font-weight: 700; padding: 8px; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4.5 3h15" /><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3" /><path d="M6 10h12" /><path d="M12 10l-2 4h4l-2 4" />
+      </svg>
+      <span class="display">Gel Calculator</span>
+    </div>
+    <h1 class="display">Race-day fuel,<br><em>in one view</em></h1>
+    <p class="lead">Carbs, sodium, fluid and caffeine for your event, from your sweat test or an estimate. Then mix your own gels and drinks.</p>
+    <div class="subs">
+      <span class="sub" style="background: color-mix(in srgb, var(--glucose) 18%, var(--surface)); color: var(--glucose)"><i style="background: var(--glucose)"></i>Glucose</span>
+      <span class="sub" style="background: color-mix(in srgb, var(--fructose) 18%, var(--surface)); color: var(--fructose)"><i style="background: var(--fructose)"></i>Fructose</span>
+      <span class="sub" style="background: color-mix(in srgb, var(--sodium) 18%, var(--surface)); color: var(--sodium)"><i style="background: var(--sodium)"></i>Sodium</span>
+      <span class="sub" style="background: color-mix(in srgb, var(--fluid) 18%, var(--surface)); color: var(--fluid)"><i style="background: var(--fluid)"></i>Fluid</span>
+      <span class="sub" style="background: color-mix(in srgb, var(--caffeine) 18%, var(--surface)); color: var(--caffeine)"><i style="background: var(--caffeine)"></i>Caffeine</span>
+    </div>
+  </div>
+  <div class="board">
+    <div class="board-title">
+      <div class="caption">Race board</div>
+      <div class="display">3:30 h · Running · Race</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi" style="--c: var(--glucose)"><div class="caption">Carbs</div><div class="value">90<small>g/h</small></div><div class="info">1:0.5 · 315 g total</div></div>
+      <div class="kpi" style="--c: var(--sodium)"><div class="caption">Sodium</div><div class="value">570<small>mg/h</small></div><div class="info">1,995 mg total</div></div>
+      <div class="kpi" style="--c: var(--fluid)"><div class="caption">Fluid</div><div class="value">800<small>ml/h</small></div><div class="info">2,800 ml total</div></div>
+      <div class="kpi" style="--c: var(--caffeine)"><div class="caption">Caffeine</div><div class="value">245<small>mg</small></div><div class="info">3.5 mg/kg · 2 doses</div></div>
+    </div>
+    <div class="lanes">
+      <div class="head"><span class="display">Gels ×11</span><span class="caption" style="color: var(--muted); font-size: 13px">Whole batch</span></div>
+      <div class="lane" style="--c: var(--glucose)"><div class="row"><span><span class="dot"></span>Maltodextrin</span><b>221 g</b></div><div class="bar"><div style="width: 67%"></div></div></div>
+      <div class="lane" style="--c: var(--fructose)"><div class="row"><span><span class="dot"></span>Crystalline Fructose</span><b>105 g</b></div><div class="bar"><div style="width: 33%"></div></div></div>
+    </div>
+    <div class="cta display">Start mixing</div>
+  </div>
+</body>
+</html>

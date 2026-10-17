@@ -17,7 +17,7 @@
 /**
  * English text for message keys returned by `src/domain/carbs.js` and
  * `src/domain/solver.js`.
- * Placeholders use `{name}` syntax.
+ * Placeholders use `{name}` or typed `{name:type}` syntax (`src/i18n/index.js`).
  * @type {Record<string, string>}
  */
 const carbs = {
@@ -37,7 +37,7 @@ const carbs = {
 
   // recommendCarbs: how to do the mouth rinse (45–75 min)
   'carbs.mouthRinse.howTo':
-    'Rinsing your mouth with a carb drink can improve performance even when you swallow little or no carbs. Swish 25 ml of a 6–8% maltodextrin drink in your mouth for 5–10 s, then spit it out. Repeat every 5–10 min.',
+    'Rinsing your mouth with a carb drink can improve performance even when you swallow little or no carbs. Swish {rinseMl:volume} of a 6–8% maltodextrin drink in your mouth for 5–10 s, then spit it out. Repeat every 5–10 min.',
 
   // recommendCarbs: position inside the range
   'carbs.why.intensity.easy':
@@ -67,13 +67,13 @@ const carbs = {
   'carbs.warn.noRatio':
     'Set at least one ratio part above zero. Without a ratio, no carb sources can be calculated.',
   'carbs.warn.tooLittleFructose':
-    'At {gPerHour} g/h, use at least {minRatio} glucose to fructose. Glucose alone cannot be absorbed fast enough.',
+    'At {gPerHour} g/h, use at least {minRatio:ratio} glucose to fructose. Glucose alone cannot be absorbed fast enough.',
   'carbs.warn.tooMuchFructose':
     'Use no more fructose than glucose. Extra fructose often causes gut problems.',
 
   // solveIngredients (src/domain/solver.js)
   'carbs.warn.ratioNotReachable':
-    'Your ingredients cannot make {target} glucose to fructose. The recipe uses {achievable}, the closest they can make. Add an ingredient with more glucose or more fructose to get closer.',
+    'Your ingredients cannot make {target:ratio} glucose to fructose. The recipe uses {achievable:ratio}, the closest they can make. Add an ingredient with more glucose or more fructose to get closer.',
   'carbs.warn.noIngredients':
     'Add at least one carb ingredient. Without one, the recipe has no carbs.',
 };

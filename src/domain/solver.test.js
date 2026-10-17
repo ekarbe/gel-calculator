@@ -841,7 +841,7 @@ describe('i18n (en/carbs) for solver messages', () => {
     expect(messages.map((m) => m.key)).toEqual(['carbs.warn.ratioNotReachable', 'carbs.warn.noIngredients']);
     for (const message of messages) {
       expect(catalog).toHaveProperty([message.key]);
-      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+      const placeholders = [...catalog[message.key].matchAll(/\{(\w+)(?::\w+)*\}/g)].map((m) => m[1]);
       for (const name of placeholders) expect(message.params ?? {}).toHaveProperty([name]);
     }
   });
